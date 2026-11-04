@@ -28,15 +28,9 @@ const schema = z.object({
   AUTO_RACES_RANKED: bool.default(false),
   /** Quantas horas à frente a grade automática fica preenchida. */
   AUTO_RACES_LOOKAHEAD_HOURS: z.coerce.number().int().min(1).max(168).default(24),
-  /** Corridas teste com bots: intervalo em minutos (0 desliga), voltas, antecedência e retenção. */
-  AUTO_TEST_RACES_EVERY_MIN: z.coerce.number().int().min(0).max(240).default(0),
+  /** Corridas teste com bots, em ciclo: a próxima larga N minutos depois da bandeirada da anterior (0 desliga). */
+  AUTO_TEST_RACES_GAP_MIN: z.coerce.number().int().min(0).max(240).default(0),
   AUTO_TEST_RACES_LAPS: z.coerce.number().int().min(3).max(60).default(10),
-  AUTO_TEST_RACES_LOOKAHEAD_MIN: z.coerce
-    .number()
-    .int()
-    .min(5)
-    .max(24 * 60)
-    .default(60),
   AUTO_TEST_RACES_KEEP_HOURS: z.coerce.number().min(0.5).max(168).default(3),
   REQUIRE_VERIFIED_EMAIL_FOR_RANKED: bool.default(false),
   RANKING_MIN_RACES: z.coerce.number().int().min(0).default(1),

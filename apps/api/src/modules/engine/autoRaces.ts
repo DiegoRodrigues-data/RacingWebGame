@@ -1,4 +1,5 @@
-import { and, eq, gte, inArray, lte, sql } from 'drizzle-orm';
+import { TRACE_WINDOW_MS } from '@tracado/shared';
+import { and, desc, eq, gte, inArray, lte, sql } from 'drizzle-orm';
 import type { Ctx } from '../../context';
 import { categories, notifications, races, tracks } from '../../db/schema';
 import { createRace } from '../races/service';
@@ -74,66 +75,64 @@ export async function ensureAutoRaces(ctx: Ctx): Promise<number> {
   return created;
 }
 
+/** Fases curtas das corridas teste (o traçado tem a janela fixa de 5 min). */
+const TEST_PRACTICE_MS = 2 * 60_000;
+const TEST_SETUP_LOCK_MS = 10_000;
+const TEST_QUALIFYING_MS = 20_000;
+const TEST_PRELUDE_MS = TEST_PRACTICE_MS + TRACE_WINDOW_MS + TEST_SETUP_LOCK_MS + TEST_QUALIFYING_MS;
+
 /**
- * Corridas teste: curtas (AUTO_TEST_RACES_LAPS voltas, padrão 10), largando a cada AUTO_TEST_RACES_EVERY_MIN
- * minutos, preenchidas até AUTO_TEST_RACES_LOOKAHEAD_MIN à frente. Amistosas, com bots (DEMO_BOTS) completando o
- * grid, e fora das listas normais. Ficam abaixo do mínimo de voltas das corridas normais de propósito.
+ * Corridas teste em ciclo: uma de cada vez, curta (AUTO_TEST_RACES_LAPS voltas, padrão 10), amistosa e com bots
+ * (DEMO_BOTS) completando o grid. A próxima larga AUTO_TEST_RACES_GAP_MIN minutos depois da bandeirada da anterior
+ * e é criada assim que a anterior começa a correr (o fim já é conhecido), com inscrições abertas desde então.
+ * Ficam abaixo do mínimo de voltas das corridas normais de propósito e fora das listas normais.
  * Depois de AUTO_TEST_RACES_KEEP_HOURS encerradas, são apagadas com replay, resultados e pista.
  */
-export async function ensureAutoTestRaces(ctx: Ctx): Promise<number> {
+export async function ensureAutoTestRaces(ctx: Ctx): Promise<boolean> {
   const cfg = ctx.config;
-  if (!cfg.AUTO_TEST_RACES_EVERY_MIN) return 0;
+  if (!cfg.AUTO_TEST_RACES_GAP_MIN) return false;
   await pruneTestRaces(ctx);
-  const step = cfg.AUTO_TEST_RACES_EVERY_MIN * 60_000;
   const now = ctx.clock.now();
-  const horizon = now + cfg.AUTO_TEST_RACES_LOOKAHEAD_MIN * 60_000;
+  const gap = cfg.AUTO_TEST_RACES_GAP_MIN * 60_000;
+  const [last] = await ctx.db
+    .select()
+    .from(races)
+    .where(sql`${races.flags} ? 'autoTest'`)
+    .orderBy(desc(races.practiceAt))
+    .limit(1);
+  let raceAt: number;
+  if (!last || ['finished', 'archived', 'cancelled'].includes(last.status))
+    raceAt = (last?.raceEndsAt?.getTime() ?? now) + gap;
+  else if (last.status === 'race' && last.raceEndsAt) raceAt = last.raceEndsAt.getTime() + gap;
+  else return false; // a atual ainda não largou: a próxima é criada quando ela começar a correr
+  // Nunca começa o treino no passado nem sem tempo para alguém se inscrever.
+  const practiceAt = Math.max(raceAt - TEST_PRELUDE_MS, now + 60_000);
   const [cat] = await ctx.db.select().from(categories).where(eq(categories.slug, cfg.AUTO_RACES_CATEGORY));
-  if (!cat || !cat.active) return 0;
-  const first = Math.ceil((now + 2 * 60_000) / step) * step;
-  if (first > horizon) return 0;
-  const taken = new Set(
-    (
-      await ctx.db
-        .select({ at: races.practiceAt })
-        .from(races)
-        .where(
-          and(
-            gte(races.practiceAt, new Date(first)),
-            lte(races.practiceAt, new Date(horizon)),
-            sql`${races.flags} ? 'autoTest'`,
-          ),
-        )
-    ).map((r) => r.at.getTime()),
+  if (!cat || !cat.active) return false;
+  const row = await createRace(
+    ctx,
+    {
+      name: `Corrida Teste ${hourLabel(practiceAt + TEST_PRELUDE_MS)}`,
+      categoryId: cat.id,
+      ranked: false,
+      startAt: new Date(practiceAt).toISOString(),
+      registrationLeadMinutes: Math.ceil((practiceAt - now) / 60_000) + 1,
+      practiceMinutes: TEST_PRACTICE_MS / 60_000,
+      setupLockSeconds: TEST_SETUP_LOCK_MS / 1000,
+      qualifyingSeconds: TEST_QUALIFYING_MS / 1000,
+      capacity: 22,
+      waitlistMax: 10,
+      laps: cfg.AUTO_TEST_RACES_LAPS,
+      track: { type: 'procedural' },
+    },
+    null,
   );
-  let created = 0;
-  for (let at = first; at <= horizon; at += step) {
-    if (taken.has(at)) continue;
-    const row = await createRace(
-      ctx,
-      {
-        name: `Corrida Teste ${hourLabel(at)}`,
-        categoryId: cat.id,
-        ranked: false,
-        startAt: new Date(at).toISOString(),
-        registrationLeadMinutes: Math.ceil((at - now) / 60_000) + 1,
-        practiceMinutes: 2,
-        setupLockSeconds: 10,
-        qualifyingSeconds: 20,
-        capacity: 22,
-        waitlistMax: 10,
-        laps: cfg.AUTO_TEST_RACES_LAPS,
-        track: { type: 'procedural' },
-      },
-      null,
-    );
-    await ctx.db
-      .update(races)
-      .set({ flags: { ...row.flags, autoTest: true } })
-      .where(eq(races.id, row.id));
-    created++;
-  }
-  if (created) ctx.log.info({ created }, 'Corridas teste criadas');
-  return created;
+  await ctx.db
+    .update(races)
+    .set({ flags: { ...row.flags, autoTest: true } })
+    .where(eq(races.id, row.id));
+  ctx.log.info({ raceId: row.id, practiceAt: new Date(practiceAt).toISOString() }, 'Corrida teste criada');
+  return true;
 }
 
 /** Apaga corridas teste encerradas há mais de AUTO_TEST_RACES_KEEP_HOURS (com replay, resultados e pista). */

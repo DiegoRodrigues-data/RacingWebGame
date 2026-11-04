@@ -59,20 +59,13 @@ de 0,5 a 1 MB em gzip (cerca de 20 MB por dia no Postgres). Falta uma rotina que
 
 ### Corridas teste com bots
 
-Uma corrida teste larga a cada 5 minutos (`ensureAutoTestRaces`), sempre com a próxima hora preenchida: 10 voltas
-(abaixo do mínimo de 30 das corridas normais, de propósito, para durar uns 12 minutos do treino à bandeirada),
-amistosa, com bots completando o grid. Ficam marcadas com `flags.autoTest`, aparecem só em "Acontecendo agora" (as em
-andamento e a próxima aberta) e ficam fora do calendário, das próximas largadas e dos resultados recentes
-(`GET /races?test=true|all` para vê-las). Para não encher o banco (288 por dia), são apagadas com replay, resultados e
-pista 3 h depois de encerradas (`AUTO_TEST_RACES_KEEP_HOURS`).
-
-### Traçado salvo desde a inscrição
-
-Antes, o servidor só aceitava o traçado durante a janela de 5 minutos; o que o jogador desenhava antes ficava como
-rascunho no navegador e só era enviado se o Box estivesse aberto quando a janela abrisse. Quem fechava a página
-corria com a linha central e penalidade, e via "sem traçado" sem entender. Agora `PUT /races/:id/trace` vale das
-inscrições até o parque fechado (como o setup), cada ajuste no Box é salvo na hora e a janela de 5 minutos é a
-última chance de ajustar. A linha central intocada não é enviada sozinha: sem desenho, a penalidade continua.
+As corridas teste rodam em ciclo (`ensureAutoTestRaces`): uma de cada vez, 10 voltas (abaixo do mínimo de 30 das
+corridas normais, de propósito), amistosas, com bots completando o grid. Quando uma começa a correr, o fim dela já é
+conhecido e a próxima é criada para largar 10 minutos depois da bandeirada (`AUTO_TEST_RACES_GAP_MIN`), com inscrições
+abertas desde então; antes da largada há 2 min de treino, a janela fixa de 5 min de traçado e uma classificação curta.
+Ficam marcadas com `flags.autoTest`, aparecem só em "Acontecendo agora" (a em andamento e a próxima aberta) e ficam
+fora do calendário, das próximas largadas e dos resultados recentes (`GET /races?test=true|all` para vê-las). São
+apagadas com replay, resultados e pista 3 h depois de encerradas (`AUTO_TEST_RACES_KEEP_HOURS`).
 
 ## Modelo de simulação
 

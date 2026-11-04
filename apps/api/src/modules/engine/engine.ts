@@ -81,7 +81,7 @@ export class PhaseEngine {
       // Grade automática: uma checagem por minuto basta (os horários são de hora em hora).
       const cfg = this.ctx.config;
       if (
-        (cfg.AUTO_RACES_PER_DAY || cfg.AUTO_TEST_RACES_EVERY_MIN) &&
+        (cfg.AUTO_RACES_PER_DAY || cfg.AUTO_TEST_RACES_GAP_MIN) &&
         this.ctx.clock.now() - this.lastAutoRaces >= 60_000
       ) {
         this.lastAutoRaces = this.ctx.clock.now();
