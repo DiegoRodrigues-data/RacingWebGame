@@ -1,0 +1,14 @@
+**/node_modules
+**/dist
+**/.turbo
+**/.data
+**/.env
+**/.env.*
+!**/.env.example
+**/test-results
+**/playwright-report
+**/coverage
+**/*.tsbuildinfo
+**/.DS_Store
+.git
+racing_pack
