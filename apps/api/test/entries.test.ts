@@ -151,3 +151,26 @@ describe('minhas corridas', () => {
     expect((await t.json('GET', '/me/races')).status).toBe(401);
   });
 });
+
+describe('inscrição tardia', () => {
+  it('no treino e na janela de traçado entra quem achar vaga; grid cheio e parque fechado recusam', async () => {
+    const race = await t.createRace({ capacity: 2, waitlistMax: 2 }, 24 * 3600_000);
+    const [a, b, c, d] = await users(4, 'tarde');
+    await t.json('POST', `/races/${race}/entries`, {}, a!.token);
+    const { timeline } = await t.race(race);
+    await t.advanceTo(Date.parse(timeline.practiceAt));
+    expect((await t.race(race)).status).toBe('practice');
+    const late = await t.json('POST', `/races/${race}/entries`, {}, b!.token);
+    expect(late.body.status).toBe('confirmed');
+    // Grid cheio: sem fila de espera depois que o treino começou.
+    expect((await t.json('POST', `/races/${race}/entries`, {}, c!.token)).body.error.code).toBe('RACE_FULL');
+    await t.json('DELETE', `/races/${race}/entries/me`, undefined, b!.token);
+    await t.advanceTo(Date.parse(timeline.traceWindowAt));
+    expect((await t.race(race)).status).toBe('trace_window');
+    expect((await t.json('POST', `/races/${race}/entries`, {}, c!.token)).body.status).toBe('confirmed');
+    await t.advanceTo(Date.parse(timeline.setupLockAt));
+    expect((await t.json('POST', `/races/${race}/entries`, {}, d!.token)).body.error.code).toBe(
+      'REGISTRATION_CLOSED',
+    );
+  });
+});

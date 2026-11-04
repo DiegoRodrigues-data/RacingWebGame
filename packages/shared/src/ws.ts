@@ -27,8 +27,13 @@ export interface ReplayFrame {
   t: number; // ms desde a largada (tempo simulado)
   c: number[];
 }
-/** x, y (m), heading (rad), progresso (voltas.fração), pneu (índice TYRES), status (0 correndo, 1 box, 2 abandono, 3 terminou). */
-export const CAR_FRAME_STRIDE = 6;
+/**
+ * x, y (m), heading (rad), progresso (voltas.fração), pneu (índice TYRES), status (0 correndo, 1 box, 2 abandono,
+ * 3 terminou), desgaste do pneu (%, passa de 100 depois da vida útil) e desgaste do motor (%).
+ * Replays gravados antes da simulação v2 têm só os 6 primeiros (CAR_FRAME_STRIDE_V1).
+ */
+export const CAR_FRAME_STRIDE = 8;
+export const CAR_FRAME_STRIDE_V1 = 6;
 export const CAR_STATUS = { running: 0, pit: 1, dnf: 2, finished: 3 } as const;
 
 export interface LiveCarDto {

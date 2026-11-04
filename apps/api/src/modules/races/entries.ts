@@ -3,6 +3,7 @@ import {
   CAR_COLORS,
   CAR_MODELS,
   carChoiceSchema,
+  LATE_ENTRY_PHASES,
   MAX_OVERLAPPING_ENTRIES,
   meetsLevel,
   SETUP_EDITABLE_PHASES,
@@ -85,7 +86,9 @@ export interface RegisterResult {
 }
 
 /**
- * Inscrição. A linha da corrida é travada (SELECT ... FOR UPDATE) e há um mutex por corrida no processo,
+ * Inscrição. Vale com as inscrições abertas e, se houver vaga no grid, também no treino e na janela de traçado
+ * (inscrição tardia, sem fila de espera) até o parque fechado.
+ * A linha da corrida é travada (SELECT ... FOR UPDATE) e há um mutex por corrida no processo,
  * então duas tentativas simultâneas pela última vaga são serializadas: a primeira confirma, a segunda vai para a fila.
  */
 export async function register(ctx: Ctx, raceId: string, user: AuthUser): Promise<RegisterResult> {
@@ -94,10 +97,12 @@ export async function register(ctx: Ctx, raceId: string, user: AuthUser): Promis
       ctx.db.transaction(async (tx) => {
         const now = ctx.clock.now();
         const race = await getRaceRow(tx, raceId, true);
+        const late = LATE_ENTRY_PHASES.includes(race.status) && now < race.setupLockAt.getTime();
         if (
-          race.status !== 'registration_open' ||
-          now >= race.practiceAt.getTime() ||
-          now < race.registrationOpensAt.getTime()
+          !late &&
+          (race.status !== 'registration_open' ||
+            now >= race.practiceAt.getTime() ||
+            now < race.registrationOpensAt.getTime())
         )
           throw new AppError('REGISTRATION_CLOSED', 'As inscrições desta corrida não estão abertas.');
         const profile = await checkEligibility(ctx, tx, race, user);
@@ -114,7 +119,8 @@ export async function register(ctx: Ctx, raceId: string, user: AuthUser): Promis
         if (cap.confirmed < race.capacity) {
           status = 'confirmed';
           car = await assignCar(tx, raceId, profile.carColor);
-        } else if (cap.waitlisted < race.waitlistMax) status = 'waitlisted';
+        } else if (late) throw new AppError('RACE_FULL', 'O grid já está completo.');
+        else if (cap.waitlisted < race.waitlistMax) status = 'waitlisted';
         else throw new AppError('RACE_FULL', 'Corrida lotada e fila de espera completa.');
         const values = {
           status,

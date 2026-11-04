@@ -1,6 +1,7 @@
 import {
   formatLapTime,
   ROOM,
+  type CarSetup,
   type LiveCarDto,
   type RaceIncidentDto,
   type ReplayFrame,
@@ -12,6 +13,7 @@ import clsx from 'clsx';
 import { Pause, Play } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useParams } from 'react-router';
+import { CarWearPanel, TyreWearMini } from '../components/CarWear';
 import { Minimap, RainOverlay } from '../components/Minimap';
 import { CameraControls, TrackCanvas } from '../components/TrackCanvas';
 import { Countdown, Empty, PhaseBadge, Spinner } from '../components/ui';
@@ -19,7 +21,7 @@ import { CAR_CSS } from '../game/assets';
 import { FrameBuffer, type CarState } from '../game/playback';
 import type { TrackScene } from '../game/scene';
 import { get } from '../lib/api';
-import { TYRE_COLOR, TYRES_BY_CODE, WEATHER_ICON } from '../lib/format';
+import { WEATHER_ICON } from '../lib/format';
 import { useGeometry, useRace } from '../lib/queries';
 import { realtime, useRoom } from '../lib/realtime';
 import { useSession } from '../lib/session';
@@ -63,6 +65,12 @@ export default function Live({ mode }: { mode: 'live' | 'replay' }) {
   const [meta, setMeta] = useState<{ startedAt: number; speed: number; durationMs: number } | null>(null);
   const [incidents, setIncidents] = useState<RaceIncidentDto[]>([]);
   const [standings, setStandings] = useState<{ car: LiveCarDto; st: CarState; idx: number }[]>([]);
+  // Todas as paradas (a lista de acontecimentos guarda só as últimas): dão as voltas de cada jogo de pneus.
+  const pitLog = useRef(new Map<string, RaceIncidentDto>());
+  const logPits = (list: RaceIncidentDto[]) => {
+    for (const i of list) if (i.kind === 'pit' && i.userId) pitLog.current.set(`${i.userId}|${i.t}`, i);
+  };
+  const [simT, setSimT] = useState(0);
   const [follow, setFollow] = useState<string | null>(null);
   const [finished, setFinished] = useState(false);
   // Replay: relógio local controlável.
@@ -88,6 +96,7 @@ export default function Live({ mode }: { mode: 'live' | 'replay' }) {
       speed: replay.data.playbackSpeed,
       durationMs: replay.data.durationMs,
     });
+    logPits(replay.data.incidents);
     setIncidents(replay.data.incidents.filter((i) => i.kind !== 'overtake').slice(-30));
   }, [replay.data]);
 
@@ -98,6 +107,7 @@ export default function Live({ mode }: { mode: 'live' | 'replay' }) {
         if (live && !buffer.current.frames.length) {
           setCars(live.cars);
           setMeta({ startedAt: live.startedAt, speed: live.playbackSpeed, durationMs: live.durationMs });
+          logPits(live.incidents);
           setIncidents(live.incidents);
           void qc.invalidateQueries({ queryKey: ['replay', id, mode] });
         }
@@ -115,6 +125,7 @@ export default function Live({ mode }: { mode: 'live' | 'replay' }) {
         break;
       }
       case 'race.incident':
+        logPits((env.payload as ServerEvents['race.incident']).incidents);
         setIncidents((list) =>
           [...list, ...(env.payload as ServerEvents['race.incident']).incidents].slice(-30),
         );
@@ -168,6 +179,7 @@ export default function Live({ mode }: { mode: 'live' | 'replay' }) {
       if (acc > 250) {
         acc = 0;
         if (mode === 'replay') setScrub(replayT.current);
+        setSimT(t);
         const order = cars
           .map((car, idx) => ({ car, st: states[idx]!, idx }))
           .sort(
@@ -182,6 +194,15 @@ export default function Live({ mode }: { mode: 'live' | 'replay' }) {
     };
   }, [scene, meta, cars, mode, playing, rate, follow, me?.id]);
 
+  // Seu setup (só o dono vê): mostra a próxima parada planejada no painel do seu carro.
+  const inRace = !!me && cars.some((c) => c.userId === me.id);
+  const mySetup = useQuery({
+    queryKey: ['setup', id, me?.id],
+    queryFn: () => get<{ setup: CarSetup } | null>(`/races/${id}/setup`),
+    enabled: !!id && inRace,
+    staleTime: Infinity,
+  });
+
   const leader = standings[0];
   const lapNow = leader ? Math.min(race?.laps ?? 0, Math.max(1, Math.floor(leader.st.progress) + 1)) : 1;
   const leaderTimePerLap = useMemo(() => {
@@ -190,6 +211,32 @@ export default function Live({ mode }: { mode: 'live' | 'replay' }) {
   }, [leader, meta, race?.laps]);
   const weatherNow = [...incidents].reverse().find((i) => i.kind === 'weather')?.detail as
     Weather | undefined;
+  const focusId = follow ?? (inRace ? me!.id : (leader?.car.userId ?? null));
+  const focusPos = standings.findIndex((s) => s.car.userId === focusId);
+  const focus = focusPos >= 0 ? standings[focusPos]! : null;
+  const focusInfo = focus
+    ? (() => {
+        const done = Math.max(0, Math.floor(focus.st.progress));
+        let lastPit = 0;
+        for (const i of pitLog.current.values())
+          if (i.userId === focus.car.userId && i.t <= simT) lastPit = Math.max(lastPit, i.lap);
+        const isMe = focus.car.userId === me?.id;
+        const stops = isMe ? mySetup.data?.setup.pitStops : undefined;
+        return {
+          nickname: focus.car.nickname,
+          carColor: focus.car.carColor,
+          carNumber: focus.car.carNumber,
+          position: focusPos + 1,
+          tyreCode: focus.st.tyre,
+          tyreWear: focus.st.tyreWear,
+          engineWear: focus.st.engineWear,
+          stintLaps: focus.st.progress < 0 ? 0 : done - lastPit,
+          status: focus.st.status,
+          isMe,
+          ...(stops ? { nextStop: stops.find((p) => p.lap > done) ?? null } : {}),
+        };
+      })()
+    : null;
 
   if (!race) return <Spinner />;
   if (mode === 'replay' && !['finished', 'archived'].includes(race.status))
@@ -304,12 +351,15 @@ export default function Live({ mode }: { mode: 'live' | 'replay' }) {
           )}
         </div>
         <aside className="space-y-3">
+          {focusInfo && <CarWearPanel info={focusInfo} />}
           <div className="card !p-2">
-            <div className="label px-2 pt-1">Classificação</div>
+            <div className="label flex justify-between px-2 pt-1">
+              <span>Classificação</span>
+              <span className="normal-case tracking-normal">toque para acompanhar</span>
+            </div>
             <ol className="max-h-[46dvh] overflow-auto">
               {standings.map(({ car, st }, pos) => {
                 const gap = pos === 0 ? null : (leader!.st.progress - st.progress) * leaderTimePerLap;
-                const tyre = TYRES_BY_CODE[st.tyre] ?? 'medium';
                 return (
                   <li key={car.userId}>
                     <button
@@ -346,11 +396,7 @@ export default function Live({ mode }: { mode: 'live' | 'replay' }) {
                               : `+${(gap / 1000).toFixed(1)}`}
                         </span>
                       )}
-                      <span
-                        className="size-2.5 rounded-full"
-                        style={{ background: TYRE_COLOR[tyre] }}
-                        title={tyre}
-                      />
+                      <TyreWearMini tyreCode={st.tyre} wear={st.tyreWear} />
                     </button>
                   </li>
                 );

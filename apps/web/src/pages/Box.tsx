@@ -3,9 +3,11 @@ import { traceToOffsets } from '@tracado/trackgen';
 import { useQuery } from '@tanstack/react-query';
 import { useEffect, useState } from 'react';
 import { Link, useParams, useSearchParams } from 'react-router';
-import { Countdown, Empty, PhaseBadge, Spinner, Tabs } from '../components/ui';
+import { isRegistered, JoinRaceButton, lateEntryOpen } from '../components/JoinRace';
+import { Countdown, PhaseBadge, Spinner, Tabs } from '../components/ui';
 import { get } from '../lib/api';
 import { useGeometry, useRace } from '../lib/queries';
+import { useServerNow } from '../lib/realtime';
 import { useSession } from '../lib/session';
 import { draftKey, loadDraft, type PracticeInfo } from './box/common';
 import { PracticeTab } from './box/PracticeTab';
@@ -15,9 +17,14 @@ import { TraceTab } from './box/TraceTab';
 export default function Box() {
   const { id } = useParams();
   const [params, setParams] = useSearchParams();
-  const tab = (params.get('aba') as 'tracado' | 'setup' | 'treino') ?? 'tracado';
   const me = useSession((s) => s.me);
   const { data: race, isLoading } = useRace(id);
+  const now = useServerNow(1000);
+  const registered = !!race && isRegistered(race);
+  // Sem inscrição o box vira treino livre: tudo fica neste aparelho. Começa na aba de treino.
+  const tab =
+    (params.get('aba') as 'tracado' | 'setup' | 'treino' | null) ??
+    (race && !registered ? 'treino' : 'tracado');
   const geo = useGeometry(race?.track.versionId);
   const practice = useQuery({
     queryKey: ['practice', id],
@@ -28,12 +35,12 @@ export default function Box() {
     queryKey: ['trace', id, me?.id],
     queryFn: () =>
       get<{ points: TracePoint[]; version: number; submittedAt: string } | null>(`/races/${id}/trace`),
-    enabled: !!id,
+    enabled: !!id && !!me,
   });
   const serverSetup = useQuery({
     queryKey: ['setup', id, me?.id],
     queryFn: () => get<{ setup: CarSetup; updatedAt: string } | null>(`/races/${id}/setup`),
-    enabled: !!id,
+    enabled: !!id && !!me,
   });
 
   const [offsets, setOffsets] = useState<Float64Array | null>(null);
@@ -59,15 +66,7 @@ export default function Box() {
   }, [serverSetup.isLoading, serverSetup.data, setup, practice.data, id, race?.track.terrain]);
 
   if (isLoading || !race) return <Spinner />;
-  const entry = race.me?.entry;
-  if (!entry || (entry.status !== 'confirmed' && entry.status !== 'waitlisted'))
-    return (
-      <Empty title="Você não está inscrito nesta corrida" icon="🔒">
-        <Link className="btn-primary mt-3" to={`/corridas/${id}`}>
-          Ver corrida
-        </Link>
-      </Empty>
-    );
+  const late = lateEntryOpen(race, now);
   return (
     <div className="space-y-4">
       <header className="flex flex-wrap items-center justify-between gap-3">
@@ -82,6 +81,29 @@ export default function Box() {
           {race.phaseDeadline && <Countdown to={race.phaseDeadline} className="text-2xl" />}
         </div>
       </header>
+      {!registered && (
+        <div className="card flex flex-wrap items-center gap-3 border-sky">
+          <div className="min-w-0 flex-1 text-sm">
+            <b>Treino livre.</b>{' '}
+            <span className="text-muted">
+              Você não está inscrito: teste setups, traçados e corridas contra fantasmas à vontade, mas nada
+              disso vale para a corrida.{' '}
+              {!me
+                ? 'Entre na sua conta para disputar.'
+                : late || race.status === 'registration_open'
+                  ? 'Inscreva-se para levar o seu carro ao grid.'
+                  : ''}
+            </span>
+          </div>
+          {!me ? (
+            <Link to={`/entrar?voltar=/corridas/${id}/box`} className="btn-primary">
+              Entrar
+            </Link>
+          ) : (
+            <JoinRaceButton race={race} now={now} className="btn-primary" />
+          )}
+        </div>
+      )}
       <Tabs
         value={tab}
         onChange={(v) => setParams({ aba: v }, { replace: true })}

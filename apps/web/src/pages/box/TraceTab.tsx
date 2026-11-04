@@ -517,10 +517,14 @@ export function TraceTab({
               e o traçado trava às{' '}
               <b className="text-ink">{new Date(race.timeline.setupLockAt).toLocaleTimeString('pt-BR')}</b>.
             </p>
-          ) : editable ? (
+          ) : editable && race.me?.entry?.status === 'waitlisted' ? (
             <p className="text-sm text-muted">
               Você está na fila de espera: o desenho fica neste aparelho e é salvo no servidor quando sua vaga
               for confirmada (com esta página aberta).
+            </p>
+          ) : editable ? (
+            <p className="text-sm text-muted">
+              Treino livre: o desenho fica só neste aparelho. Inscreva-se para ele valer na corrida.
             </p>
           ) : (
             <p className="text-sm text-muted">Não é mais possível alterar o traçado.</p>

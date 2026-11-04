@@ -69,10 +69,14 @@ describe('ciclo de vida completo de uma corrida (fluxo crítico)', () => {
     await t.advanceTo(Date.parse(race.timeline.practiceAt));
     race = await t.race(raceId);
     expect(race.status).toBe('practice');
+    // Inscrição tardia: com vaga no grid, ainda dá para entrar no treino (e desistir em seguida não larga).
+    const atrasado = await t.register('Atrasado');
+    expect((await t.json('POST', `/races/${raceId}/entries`, {}, atrasado.token)).body.status).toBe(
+      'confirmed',
+    );
     expect(
-      (await t.json('POST', `/races/${raceId}/entries`, {}, (await t.register('Atrasado')).token)).body.error
-        .code,
-    ).toBe('REGISTRATION_CLOSED');
+      (await t.json('DELETE', `/races/${raceId}/entries/me`, undefined, atrasado.token)).body.status,
+    ).toBe('withdrawn');
     const practice = await t.json('GET', `/races/${raceId}/practice`);
     expect(practice.body.reference.suggestedLapMs).toBeLessThan(practice.body.reference.centerlineLapMs);
 

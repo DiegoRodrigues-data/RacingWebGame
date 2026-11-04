@@ -1,4 +1,4 @@
-import type { CarSetup, Terrain, Tyre, Weather } from '@tracado/shared';
+import type { CarSetup, RaceWeather, Terrain, Tyre, Weather } from '@tracado/shared';
 import { CAR_HALF_WIDTH, type TrackGeometry } from '@tracado/trackgen';
 
 /**
@@ -42,6 +42,20 @@ export const COEF = {
     power: { top: 1.03, accel: 1.05, wear: 1.12, failure: 0.012 },
   },
   gearing: { accel: 0.08, top: 0.045 },
+  /**
+   * Desgaste do motor ao longo de uma corrida completa (1 = fim da vida útil). Marcha curta gira mais alto e gasta
+   * até `gearingWear` a mais. A chance de quebra por volta do mapa (`engine.*.failure`) é multiplicada por
+   * `failBase + failSlope × desgaste`: motor novo quase não quebra, motor gasto quebra mais.
+   */
+  engineWear: { economy: 0.45, balanced: 0.7, power: 1 } as Record<CarSetup['engine'], number>,
+  engineGearingWear: 0.1,
+  engineFail: { base: 0.4, slope: 1.2 },
+  /**
+   * Variação sorteada do desgaste dos pneus: cada stint de cada carro recebe um fator uniforme em ±spread, de
+   * `stable` (seco, temperatura amena) a `unstable` (chuva provável ou temperatura extrema), e cada volta
+   * oscila mais ±lapJitter. Segue determinístico pela seed da corrida.
+   */
+  wearSpread: { stable: 0.08, unstable: 0.2, lapJitter: 0.03 },
   weatherBet: { dryGain: 0.015, wrongPenalty: 0.05 },
   pitLossBase: 6,
   pitLossScaled: 10,
@@ -63,6 +77,7 @@ export interface CarModifiers {
   accel: number;
   brakeScale: number;
   wearPerRace: number;
+  engineWearPerRace: number;
   failurePerLap: number;
   /** Aderência relativa ao ideal para a condição (para risco de rodada). */
   gripRatio: number;
@@ -76,6 +91,20 @@ export function tyreGrip(tyre: Tyre, wetness: number): number {
 export function wearGripFactor(wear: number): number {
   const cliff = wear > COEF.cliffAt ? (wear - COEF.cliffAt) * COEF.cliffSlope : 0;
   return Math.max(0.35, 1 - COEF.wearLinearLoss * wear - cliff);
+}
+
+/** Quanto o desgaste dos pneus pode variar (± fração) com a previsão do tempo: clima instável, mais incerteza. */
+export function wearSpread(w: RaceWeather): number {
+  const raining = w.base === 'light_rain' || w.base === 'rain' ? 0.6 : 0;
+  const heat = Math.max(0, Math.abs(w.temperature - 22) - 8) / 10;
+  const instability = Math.min(1, Math.max(raining, w.rainChance * 1.4) + heat);
+  const { stable, unstable } = COEF.wearSpread;
+  return Math.round((stable + (unstable - stable) * instability) * 100) / 100;
+}
+
+/** Multiplicador da chance de quebra do motor para um desgaste acumulado (0 = novo, 1 = fim da vida útil). */
+export function engineFailFactor(engineWear: number): number {
+  return COEF.engineFail.base + COEF.engineFail.slope * engineWear;
 }
 
 export function optimalPressure(c: Conditions): number {
@@ -171,6 +200,7 @@ export function carModifiers(
     accel: COEF.baseAccel * eng.accel * gearAccel,
     brakeScale: Math.min(1.15, tyreMu * pressureGrip),
     wearPerRace: COEF.raceWear[tyre] * wearMul,
+    engineWearPerRace: COEF.engineWear[setup.engine] * (1 - COEF.engineGearingWear * gx),
     failurePerLap: eng.failure,
     gripRatio: (tyreMu * pressureGrip * betGrip) / idealTyreMu,
   };

@@ -48,6 +48,8 @@ export function canTransition(from: RacePhase, to: RacePhase): boolean {
 export const TERMINAL_PHASES: readonly RacePhase[] = ['archived', 'cancelled'];
 export const SETUP_EDITABLE_PHASES: readonly RacePhase[] = ['registration_open', 'practice', 'trace_window'];
 export const ENTRY_OPEN_PHASES: readonly RacePhase[] = ['registration_open'];
+/** Inscrição tardia: com a corrida já no treino ou na janela de traçado, entra quem achar vaga até o parque fechado. */
+export const LATE_ENTRY_PHASES: readonly RacePhase[] = ['practice', 'trace_window'];
 export const WITHDRAW_PHASES: readonly RacePhase[] = ['registration_open', 'practice', 'trace_window'];
 export const LIVE_PHASES: readonly RacePhase[] = [
   'practice',

@@ -19,15 +19,18 @@ import {
 import {
   carModifiers,
   COEF,
+  engineFailFactor,
   lapProfile,
   lateralMeters,
   pathCurvature,
   WETNESS,
+  wearSpread,
   type Conditions,
   type LapProfile,
 } from './model';
 
-export const SIM_VERSION = 1;
+/** 2: desgaste de pneu com variação sorteada por stint, desgaste do motor e os dois nos frames. */
+export const SIM_VERSION = 2;
 export const FRAME_HZ = 4;
 const DT = 0.25;
 
@@ -106,6 +109,10 @@ interface CarState {
   tyre: Tyre;
   wear: number;
   wearPerLap: number;
+  /** Fator sorteado do stint atual (±wearSpread). */
+  wearFactor: number;
+  engineWear: number;
+  engineWearPerLap: number;
   failurePerLap: number;
   gripRatio: number;
   lapStart: number;
@@ -153,10 +160,14 @@ export function simulateRace(input: RaceSimInput): RaceSimOutput {
   let wetness = WETNESS[weather[0]!];
   const cond = (): Conditions => ({ wetness, temperature: input.weather.temperature });
   const gripZones: { from: number; to: number; factor: number; untilLap: number }[] = [];
+  const spread = wearSpread(input.weather);
+  const stintFactor = (id: string, stint: number) =>
+    createRng(`${input.seed}|wear|${id}|${stint}`).range(1 - spread, 1 + spread);
 
   const buildProfile = (s: CarState) => {
     const m = carModifiers(g, s.car.setup, s.tyre, s.wear, cond(), gripZones);
     s.wearPerLap = m.wearPerRace / laps;
+    s.engineWearPerLap = m.engineWearPerRace / laps;
     s.failurePerLap = m.failurePerLap;
     s.gripRatio = m.gripRatio;
     s.profile = lapProfile(s.path, s.curvature, m, s.car.trace ? 0 : NO_TRACE_PACE_PENALTY);
@@ -179,6 +190,9 @@ export function simulateRace(input: RaceSimInput): RaceSimOutput {
       tyre: car.setup.tyre,
       wear: 0,
       wearPerLap: 0,
+      wearFactor: stintFactor(car.id, 0),
+      engineWear: 0,
+      engineWearPerLap: 0,
       failurePerLap: 0,
       gripRatio: 1,
       lapStart: 0,
@@ -204,7 +218,8 @@ export function simulateRace(input: RaceSimInput): RaceSimOutput {
     const spinP =
       COEF.spinBase + COEF.spinLowGrip * Math.max(0, 0.92 - s.gripRatio) + (s.wear > 1 ? 0.05 : 0);
     s.spinAtFrac = r.chance(spinP) ? r.range(0.1, 0.9) : null;
-    s.failAtFrac = input.randomEvents.mechanical && r.chance(s.failurePerLap) ? r.range(0.05, 0.95) : null;
+    const failP = s.failurePerLap * engineFailFactor(s.engineWear);
+    s.failAtFrac = input.randomEvents.mechanical && r.chance(failP) ? r.range(0.05, 0.95) : null;
   };
   cars.forEach((c) => planLapEvents(c, 0));
 
@@ -265,6 +280,8 @@ export function simulateRace(input: RaceSimInput): RaceSimOutput {
         Math.round((s.total / n) * 1000) / 1000,
         tyreCode(s.tyre),
         status,
+        Math.round(s.wear * 100),
+        Math.round(s.engineWear * 100),
       );
     }
     frames.push({ t: Math.round(time * 1000), c });
@@ -291,7 +308,12 @@ export function simulateRace(input: RaceSimInput): RaceSimOutput {
         detail: String(ms),
       });
     }
-    s.wear += s.wearPerLap;
+    const jitter = COEF.wearSpread.lapJitter;
+    s.wear +=
+      s.wearPerLap *
+      s.wearFactor *
+      createRng(`${input.seed}|wearlap|${s.car.id}|${completed}`).range(1 - jitter, 1 + jitter);
+    s.engineWear += s.engineWearPerLap;
     if (completed > leaderLap) {
       leaderLap = completed;
       // Clima evolui por volta do líder; a umidade da pista acompanha com atraso.
@@ -350,6 +372,7 @@ export function simulateRace(input: RaceSimInput): RaceSimOutput {
       s.pitStops++;
       s.tyre = planned ? planned.tyre : s.tyre;
       s.wear = 0;
+      s.wearFactor = stintFactor(s.car.id, s.pitStops);
       s.v = 0;
       incidents.push({
         t: Math.round(time * 1000),
@@ -527,9 +550,38 @@ export interface LapEstimate {
   sectorMs: number[];
   topSpeedKmh: number;
   wearPerLap: number;
-  /** Voltas até o "penhasco" de desgaste. */
+  /** Voltas até o "penhasco" de desgaste, na média (sem a variação sorteada). */
   lapsToCliff: number;
+  /** Desgaste do motor por volta (1 = vida útil inteira). */
+  engineWearPerLap: number;
   profile: Float64Array;
+}
+
+export interface TyreLife {
+  /** Voltas até o penhasco de desgaste na média e nos extremos da variação sorteada. */
+  avg: number;
+  min: number;
+  max: number;
+  /** ± fração da variação sorteada para esta previsão do tempo. */
+  spread: number;
+}
+
+/** Quantas voltas o pneu rende antes do penhasco, com a faixa de variação que o clima previsto traz. */
+export function tyreLife(wearPerLap: number, weather: RaceWeather, fromWear = 0): TyreLife {
+  const spread = wearSpread(weather);
+  const left = Math.max(0, COEF.cliffAt - fromWear);
+  const laps = (f: number) => Math.floor(left / (wearPerLap * f));
+  return { avg: laps(1), min: laps(1 + spread), max: laps(1 - spread), spread };
+}
+
+/** Chance de o motor quebrar em algum momento da corrida (eventos mecânicos ligados). */
+export function engineRaceRisk(setup: CarSetup, laps: number): { risk: number; wearAtEnd: number } {
+  const m = COEF.engine[setup.engine];
+  const gx = (setup.gearing - 5.5) / 4.5;
+  const perRace = COEF.engineWear[setup.engine] * (1 - COEF.engineGearingWear * gx);
+  let ok = 1;
+  for (let lap = 0; lap < laps; lap++) ok *= 1 - m.failure * engineFailFactor((perRace * lap) / laps);
+  return { risk: 1 - ok, wearAtEnd: perRace };
 }
 
 export function estimateLap(
@@ -557,6 +609,7 @@ export function estimateLap(
     topSpeedKmh: Math.round(p.topSpeed * 3.6),
     wearPerLap,
     lapsToCliff: Math.max(0, Math.floor((COEF.cliffAt - wear) / wearPerLap)),
+    engineWearPerLap: m.engineWearPerRace / laps,
     profile: p.v,
   };
 }
@@ -590,7 +643,16 @@ export function simulateQualifying(
 /** Decodifica um frame em objetos (útil no cliente e em testes). */
 export function decodeFrame(
   frame: ReplayFrame,
-): { x: number; y: number; heading: number; progress: number; tyre: number; status: number }[] {
+): {
+  x: number;
+  y: number;
+  heading: number;
+  progress: number;
+  tyre: number;
+  status: number;
+  tyreWear: number;
+  engineWear: number;
+}[] {
   const out = [];
   for (let i = 0; i < frame.c.length; i += CAR_FRAME_STRIDE)
     out.push({
@@ -600,6 +662,8 @@ export function decodeFrame(
       progress: frame.c[i + 3]!,
       tyre: frame.c[i + 4]!,
       status: frame.c[i + 5]!,
+      tyreWear: frame.c[i + 6]!,
+      engineWear: frame.c[i + 7]!,
     });
   return out;
 }

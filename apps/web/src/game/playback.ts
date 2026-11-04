@@ -1,4 +1,4 @@
-import { CAR_FRAME_STRIDE, type ReplayFrame } from '@tracado/shared';
+import { CAR_FRAME_STRIDE, CAR_FRAME_STRIDE_V1, type ReplayFrame } from '@tracado/shared';
 
 export interface CarState {
   x: number;
@@ -7,6 +7,9 @@ export interface CarState {
   progress: number;
   tyre: number;
   status: number;
+  /** Desgaste do pneu e do motor em %; null em replays anteriores à simulação v2. */
+  tyreWear: number | null;
+  engineWear: number | null;
 }
 
 /** Buffer de frames com interpolação linear (posição) e angular (direção). */
@@ -74,8 +77,11 @@ export class FrameBuffer {
 
 export function decode(f: ReplayFrame, cars: number): CarState[] {
   const out: CarState[] = [];
+  // O tamanho do frame diz a versão: replays antigos têm 6 números por carro, os novos 8.
+  const stride = cars && f.c.length >= cars * CAR_FRAME_STRIDE ? CAR_FRAME_STRIDE : CAR_FRAME_STRIDE_V1;
+  const wear = stride === CAR_FRAME_STRIDE;
   for (let i = 0; i < cars; i++) {
-    const o = i * CAR_FRAME_STRIDE;
+    const o = i * stride;
     out.push({
       x: f.c[o]!,
       y: f.c[o + 1]!,
@@ -83,6 +89,8 @@ export function decode(f: ReplayFrame, cars: number): CarState[] {
       progress: f.c[o + 3]!,
       tyre: f.c[o + 4]!,
       status: f.c[o + 5]!,
+      tyreWear: wear ? f.c[o + 6]! : null,
+      engineWear: wear ? f.c[o + 7]! : null,
     });
   }
   return out;

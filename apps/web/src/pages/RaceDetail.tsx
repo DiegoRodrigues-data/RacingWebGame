@@ -1,8 +1,8 @@
 import { formatLapTime, LEVEL_LABELS, PHASE_LABELS, type QualifyingRowDto } from '@tracado/shared';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import confetti from 'canvas-confetti';
 import { useState } from 'react';
 import { Link, useParams } from 'react-router';
+import { isRegistered, JoinRaceButton, lateEntryOpen } from '../components/JoinRace';
 import { LiveTrack } from '../components/LiveTrack';
 import { CameraControls, TrackCanvas } from '../components/TrackCanvas';
 import {
@@ -17,9 +17,10 @@ import {
   toast,
 } from '../components/ui';
 import type { TrackScene } from '../game/scene';
-import { del, errorMessage, get, post } from '../lib/api';
+import { del, errorMessage, get } from '../lib/api';
 import { fmtDateTime, fmtKm, TERRAIN_LABEL, WEATHER_ICON, WEATHER_LABEL } from '../lib/format';
 import { useGeometry, useRace } from '../lib/queries';
+import { useServerNow } from '../lib/realtime';
 import { useSession } from '../lib/session';
 import { ShareRace } from '../components/ShareRace';
 
@@ -31,6 +32,7 @@ export default function RaceDetail() {
   const geo = useGeometry(race?.track.versionId);
   const [scene, setScene] = useState<TrackScene | null>(null);
   const [busy, setBusy] = useState(false);
+  const now = useServerNow(1000);
   const qualiVisible = race && ['qualifying', 'race', 'finished', 'archived'].includes(race.status);
   const quali = useQuery({
     queryKey: ['quali', id],
@@ -40,24 +42,11 @@ export default function RaceDetail() {
   if (isLoading) return <Spinner />;
   if (error || !race) return <Empty title="Corrida não encontrada" icon="🚧" />;
   const entry = race.me?.entry;
-  const active = entry && (entry.status === 'confirmed' || entry.status === 'waitlisted');
-  const prepPhase = ['registration_open', 'practice', 'trace_window'].includes(race.status);
-
-  async function register() {
-    setBusy(true);
-    try {
-      const r = await post<{ status: string; waitlistPosition: number | null }>(`/races/${id}/entries`);
-      if (r.status === 'confirmed') {
-        toast('Você está no grid! 🏎️', 'Configure o carro e prepare seu traçado.', 'ok');
-        if (!me?.profile.reducedMotion) void confetti({ particleCount: 80, spread: 70, origin: { y: 0.7 } });
-      } else toast('Corrida lotada', `Você é o ${r.waitlistPosition}º da fila de espera.`, 'warn');
-      await qc.invalidateQueries({ queryKey: ['race', id] });
-    } catch (e) {
-      toast('Não foi possível se inscrever', errorMessage(e), 'error');
-    } finally {
-      setBusy(false);
-    }
-  }
+  const active = isRegistered(race);
+  const prepPhase =
+    ['registration_open', 'practice', 'trace_window'].includes(race.status) &&
+    now < Date.parse(race.timeline.setupLockAt);
+  const late = lateEntryOpen(race, now);
   async function cancel() {
     if (
       !window.confirm(
@@ -128,6 +117,14 @@ export default function RaceDetail() {
                 label={`Mapa da pista ${race.track.name}`}
               />
               <CameraControls scene={scene} />
+              {prepPhase && (
+                <Link
+                  to={`/corridas/${race.id}/box?aba=treino`}
+                  className="btn-go absolute bottom-3 left-3 !px-3 !py-2 text-sm shadow-xl"
+                >
+                  ⏱️ Treinar nesta pista
+                </Link>
+              )}
             </div>
           )}
           <div className="flex flex-wrap gap-2 text-sm">
@@ -164,10 +161,28 @@ export default function RaceDetail() {
                 Entre para se inscrever
               </Link>
             )}
-            {me && !active && race.status === 'registration_open' && (
-              <button className="btn-primary w-full" disabled={busy} onClick={register}>
-                {race.capacity.free > 0 ? 'Inscrever-se' : 'Entrar na fila de espera'}
-              </button>
+            <JoinRaceButton race={race} now={now} />
+            {me && !active && late && (
+              <p className="text-center text-xs text-muted">
+                O treino já começou, mas ainda há {race.capacity.free}{' '}
+                {race.capacity.free === 1 ? 'vaga' : 'vagas'}: entre até o parque fechado (
+                <Countdown to={race.timeline.setupLockAt} className="text-ink" />
+                ).
+              </p>
+            )}
+            {me &&
+              !active &&
+              !late &&
+              ['practice', 'trace_window'].includes(race.status) &&
+              now < Date.parse(race.timeline.setupLockAt) && (
+                <p className="text-center text-sm text-muted">
+                  O grid está completo. Você ainda pode treinar nesta pista.
+                </p>
+              )}
+            {!active && prepPhase && (
+              <Link to={`/corridas/${race.id}/box?aba=treino`} className="btn-ghost w-full">
+                ⏱️ Treinar nesta pista
+              </Link>
             )}
             {me && !active && race.status === 'scheduled' && (
               <p className="text-center text-sm text-muted">

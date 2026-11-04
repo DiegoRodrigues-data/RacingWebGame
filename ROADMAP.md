@@ -170,6 +170,8 @@ Profundidade estratégica com balanceamento verificável.
 - [x] Eventos semeados por categoria (safety car, óleo, falha mecânica, furo, rodada, clima)
 - [x] Tela de setup com prévia de tempo seco/chuva, velocidade, desgaste por volta e limites da categoria
 - [x] Setup gamificado: garagem com o carro, ficha técnica (velocidade, curvas, pneus, confiabilidade, chuva) e nota, cartões de pneu/motor/terreno/clima, manômetros com faixa ideal, barra de stints e dicas do engenheiro
+- [x] Desgaste de pneu com variação sorteada por jogo de pneus (±8% a ±20% conforme o clima) e desgaste do motor que aumenta a chance de quebra (simulação v2, balanceamento conferido)
+- [x] Setup mostra quantas voltas cada composto rende (média e faixa) e onde o pneu pode passar do limite
 - [x] Escolha do carro na corrida (cor e modelo livres, só visual) com `PUT /races/:id/car`
 - [x] `PUT/GET /races/:id/setup` com limites por categoria
 - [x] Script de balanceamento (`pnpm balance`): estratégia mais vencedora 22%, maior lift 1,72
@@ -181,6 +183,8 @@ Fecha o ciclo de vida com resultados persistidos.
 
 - [x] **Treino:** volta e corrida de teste locais contra 5 fantasmas; tempos de referência do servidor
 - [x] Treino com o carro na pista: volta lançada animada (1×/2×/5×, parciais por setor) e corrida de teste em replay com os 6 carros, posições ao vivo e controles
+- [x] Inscrição tardia (treino e janela de traçado, com vaga, até o parque fechado) e treino livre no box para quem não está inscrito
+- [x] Ao vivo: painel do carro em foco com desgaste do pneu e do motor, voltas no jogo de pneus e próxima parada; desgaste de pneu na classificação
 - [x] **Classificação:** volta lançada simulada no servidor; empate pela ordem de confirmação
 - [x] **Corrida:** simulação completa com replay a 4 Hz gravado comprimido em `race_replays`
 - [x] Transmissão: `race.started`, `race.tick`, `race.incident`, `race.finished`; replay sem revelar o futuro

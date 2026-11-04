@@ -187,9 +187,22 @@ export default function AdminRaces() {
   async function action(r: RaceSummaryDto, kind: 'cancel' | 'annul' | 'reprocess') {
     try {
       if (kind === 'reprocess') {
-        const res = await post<{ match: boolean; storedHash: string; recomputedHash: string }>(
-          `/admin/races/${r.id}/reprocess`,
-        );
+        const res = await post<{
+          match: boolean;
+          outdated?: boolean;
+          simVersion?: number;
+          currentSimVersion?: number;
+          storedHash: string;
+          recomputedHash: string | null;
+        }>(`/admin/races/${r.id}/reprocess`);
+        if (res.outdated) {
+          toast(
+            'Corrida de outra versão da simulação',
+            `Simulada na v${res.simVersion}; o servidor roda a v${res.currentSimVersion}, então não dá para reprocessar.`,
+            'warn',
+          );
+          return;
+        }
         toast(
           res.match ? 'Reprocessamento confere ✅' : 'DIVERGÊNCIA no reprocessamento ❌',
           `${res.storedHash} / ${res.recomputedHash}`,

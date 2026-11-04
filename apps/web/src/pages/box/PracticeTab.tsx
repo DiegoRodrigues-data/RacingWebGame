@@ -14,6 +14,7 @@ import clsx from 'clsx';
 import { FastForward, Pause, Play, Square } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link } from 'react-router';
+import { CarWearPanel } from '../../components/CarWear';
 import { CameraControls, TrackCanvas } from '../../components/TrackCanvas';
 import { CarIcon, Segmented } from '../../components/ui';
 import { CAR_CSS } from '../../game/assets';
@@ -49,6 +50,8 @@ type Anim =
       durationMs: number;
       cars: PracticeCar[];
       results: CarResult[];
+      /** Voltas em que o seu carro parou nos boxes, com o instante (ms simulados). */
+      myPits: { t: number; lap: number }[];
     };
 
 const LAP_RATES = [1, 2, 5] as const;
@@ -243,6 +246,7 @@ export function PracticeTab({
       durationMs: out.durationMs,
       cars: [me, ...ghosts.map((x) => x.car)],
       results: out.results,
+      myPits: out.incidents.filter((i) => i.kind === 'pit' && i.userId === 'voce'),
     };
     setFollow(true);
     if (scene && scene.zoom < 3) scene.setZoom(3.5);
@@ -270,6 +274,11 @@ export function PracticeTab({
   const lapNow =
     a.kind === 'race' && live[0] ? Math.min(practice.laps, Math.floor(live[0].st!.progress) + 1) : 0;
   const nameOf = (id: string) => (a.kind === 'race' ? (a.cars.find((c) => c.id === id) ?? me) : me);
+  const myPos = live.findIndex((x) => x.c.id === 'voce');
+  const mine = myPos >= 0 ? live[myPos]!.st! : null;
+  const myDone = mine ? Math.max(0, Math.floor(mine.progress)) : 0;
+  const myLastPit =
+    a.kind === 'race' ? Math.max(0, ...a.myPits.filter((p) => p.t <= a.t).map((p) => p.lap)) : 0;
 
   return (
     <div className="grid gap-4 lg:grid-cols-[1fr_340px]">
@@ -332,6 +341,16 @@ export function PracticeTab({
             </div>
           )}
         </div>
+        {a.kind === 'idle' && (
+          <div className="absolute bottom-3 left-3 flex flex-wrap gap-2">
+            <button className="btn-go !px-3 !py-2 text-sm shadow-xl" onClick={startLap}>
+              ⏱️ Volta de treino
+            </button>
+            <button className="btn-primary !px-3 !py-2 text-sm shadow-xl" onClick={runRace}>
+              🏁 Corrida de teste
+            </button>
+          </div>
+        )}
         {a.kind === 'race' && (
           <div className="absolute bottom-3 left-3 flex items-center gap-1 rounded-2xl bg-night/85 p-1 backdrop-blur">
             <button
@@ -425,6 +444,23 @@ export function PracticeTab({
             sugerida, setup padrão): {formatLapTime(practice.reference.suggestedLapMs)}.
           </p>
         </div>
+        {a.kind === 'race' && mine && (
+          <CarWearPanel
+            info={{
+              nickname: 'Você',
+              carColor: me.color,
+              carNumber: me.number,
+              position: myPos + 1,
+              tyreCode: mine.tyre,
+              tyreWear: mine.tyreWear,
+              engineWear: mine.engineWear,
+              stintLaps: mine.progress < 0 ? 0 : myDone - myLastPit,
+              status: mine.status,
+              isMe: true,
+              nextStop: setup.pitStops.find((p) => p.lap > myDone) ?? null,
+            }}
+          />
+        )}
         {a.kind === 'race' && (
           <div className="card">
             <div className="label">{raceDone ? 'Resultado da corrida de teste' : 'Posições'}</div>

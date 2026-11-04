@@ -67,6 +67,13 @@ Ficam marcadas com `flags.autoTest`, aparecem só em "Acontecendo agora" (a em a
 fora do calendário, das próximas largadas e dos resultados recentes (`GET /races?test=true|all` para vê-las). São
 apagadas com replay, resultados e pista 3 h depois de encerradas (`AUTO_TEST_RACES_KEEP_HOURS`).
 
+### Inscrição tardia
+
+Quem chega com a corrida já no treino ou na janela de traçado pode entrar se houver vaga no grid, até o parque fechado
+(`LATE_ENTRY_PHASES`); nessa hora não há fila de espera (grid cheio responde `RACE_FULL`). Antes, a página da corrida em
+"Acontecendo agora" mostrava só a pista para quem não estava inscrito. Sem inscrição, o box vira treino livre: setup,
+traçado e corrida contra fantasmas rodam no aparelho e nada é enviado ao servidor.
+
 ## Modelo de simulação
 
 Determinístico (PRNG sfc32 semeado; nenhuma fonte de aleatoriedade externa). Por volta, cada carro tem um perfil de velocidade
@@ -84,6 +91,21 @@ Seed: Novatos 30, Rali 35, Amadora 40, Pro 50, Elite 60 voltas; a velocidade de 
 corrida ao vivo durar de 12 a 22 minutos. Medido com 22 carros: a simulação de 60 voltas leva cerca de 0,2 s de CPU;
 o replay de 60 voltas numa pista de 4 km tem 13 MB de JSON e 3,8 MB em gzip, por isso o cache de replays em memória caiu de 31 para 6.
 A migração `0001_corridas_longas` atualiza categorias, corridas que ainda aceitam setup e setups salvos sem parada.
+
+### Desgaste com variação e motor (simulação v2)
+
+- **Pneus:** cada jogo de pneus de cada carro sorteia um fator de desgaste uniforme em ±8% (seco, temperatura amena) até
+  ±20% (chuva provável ou temperatura extrema), mais ±3% por volta (`wearSpread` em `model.ts`). Continua determinístico
+  pela seed. O setup mostra quantas voltas cada composto rende em média com aquele carro e clima, e a faixa
+  (`tyreLife`), e a barra de stints marca listrado onde o pneu pode passar do limite com azar.
+- **Motor:** acumula desgaste por volta (econômico 45%, equilibrado 70%, potência 100% numa corrida inteira; marcha curta
+  até +10%). A chance de quebra por volta do mapa passa a ser multiplicada por `0,4 + 1,2 × desgaste`: no total fica
+  perto da anterior, mas concentrada no fim da corrida.
+- **Frames:** levam o desgaste do pneu e do motor (8 números por carro). O cliente lê 6 ou 8 conforme o tamanho do frame,
+  então replays antigos continuam abrindo, só sem o painel de desgaste. O replay cresce cerca de um terço (dois inteiros
+  pequenos a mais por carro em cada frame). `SIM_VERSION` = 2; reprocessar uma corrida da v1
+  avisa que a versão é outra em vez de acusar divergência.
+- Balanceamento depois da mudança: maior lift 1,69 (aero alta), estratégia mais vencedora com 20,5% das vitórias.
 
 Balanceamento (`pnpm balance`, 210 corridas, 7 cenários): estratégia de pneus mais vencedora com 22% das vitórias e maior
 "lift" por característica de 1,72. A melhor combinação muda por cenário (seco rápido, seco travado, chuva, clima instável, terra, areia, misto).

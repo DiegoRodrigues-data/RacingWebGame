@@ -14,6 +14,7 @@ import {
   type Weather,
 } from '@tracado/shared';
 import {
+  SIM_VERSION,
   simulateQualifying,
   simulateRace,
   type CarResult,
@@ -229,6 +230,17 @@ export async function runSimulation(
 export async function reprocess(ctx: Ctx, raceId: string) {
   const [r] = await ctx.db.select().from(raceReplays).where(eq(raceReplays.raceId, raceId));
   if (!r) return null;
+  // Outra versão da simulação dá outro resultado por definição: não é divergência, só não dá para conferir.
+  if (r.simVersion !== SIM_VERSION)
+    return {
+      match: false,
+      outdated: true,
+      simVersion: r.simVersion,
+      currentSimVersion: SIM_VERSION,
+      storedHash: r.resultHash,
+      recomputedHash: null,
+      trackHash: r.trackHash,
+    };
   const si = r.simInput as Omit<RaceSimInput, 'geometry'> & { trackVersionId: string };
   const g = await getGeometry(ctx, si.trackVersionId);
   const out = simulateRace({ ...si, geometry: g });

@@ -8,7 +8,15 @@ import {
   type RaceDetailDto,
   type Tyre,
 } from '@tracado/shared';
-import { COEF, estimateLap, optimalPressure, WETNESS } from '@tracado/sim';
+import {
+  COEF,
+  engineRaceRisk,
+  estimateLap,
+  optimalPressure,
+  tyreLife,
+  WETNESS,
+  type TyreLife,
+} from '@tracado/sim';
 import { offsetsToTrace, type TrackGeometry } from '@tracado/trackgen';
 import { useQueryClient } from '@tanstack/react-query';
 import clsx from 'clsx';
@@ -22,13 +30,28 @@ import { useServerNow } from '../../lib/realtime';
 import { draftKey, isSetupEditable, saveDraft, type PracticeInfo } from './common';
 
 const TYRES: Tyre[] = ['soft', 'medium', 'hard', 'wet'];
-/** Estrelas (1–3) lidas dos coeficientes do modelo: aderência no seco e vida útil do composto. */
-const TYRE_STARS: Record<Tyre, { grip: number; life: number; note: string }> = {
-  soft: { grip: 3, life: 1, note: 'Mais rápido, gasta primeiro' },
-  medium: { grip: 2, life: 2, note: 'Equilíbrio' },
-  hard: { grip: 1, life: 3, note: 'Aguenta stints longos' },
-  wet: { grip: 1, life: 2, note: 'Só brilha na chuva' },
+/** Estrelas (1–3) lidas dos coeficientes do modelo: aderência no seco. A duração vem da estimativa em voltas. */
+const TYRE_STARS: Record<Tyre, { grip: number; note: string }> = {
+  soft: { grip: 3, note: 'Mais rápido, gasta primeiro' },
+  medium: { grip: 2, note: 'Equilíbrio' },
+  hard: { grip: 1, note: 'Aguenta stints longos' },
+  wet: { grip: 1, note: 'Só brilha na chuva' },
 };
+const lapsLabel = (n: number) => `${n} ${n === 1 ? 'volta' : 'voltas'}`;
+/** "~12 voltas (10–14)": média e faixa da variação sorteada; avisa quando aguenta a corrida inteira. */
+function LifeText({ life, laps }: { life: TyreLife; laps: number }) {
+  return (
+    <span
+      className="block text-[11px] text-muted"
+      title={`Rende em média ${lapsLabel(life.avg)} antes de perder rendimento; com a variação do clima, de ${life.min} a ${life.max}. A corrida tem ${lapsLabel(laps)}.`}
+    >
+      <span className={clsx('font-bold', life.min >= laps ? 'text-go' : 'text-ink')}>~{life.avg}</span> voltas{' '}
+      <span className="whitespace-nowrap">
+        ({life.min}–{life.max})
+      </span>
+    </span>
+  );
+}
 const clamp01 = (v: number) => Math.max(0, Math.min(1, v));
 const lerp01 = (v: number, worst: number, best: number) =>
   best === worst ? 0.5 : clamp01((v - worst) / (best - worst));
@@ -307,6 +330,8 @@ export function SetupTab({
   const qc = useQueryClient();
   const now = useServerNow(1000);
   const editable = isSetupEditable(race.status, race.timeline.setupLockAt, now);
+  const status = race.me?.entry?.status;
+  const guest = status !== 'confirmed' && status !== 'waitlisted';
   const [saving, setSaving] = useState(false);
   const [dirty, setDirty] = useState(false);
   const lim = practice.limits;
@@ -377,17 +402,23 @@ export function SetupTab({
     };
   }, [g, trace, temp, laps, lim.aero.min, lim.aero.max, setup]);
 
-  // Desgaste ao longo da estratégia (uma estimativa por composto).
+  // Desgaste por volta de cada composto com este carro, no clima previsto, e quantas voltas cada um rende.
+  const wearPerLap = useMemo(() => {
+    const out = {} as Record<Tyre, number>;
+    for (const t of TYRES)
+      out[t] = estimateLap(g, { ...setup, tyre: t }, trace, practice.weather.base, temp, laps).wearPerLap;
+    return out;
+  }, [g, setup, trace, practice.weather.base, temp, laps]);
+  const life = useMemo(() => {
+    const out = {} as Record<Tyre, TyreLife>;
+    for (const t of TYRES) out[t] = tyreLife(wearPerLap[t], practice.weather);
+    return out;
+  }, [wearPerLap, practice.weather]);
+  const spreadPct = Math.round(life.soft.spread * 100);
+
+  // Desgaste ao longo da estratégia: média e o pior caso da variação sorteada.
   const stint = useMemo(() => {
-    const perLap = new Map<Tyre, number>();
-    const wearOf = (t: Tyre) => {
-      if (!perLap.has(t))
-        perLap.set(
-          t,
-          estimateLap(g, { ...setup, tyre: t }, trace, practice.weather.base, temp, laps).wearPerLap,
-        );
-      return perLap.get(t)!;
-    };
+    const wearOf = (t: Tyre) => wearPerLap[t];
     const out: { lap: number; wear: number; tyre: Tyre; pit: boolean }[] = [];
     let wear = 0,
       tyre = setup.tyre;
@@ -401,10 +432,13 @@ export function SetupTab({
       }
     }
     return out;
-  }, [g, setup, trace, practice.weather.base, temp, laps]);
+  }, [setup, laps, wearPerLap]);
   const maxWear = Math.max(...stint.map((s) => s.wear));
+  const worst = 1 + life.soft.spread;
   const cliffLap = stint.find((s) => s.wear > COEF.cliffAt)?.lap ?? null;
-  const finishOdds = Math.pow(1 - COEF.engine[setup.engine].failure, laps);
+  const riskLap = stint.find((s) => s.wear * worst > COEF.cliffAt)?.lap ?? null;
+  const engine = engineRaceRisk(setup, laps);
+  const finishOdds = 1 - engine.risk;
   const stats = {
     speed: lerp01(dry.topSpeedKmh, range.top[0], range.top[1]),
     corners: lerp01(cornerSpeed(dry.profile), range.corner[0], range.corner[1]),
@@ -433,9 +467,14 @@ export function SetupTab({
     cliffLap
       ? {
           ok: false,
-          text: `O pneu passa do limite na volta ${cliffLap}. Pare antes ou use um composto mais duro.`,
+          text: `Na média, o pneu passa do limite na volta ${cliffLap}. Pare antes ou use um composto mais duro.`,
         }
-      : { ok: true, text: 'Nenhum stint passa do limite de desgaste.' },
+      : riskLap
+        ? {
+            ok: false,
+            text: `Com azar no desgaste (±${spreadPct}% neste clima), o pneu pode passar do limite a partir da volta ${riskLap}.`,
+          }
+        : { ok: true, text: 'Nenhum stint passa do limite de desgaste, nem no pior caso.' },
     Math.abs((setup.tyrePressure.front + setup.tyrePressure.rear) / 2 - ideal) <= 1
       ? { ok: true, text: 'Calibragem na faixa ideal para o clima previsto.' }
       : {
@@ -451,11 +490,11 @@ export function SetupTab({
     setup.engine === 'power'
       ? {
           ok: false,
-          text: `Motor em potência: ${Math.round((1 - finishOdds) * 100)}% de chance de quebrar em ${laps} voltas.`,
+          text: `Motor em potência: termina ${Math.round(engine.wearAtEnd * 100)}% gasto, ${Math.round(engine.risk * 100)}% de chance de quebrar em ${laps} voltas.`,
         }
       : {
           ok: true,
-          text: `Motor confiável: ${Math.round(finishOdds * 100)}% de chance de terminar sem quebra.`,
+          text: `Motor confiável: termina ${Math.round(engine.wearAtEnd * 100)}% gasto, ${Math.round(finishOdds * 100)}% de chance de terminar sem quebra.`,
         },
   ];
 
@@ -498,7 +537,7 @@ export function SetupTab({
             <span className="min-w-0">
               <span className={clsx('block text-sm font-bold', on && 'text-race')}>{TYRE_LABELS[t]}</span>
               <Stars n={TYRE_STARS[t].grip} label={t === 'wet' ? 'Chuva' : 'Aderência'} />
-              <Stars n={TYRE_STARS[t].life} label="Duração" />
+              <LifeText life={life[t]} laps={laps} />
             </span>
           </button>
         );
@@ -558,7 +597,7 @@ export function SetupTab({
                 icon="🔧"
                 label="Confiabilidade"
                 value={stats.reliability}
-                hint={`${Math.round(finishOdds * 100)}% de chance de terminar sem quebra`}
+                hint={`${Math.round(finishOdds * 100)}% de chance de terminar sem quebra; motor termina ${Math.round(engine.wearAtEnd * 100)}% gasto`}
               />
               <StatBar
                 icon="🌧️"
@@ -577,7 +616,11 @@ export function SetupTab({
         <fieldset disabled={!editable} className="space-y-4 disabled:opacity-80">
           <Section title="Pneus de largada" icon="🛞">
             {tyreCards(setup.tyre, (t) => update({ tyre: t }), 'Composto de largada')}
-            <p className="text-xs text-muted">{TYRE_STARS[setup.tyre].note}.</p>
+            <p className="text-xs text-muted">
+              {TYRE_STARS[setup.tyre].note}. Voltas que cada composto rende antes de perder rendimento, com
+              este carro e o clima previsto. O desgaste varia até ±{spreadPct}% a cada jogo de pneus
+              {spreadPct > 10 ? ' (clima instável, mais incerteza)' : ''}: planeje com margem.
+            </p>
           </Section>
 
           <Section title="Estratégia de boxes" icon="🔧">
@@ -598,16 +641,21 @@ export function SetupTab({
                     key={s.lap}
                     className={clsx('relative flex-1', s.pit && 'border-r-2 border-white')}
                     style={{
-                      background: s.wear > COEF.cliffAt ? '#ff5a5a' : TYRE_COLOR[s.tyre],
+                      background:
+                        s.wear > COEF.cliffAt
+                          ? '#ff5a5a'
+                          : s.wear * worst > COEF.cliffAt
+                            ? 'repeating-linear-gradient(135deg, #ffb020 0 4px, #ff5a5a 4px 8px)'
+                            : TYRE_COLOR[s.tyre],
                       opacity: 0.35 + 0.65 * (1 - Math.min(1, s.wear)),
                     }}
-                    title={`Volta ${s.lap}: ${TYRE_LABELS[s.tyre]}, desgaste ${Math.round(s.wear * 100)}%`}
+                    title={`Volta ${s.lap}: ${TYRE_LABELS[s.tyre]}, desgaste ${Math.round(s.wear * 100)}% na média (até ${Math.round(s.wear * worst * 100)}% com azar)`}
                   />
                 ))}
               </div>
               <div className="mt-1 flex justify-between text-[11px] text-muted">
                 <span>volta 1</span>
-                <span>vermelho = pneu além do limite</span>
+                <span>listrado = pode passar do limite · vermelho = passa na média</span>
                 <span>volta {laps}</span>
               </div>
             </div>
@@ -695,6 +743,7 @@ export function SetupTab({
                           )}
                         >
                           <TyreBadge tyre={t} size={20} /> {TYRE_LABELS[t]}
+                          <span className="font-normal text-muted">~{life[t].avg}v</span>
                         </button>
                       ))}
                     </div>
@@ -775,7 +824,7 @@ export function SetupTab({
                     value: 'economy',
                     icon: '🍃',
                     title: 'Econômico',
-                    hint: 'Poupa pneus, nunca quebra',
+                    hint: 'Poupa pneus e motor, nunca quebra',
                     disabled: !lim.allowedEngines.includes('economy'),
                   },
                   {
@@ -789,7 +838,7 @@ export function SetupTab({
                     value: 'power',
                     icon: '🔥',
                     title: 'Potência',
-                    hint: 'Mais rápido, risco de quebra',
+                    hint: 'Mais rápido, gasta o motor e pode quebrar',
                     disabled: !lim.allowedEngines.includes('power'),
                   },
                 ]}
@@ -900,15 +949,25 @@ export function SetupTab({
             ))}
           </div>
         )}
-        <button
-          className="btn-primary w-full !py-3 text-base"
-          disabled={!editable || saving || problems.length > 0}
-          onClick={save}
-        >
-          <Save size={18} />
-          {saving ? 'Salvando…' : dirty || !race.me?.hasSetup ? 'Salvar setup' : 'Setup salvo ✓'}
-        </button>
-        {dirty && <p className="text-center text-xs text-race">Alterações ainda não salvas no servidor.</p>}
+        {guest ? (
+          <p className="card text-center text-sm text-muted">
+            Treino livre: o setup fica neste aparelho. Inscreva-se para levá-lo à corrida.
+          </p>
+        ) : (
+          <>
+            <button
+              className="btn-primary w-full !py-3 text-base"
+              disabled={!editable || saving || problems.length > 0}
+              onClick={save}
+            >
+              <Save size={18} />
+              {saving ? 'Salvando…' : dirty || !race.me?.hasSetup ? 'Salvar setup' : 'Setup salvo ✓'}
+            </button>
+            {dirty && (
+              <p className="text-center text-xs text-race">Alterações ainda não salvas no servidor.</p>
+            )}
+          </>
+        )}
       </aside>
     </div>
   );

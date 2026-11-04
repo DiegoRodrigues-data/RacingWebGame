@@ -45,7 +45,7 @@ Tipos TypeScript e schemas Zod em `packages/shared/src/schemas.ts` e `packages/s
 | `GET /lobby`                                                                                               | público              | ao vivo, próximas, resultados recentes, top 5, minhas corridas                                               |
 | `GET /races?from&to&category&status&ranked&test&limit`                                                     | público              | calendário (`RaceSummaryDto[]`); `test=true                                                                  | all` inclui as corridas teste |
 | `GET /races/:id`                                                                                           | público              | `RaceDetailDto` (inscritos, previsão por volta, `me` se logado)                                              |
-| `POST /races/:id/entries` · `DELETE /races/:id/entries/me`                                                 | jogador              | inscrever / cancelar ou desistir                                                                             |
+| `POST /races/:id/entries` · `DELETE /races/:id/entries/me`                                                 | jogador              | inscrever (também no treino e no traçado, se houver vaga, até o parque fechado) / cancelar ou desistir       |
 | `PUT /races/:id/car`                                                                                       | jogador confirmado   | trocar cor e modelo do carro até o parque fechado (`CAR_TAKEN` se ocupado)                                   |
 | `PUT /races/:id/trace` · `GET /races/:id/trace`                                                            | jogador confirmado   | enviar / ler o próprio traçado (da inscrição ao parque fechado)                                              |
 | `PUT /races/:id/setup` · `GET /races/:id/setup`                                                            | jogador inscrito     | salvar / ler o próprio setup                                                                                 |
@@ -117,20 +117,20 @@ Reconexão: ao assinar com `lastSeq`, o servidor reenvia os eventos perdidos do 
 se o buffer não cobrir o intervalo, envia um `race.snapshot` novo. Sem `lastSeq`, sempre envia o snapshot.
 A sala `user:<id>` é assinada automaticamente para conexões autenticadas.
 
-| Evento                                        | Sala   | Payload                                                                                                |
-| --------------------------------------------- | ------ | ------------------------------------------------------------------------------------------------------ |
-| `hello`                                       | direto | `{connectionId, userId, protocol}`                                                                     |
-| `race.snapshot`                               | race   | resumo, inscritos e, durante a corrida, últimos frames e incidentes                                    |
-| `race.phase`                                  | race   | `{raceId, from, to, phaseDeadline, race}`                                                              |
-| `race.capacity` / `race.entries`              | race   | vagas e lista de inscritos em tempo real                                                               |
-| `trace.window_opened` / `trace.window_closed` | race   | `{raceId, deadline}`                                                                                   |
-| `trace.saved` / `trace.rejected`              | user   | confirmação ou motivo da recusa                                                                        |
-| `race.qualifying`                             | race   | grid (`QualifyingRowDto[]`)                                                                            |
-| `race.started`                                | race   | `{startedAt, durationMs, frameHz, playbackSpeed, cars}` (luzes apagam em `startedAt`)                  |
-| `race.tick`                                   | race   | `{fromFrame, frames}` — frame `{t, c}` com 6 números por carro: x, y, direção, progresso, pneu, status |
-| `race.incident`                               | race   | rodadas, paradas, safety car, óleo, clima, volta mais rápida                                           |
-| `race.finished`                               | race   | resultado final (`ResultRowDto[]`)                                                                     |
-| `lobby.race`                                  | lobby  | resumo atualizado de uma corrida                                                                       |
-| `notification`                                | user   | `NotificationDto`                                                                                      |
+| Evento                                        | Sala   | Payload                                                                                                                                                                                    |
+| --------------------------------------------- | ------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `hello`                                       | direto | `{connectionId, userId, protocol}`                                                                                                                                                         |
+| `race.snapshot`                               | race   | resumo, inscritos e, durante a corrida, últimos frames e incidentes                                                                                                                        |
+| `race.phase`                                  | race   | `{raceId, from, to, phaseDeadline, race}`                                                                                                                                                  |
+| `race.capacity` / `race.entries`              | race   | vagas e lista de inscritos em tempo real                                                                                                                                                   |
+| `trace.window_opened` / `trace.window_closed` | race   | `{raceId, deadline}`                                                                                                                                                                       |
+| `trace.saved` / `trace.rejected`              | user   | confirmação ou motivo da recusa                                                                                                                                                            |
+| `race.qualifying`                             | race   | grid (`QualifyingRowDto[]`)                                                                                                                                                                |
+| `race.started`                                | race   | `{startedAt, durationMs, frameHz, playbackSpeed, cars}` (luzes apagam em `startedAt`)                                                                                                      |
+| `race.tick`                                   | race   | `{fromFrame, frames}` — frame `{t, c}` com 8 números por carro: x, y, direção, progresso, pneu, status, desgaste do pneu (%) e do motor (%); replays da simulação v1 têm só os 6 primeiros |
+| `race.incident`                               | race   | rodadas, paradas, safety car, óleo, clima, volta mais rápida                                                                                                                               |
+| `race.finished`                               | race   | resultado final (`ResultRowDto[]`)                                                                                                                                                         |
+| `lobby.race`                                  | lobby  | resumo atualizado de uma corrida                                                                                                                                                           |
+| `notification`                                | user   | `NotificationDto`                                                                                                                                                                          |
 
 Limites: mensagens de até 8 KB, 40 mensagens por 10 s por conexão (acima disso fecha com `1008`), 20 salas por conexão, heartbeat a cada 25 s.
