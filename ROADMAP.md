@@ -229,6 +229,7 @@ Fecha o ciclo de vida com resultados persistidos.
 - [x] Nome do jogo: Roda Presa
 - [x] "Como funciona" no topo do portal, acima das listas de corridas
 - [x] Compartilhar corrida nas redes (convite, ao vivo, resultado) com prévia Open Graph em `/s/corridas/:id`
+- [x] Corridas teste com bots: 10 voltas a cada 5 minutos, em "Acontecendo agora", apagadas 3 h depois
 - [x] Grade automática: uma corrida amistosa por hora (24 por dia), inscrições abertas a todos; ranqueadas e competições pelo admin
 - [ ] Apagar replays antigos (a grade automática grava cerca de 20 MB por dia com bots ligados)
 - [x] Cards de corrida com mini mapa da pista; corridas ao vivo mostram os carros andando (cauda do replay + `race.tick`)

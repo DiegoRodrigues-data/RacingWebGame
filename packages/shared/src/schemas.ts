@@ -367,6 +367,8 @@ export interface RaceSummaryDto {
   status: (typeof RACE_PHASES)[number];
   ranked: boolean;
   annulled: boolean;
+  /** Corrida teste automática (curta, com bots); fica fora das listas normais. */
+  test: boolean;
   category: { id: string; slug: string; name: string; level: Level };
   event: { id: string; name: string } | null;
   timeline: {

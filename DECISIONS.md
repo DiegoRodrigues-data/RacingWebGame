@@ -57,6 +57,15 @@ de 0,5 a 1 MB em gzip (cerca de 20 MB por dia no Postgres). Falta uma rotina que
 - **Compartilhar.** O site é SPA, então as redes não veriam o título da corrida. O link `/s/corridas/:id` é servido pela
   API com tags Open Graph (imagem `og.png`) e redireciona para a corrida; o texto muda para convite, "ao vivo" ou resultado.
 
+### Corridas teste com bots
+
+Uma corrida teste larga a cada 5 minutos (`ensureAutoTestRaces`), sempre com a próxima hora preenchida: 10 voltas
+(abaixo do mínimo de 30 das corridas normais, de propósito, para durar uns 12 minutos do treino à bandeirada),
+amistosa, com bots completando o grid. Ficam marcadas com `flags.autoTest`, aparecem só em "Acontecendo agora" (as em
+andamento e a próxima aberta) e ficam fora do calendário, das próximas largadas e dos resultados recentes
+(`GET /races?test=true|all` para vê-las). Para não encher o banco (288 por dia), são apagadas com replay, resultados e
+pista 3 h depois de encerradas (`AUTO_TEST_RACES_KEEP_HOURS`).
+
 ## Modelo de simulação
 
 Determinístico (PRNG sfc32 semeado; nenhuma fonte de aleatoriedade externa). Por volta, cada carro tem um perfil de velocidade

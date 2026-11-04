@@ -245,6 +245,10 @@ export function Home() {
                     <Link className="btn-danger !py-1.5" to={`/corridas/${r.id}/ao-vivo`}>
                       Assistir
                     </Link>
+                  ) : r.test && r.status === 'registration_open' ? (
+                    <Link className="btn-primary !py-1.5" to={`/corridas/${r.id}`}>
+                      Correr
+                    </Link>
                   ) : undefined
                 }
               />

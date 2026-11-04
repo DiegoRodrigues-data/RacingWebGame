@@ -197,6 +197,7 @@ export async function raceSummaries(db: Db | Tx, rows: RaceRow[]): Promise<RaceS
       status: r.status,
       ranked: r.ranked,
       annulled: r.annulled,
+      test: !!r.flags?.autoTest,
       category: { id: c.id, slug: c.slug, name: c.name, level: c.level },
       event: e ? { id: e.id, name: e.name } : null,
       timeline: {
@@ -302,6 +303,8 @@ export interface ListQuery {
   categoryId?: string;
   status?: RacePhase[];
   ranked?: boolean;
+  /** true: só corridas teste; false: sem elas; ausente: todas. */
+  test?: boolean;
   limit?: number;
   order?: 'asc' | 'desc';
 }
@@ -313,6 +316,8 @@ export async function listRaces(ctx: Ctx, q: ListQuery): Promise<RaceSummaryDto[
   if (q.categoryId) conds.push(eq(races.categoryId, q.categoryId));
   if (q.status?.length) conds.push(inArray(races.status, q.status));
   if (q.ranked !== undefined) conds.push(eq(races.ranked, q.ranked));
+  if (q.test === true) conds.push(sql`${races.flags} ? 'autoTest'`);
+  if (q.test === false) conds.push(sql`not (${races.flags} ? 'autoTest')`);
   const rows = await ctx.db
     .select()
     .from(races)

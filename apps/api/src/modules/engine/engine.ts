@@ -13,7 +13,7 @@ import { entries, races } from '../../db/schema';
 import { notify } from '../notifications/service';
 import { bumpRankingCache } from '../rankings/service';
 import { getRaceRow, listEntries, raceSummaries, timelineOf, type RaceRow } from '../races/service';
-import { ensureAutoRaces } from './autoRaces';
+import { ensureAutoRaces, ensureAutoTestRaces } from './autoRaces';
 import { fillBots, prepareBots } from './bots';
 import {
   elapsedSim,
@@ -79,9 +79,14 @@ export class PhaseEngine {
       }
       await this.traceWarnings();
       // Grade automática: uma checagem por minuto basta (os horários são de hora em hora).
-      if (this.ctx.config.AUTO_RACES_PER_DAY && this.ctx.clock.now() - this.lastAutoRaces >= 60_000) {
+      const cfg = this.ctx.config;
+      if (
+        (cfg.AUTO_RACES_PER_DAY || cfg.AUTO_TEST_RACES_EVERY_MIN) &&
+        this.ctx.clock.now() - this.lastAutoRaces >= 60_000
+      ) {
         this.lastAutoRaces = this.ctx.clock.now();
         await ensureAutoRaces(this.ctx);
+        await ensureAutoTestRaces(this.ctx);
       }
       await this.broadcastPlayback();
     } catch (e) {

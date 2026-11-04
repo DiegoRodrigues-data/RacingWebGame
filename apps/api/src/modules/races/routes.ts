@@ -52,6 +52,8 @@ const listQuery = z.object({
     .optional()
     .transform((v) => (v === undefined ? undefined : v === 'true')),
   limit: z.coerce.number().int().min(1).max(300).optional(),
+  /** Corridas teste: "false" (padrão) esconde, "true" mostra só elas, "all" mostra tudo. */
+  test: z.enum(['true', 'false', 'all']).optional(),
 });
 
 export function raceRoutes(app: FastifyInstance, ctx: Ctx) {
@@ -65,6 +67,7 @@ export function raceRoutes(app: FastifyInstance, ctx: Ctx) {
       ...(q.status ? { status: q.status } : {}),
       ...(q.ranked !== undefined ? { ranked: q.ranked } : {}),
       ...(q.limit ? { limit: q.limit } : {}),
+      ...(q.test === 'all' ? {} : { test: q.test === 'true' }),
     });
   });
 
@@ -236,16 +239,25 @@ export function raceRoutes(app: FastifyInstance, ctx: Ctx) {
   /** Portal público + lobby: corridas ao vivo, próximas, resultados recentes e destaques do ranking. */
   app.get('/lobby', async (req) => {
     const now = ctx.clock.now();
-    const live = await listRaces(ctx, { status: [...LIVE_PHASES], limit: 20 });
+    // "Acontecendo agora": corridas em andamento, incluindo as corridas teste (com bots) em andamento e a
+    // próxima corrida teste com inscrições abertas, para sempre haver uma para entrar.
+    const nextTest = await listRaces(ctx, {
+      status: ['registration_open'],
+      from: now - 3600_000,
+      limit: 1,
+      test: true,
+    });
+    const live = [...(await listRaces(ctx, { status: [...LIVE_PHASES], limit: 20 })), ...nextTest];
     const upcoming = await listRaces(ctx, {
       status: ['scheduled', 'registration_open'],
       from: now - 3600_000,
       limit: 12,
+      test: false,
     });
     const recentRows = await ctx.db
       .select()
       .from(races)
-      .where(inArray(races.status, ['finished']))
+      .where(and(inArray(races.status, ['finished']), sql`not (${races.flags} ? 'autoTest')`))
       .orderBy(desc(races.raceEndsAt))
       .limit(6);
     const recent = await Promise.all(
@@ -288,7 +300,11 @@ export function raceRoutes(app: FastifyInstance, ctx: Ctx) {
       recent,
       top,
       mine,
-      stats: { players: players?.n ?? 0, liveRaces: live.length, online: ctx.hub.connectionCount },
+      stats: {
+        players: players?.n ?? 0,
+        liveRaces: live.filter((r) => r.status === 'race').length,
+        online: ctx.hub.connectionCount,
+      },
     };
   });
 
