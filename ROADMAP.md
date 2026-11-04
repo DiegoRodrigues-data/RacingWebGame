@@ -223,6 +223,8 @@ Fecha o ciclo de vida com resultados persistidos.
 ## Fase 13 — Portal público, lobby, notificações e identidade visual ✅
 
 - [x] Portal: próximas corridas, destaques do ranking, últimos resultados, chamada para criar conta
+- [x] Grade automática: uma corrida amistosa por hora (24 por dia), inscrições abertas a todos; ranqueadas e competições pelo admin
+- [ ] Apagar replays antigos (a grade automática grava cerca de 20 MB por dia com bots ligados)
 - [x] Cards de corrida com mini mapa da pista; corridas ao vivo mostram os carros andando (cauda do replay + `race.tick`)
 - [x] Animação da home dentro do SVG (carros na linha em qualquer largura) e sem rolagem horizontal no celular
 - [x] Lobby: minhas corridas com fase e atalhos para box, ao vivo e resultado

@@ -15,6 +15,13 @@
       "when": 1793786522021,
       "tag": "0001_corridas_longas",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1793808705930,
+      "tag": "0002_zera_corridas",
+      "breakpoints": true
     }
   ]
 }

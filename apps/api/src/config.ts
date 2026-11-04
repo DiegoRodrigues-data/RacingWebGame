@@ -20,6 +20,14 @@ const schema = z.object({
   ENABLE_DEV_ROUTES: bool.default(false),
   SEED_DEMO: bool.default(false),
   DEMO_BOTS: z.coerce.number().int().min(0).max(21).default(0),
+  /** Corridas criadas automaticamente por dia (0 desliga; 24 = uma por hora). */
+  AUTO_RACES_PER_DAY: z.coerce.number().int().min(0).max(96).default(0),
+  /** Categoria (slug) das corridas automáticas; a padrão aceita qualquer nível. */
+  AUTO_RACES_CATEGORY: z.string().default('copa-novatos'),
+  /** Corridas automáticas valem ranking? As competições ranqueadas ficam com o admin. */
+  AUTO_RACES_RANKED: bool.default(false),
+  /** Quantas horas à frente a grade automática fica preenchida. */
+  AUTO_RACES_LOOKAHEAD_HOURS: z.coerce.number().int().min(1).max(168).default(24),
   REQUIRE_VERIFIED_EMAIL_FOR_RANKED: bool.default(false),
   RANKING_MIN_RACES: z.coerce.number().int().min(0).default(1),
   ENGINE_TICK_MS: z.coerce.number().int().min(50).default(500),

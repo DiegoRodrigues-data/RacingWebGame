@@ -76,6 +76,7 @@ O andamento está em [ROADMAP.md](ROADMAP.md).
 - **Fases** controladas pelo servidor: agendada → inscrições → treino → janela de traçado (5 min) → parque fechado → classificação → corrida → encerrada → arquivada (ou cancelada).
 - **Inscrição**: até 22 confirmados; depois, fila de espera (tamanho configurável); com a fila cheia, `RACE_FULL`. Cancelar antes do treino promove o primeiro da fila. A disputa pela última vaga é serializada (lock de linha + mutex), então duas tentativas simultâneas resultam em uma confirmada e uma na fila.
 - **Traçado**: lista de pontos `(s, d)` — `s` é a fração da volta (0–1) e `d` o deslocamento lateral (−1 a 1). O servidor recusa pontos fora da pista (`TRACE_OUT_OF_BOUNDS`), traçado incompleto, em sentido contrário ou com mudança lateral brusca (`TRACE_INVALID`), e envios fora da janela (`TRACE_WINDOW_CLOSED`). Sem traçado válido o carro corre na linha central com penalidade de 1,5% de ritmo.
+- **Grade automática**: o servidor mantém uma corrida a cada hora cheia nas próximas 24 h (`AUTO_RACES_PER_DAY=24`), amistosa e na Copa Novatos, com inscrições abertas para qualquer piloto. Corridas ranqueadas e competições são criadas pelo admin.
 - **Setup**: editável até o parque fechado; limites por categoria. Sem setup, o servidor usa o padrão.
 - **Simulação**: perfil de velocidade por volta a partir da curvatura da sua linha, aderência (pneu, desgaste, clima, terreno, pressão, asa, aposta de clima), motor e câmbio; ultrapassagens, pit stops, safety car, óleo, rodadas e falhas mecânicas semeados. Mesmos insumos ⇒ mesmo resultado (auditável por reprocessamento).
 - **Pontos**: tabela da categoria (padrão 25-18-15-12-10-8-6-4-2-1, +1 pela volta mais rápida, × multiplicador). Desempate: vitórias → pódios → voltas mais rápidas → menos corridas → entrada mais antiga na temporada.
@@ -84,6 +85,7 @@ O andamento está em [ROADMAP.md](ROADMAP.md).
 
 1. No Dokploy, crie um serviço **Compose** apontando para este repositório e o arquivo `docker-compose.prod.yml`.
 2. Defina as variáveis: `POSTGRES_PASSWORD`, `JWT_SECRET` (longo e aleatório), `ADMIN_EMAIL`, `ADMIN_PASSWORD`, `PUBLIC_WEB_URL` (ex.: `https://tracado.seudominio.com`) e, se quiser, `METRICS_TOKEN`, `SENTRY_DSN`.
+   A grade automática vem ligada: `AUTO_RACES_PER_DAY` (padrão 24; 0 desliga), `AUTO_RACES_CATEGORY` (slug, padrão `copa-novatos`) e `AUTO_RACES_RANKED` (padrão `false`).
 3. Em **Domains**, aponte o domínio para o serviço **web**, porta **80**, com HTTPS. Se aparecer `404 page not found` com o certificado `TRAEFIK DEFAULT CERT` e os containers saudáveis, o domínio foi criado depois do container: confira serviço/porta e faça um novo Deploy.
 4. Faça o Deploy. A API aplica as migrações sozinha ao subir (com lock consultivo) e cria o admin.
 5. Confira depois de cada deploy:

@@ -13,6 +13,7 @@ import { entries, races } from '../../db/schema';
 import { notify } from '../notifications/service';
 import { bumpRankingCache } from '../rankings/service';
 import { getRaceRow, listEntries, raceSummaries, timelineOf, type RaceRow } from '../races/service';
+import { ensureAutoRaces } from './autoRaces';
 import { fillBots, prepareBots } from './bots';
 import {
   elapsedSim,
@@ -39,6 +40,7 @@ export class PhaseEngine {
   private readonly id = randomUUID();
   private failures = new Map<string, number>();
   private playback = new Map<string, { frame: number; incidentT: number }>();
+  private lastAutoRaces = -Infinity;
 
   constructor(private readonly ctx: Ctx) {}
 
@@ -76,6 +78,11 @@ export class PhaseEngine {
         for (const r of due) await this.advance(r);
       }
       await this.traceWarnings();
+      // Grade automática: uma checagem por minuto basta (os horários são de hora em hora).
+      if (this.ctx.config.AUTO_RACES_PER_DAY && this.ctx.clock.now() - this.lastAutoRaces >= 60_000) {
+        this.lastAutoRaces = this.ctx.clock.now();
+        await ensureAutoRaces(this.ctx);
+      }
       await this.broadcastPlayback();
     } catch (e) {
       this.recordError(e);
