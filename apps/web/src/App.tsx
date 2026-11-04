@@ -15,6 +15,7 @@ const Rankings = lazy(() => import('./pages/Rankings'));
 const Profile = lazy(() => import('./pages/Profile'));
 const Account = lazy(() => import('./pages/Account'));
 const Notifications = lazy(() => import('./pages/Notifications'));
+const MyRaces = lazy(() => import('./pages/MyRaces'));
 const Privacy = lazy(() => import('./pages/Legal').then((m) => ({ default: m.Privacy })));
 const Terms = lazy(() => import('./pages/Legal').then((m) => ({ default: m.Terms })));
 const Determinism = lazy(() => import('./pages/Determinism'));
@@ -83,6 +84,14 @@ export function App() {
             element={
               <RequireAuth>
                 <Account />
+              </RequireAuth>
+            }
+          />
+          <Route
+            path="/minhas-corridas"
+            element={
+              <RequireAuth>
+                <MyRaces />
               </RequireAuth>
             }
           />

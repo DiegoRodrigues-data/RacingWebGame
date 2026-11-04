@@ -1,6 +1,7 @@
 import { DEFAULT_SETUP, TRACE_WINDOW_MS } from '@tracado/shared';
 import { offsetsToTrace, suggestedLine, type TrackGeometry } from '@tracado/trackgen';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { clearGeometryCache } from '../src/modules/tracks/service';
 import { setupApp, type TestApp } from './helpers';
 
 let t: TestApp;
@@ -123,6 +124,9 @@ describe('ciclo de vida completo de uma corrida (fluxo crítico)', () => {
     );
 
     // Classificação: simulação determinística no servidor.
+    // Sem a pista em cache (como logo após reiniciar o servidor): a classificação precisa ler a geometria
+    // dentro da transação; com o PGlite, uma leitura por fora travaria o motor.
+    clearGeometryCache();
     await t.advanceTo(Date.parse(race.timeline.qualifyingAt));
     race = await t.race(raceId);
     expect(race.status).toBe('qualifying');

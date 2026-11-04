@@ -235,7 +235,7 @@ Fecha o ciclo de vida com resultados persistidos.
 - [ ] Apagar replays antigos (a grade automática grava cerca de 20 MB por dia com bots ligados)
 - [x] Cards de corrida com mini mapa da pista; corridas ao vivo mostram os carros andando (cauda do replay + `race.tick`)
 - [x] Animação da home dentro do SVG (carros na linha em qualquer largura) e sem rolagem horizontal no celular
-- [x] Lobby: minhas corridas com fase e atalhos para box, ao vivo e resultado
+- [x] "Minhas corridas" no menu superior: página com as corridas do piloto (em andamento, próximas e encerradas) e atalhos para box, ao vivo e resultado (`GET /me/races`)
 - [x] Calendário por dia/semana com filtros
 - [x] Notificações in-app (central + toasts via WS) e lembretes por e-mail opcionais (e-mail ainda só no log)
 - [x] Identidade visual: paleta, tipografia esportiva, animações, semáforo, confete, rival à frente e atrás no resultado

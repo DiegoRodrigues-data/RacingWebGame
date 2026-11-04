@@ -12,6 +12,7 @@ import {
   X,
   CalendarDays,
   Gauge,
+  CarFront,
 } from 'lucide-react';
 import { useEffect, useState, type ReactNode } from 'react';
 import { Link, NavLink, useLocation, useNavigate } from 'react-router';
@@ -83,7 +84,12 @@ export function Layout({ children }: { children: ReactNode }) {
   useEffect(() => {
     document.documentElement.classList.toggle('reduce-motion', !!me?.profile.reducedMotion);
   }, [me?.profile.reducedMotion]);
-  const links = [...NAV, ...(isEditor(me) ? [{ to: '/admin', label: 'Admin', icon: Shield }] : [])];
+  const links = [
+    NAV[0]!,
+    ...(me ? [{ to: '/minhas-corridas', label: 'Minhas corridas', icon: CarFront }] : []),
+    ...NAV.slice(1),
+    ...(isEditor(me) ? [{ to: '/admin', label: 'Admin', icon: Shield }] : []),
+  ];
   return (
     <div className="flex min-h-dvh flex-col">
       <a

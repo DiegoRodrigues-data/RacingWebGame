@@ -26,7 +26,14 @@ const cache = new Map<string, TrackGeometry>();
 const CACHE_MAX = 200;
 
 /** Geometria da versão, regenerada a partir da origem persistida e conferida pelo hash (auditoria). */
-export async function getGeometry(ctx: Pick<Ctx, 'db' | 'log'>, versionId: string): Promise<TrackGeometry> {
+/**
+ * Geometria de uma versão de pista (com cache em memória). Dentro de uma transação, passe `{ db: tx }`:
+ * com o PGlite (uma conexão só) uma consulta por fora da transação aberta espera para sempre.
+ */
+export async function getGeometry(
+  ctx: { db: Db | Tx; log: Pick<Ctx['log'], 'error'> },
+  versionId: string,
+): Promise<TrackGeometry> {
   const hit = cache.get(versionId);
   if (hit) return hit;
   const [row] = await ctx.db.select().from(trackVersions).where(eq(trackVersions.id, versionId));

@@ -137,3 +137,17 @@ describe('escolha do carro', () => {
     ).toBe('NOT_REGISTERED');
   });
 });
+
+describe('minhas corridas', () => {
+  it('lista as corridas em que o jogador está inscrito e exige login', async () => {
+    const r1 = await t.createRace({ name: 'Minha A' }, 20 * 3600_000);
+    const r2 = await t.createRace({ name: 'Outra B' }, 22 * 3600_000);
+    const [u] = await users(1, 'minhas');
+    await t.json('POST', `/races/${r1}/entries`, {}, u!.token);
+    const mine = await t.json('GET', '/me/races', undefined, u!.token);
+    expect(mine.status).toBe(200);
+    expect(mine.body.map((r: any) => r.id)).toEqual([r1]);
+    expect(mine.body.map((r: any) => r.id)).not.toContain(r2);
+    expect((await t.json('GET', '/me/races')).status).toBe(401);
+  });
+});

@@ -199,37 +199,6 @@ export function Home() {
 
       <Steps />
 
-      {me && data && data.mine.length > 0 && (
-        <section className="mt-10" aria-labelledby="minhas">
-          <h2 id="minhas" className="font-display text-2xl">
-            Minhas corridas
-          </h2>
-          <div className="mt-4 grid gap-3 md:grid-cols-2 lg:grid-cols-3">
-            {data.mine.map((r) => (
-              <RaceCard
-                key={r.id}
-                race={r}
-                cta={
-                  r.status === 'race' ? (
-                    <Link className="btn-danger !py-1.5" to={`/corridas/${r.id}/ao-vivo`}>
-                      Ao vivo
-                    </Link>
-                  ) : r.status === 'finished' ? (
-                    <Link className="btn-ghost !py-1.5" to={`/corridas/${r.id}/resultado`}>
-                      Resultado
-                    </Link>
-                  ) : (
-                    <Link className="btn-primary !py-1.5" to={`/corridas/${r.id}/box`}>
-                      Ir para o box
-                    </Link>
-                  )
-                }
-              />
-            ))}
-          </div>
-        </section>
-      )}
-
       {data && data.live.length > 0 && (
         <section className="mt-10" aria-labelledby="aovivo">
           <h2 id="aovivo" className="flex items-center gap-2 font-display text-2xl">

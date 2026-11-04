@@ -236,6 +236,22 @@ export function raceRoutes(app: FastifyInstance, ctx: Ctx) {
 
   app.get('/time', async () => ({ serverTime: ctx.clock.now() }));
 
+  /** Minhas corridas: inscrições do jogador (confirmado ou na fila), mais recentes primeiro. */
+  app.get('/me/races', async (req) => {
+    const user = requireAuth(req);
+    const rows = await ctx.db
+      .select({ r: races })
+      .from(entries)
+      .innerJoin(races, eq(races.id, entries.raceId))
+      .where(and(eq(entries.userId, user.id), inArray(entries.status, ['confirmed', 'waitlisted'])))
+      .orderBy(desc(races.practiceAt))
+      .limit(60);
+    return raceSummaries(
+      ctx.db,
+      rows.map((r) => r.r),
+    );
+  });
+
   /** Portal público + lobby: corridas ao vivo, próximas, resultados recentes e destaques do ranking. */
   app.get('/lobby', async (req) => {
     const now = ctx.clock.now();

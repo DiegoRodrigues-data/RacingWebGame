@@ -117,7 +117,8 @@ export async function runSimulation(
   race: RaceRow,
 ): Promise<{ rows: QualifyingRowDto[]; raceEndsAt: Date } | null> {
   const t0 = performance.now();
-  const g = await getGeometry(ctx, race.trackVersionId);
+  // Dentro da transação: a consulta precisa usar o tx (no PGlite, ctx.db aqui travaria esperando o próprio tx).
+  const g = await getGeometry({ db: tx, log: ctx.log }, race.trackVersionId);
   const cat = await getCategory(tx, race.categoryId);
   const confirmed = await tx
     .select({ e: entries, p: profiles })
