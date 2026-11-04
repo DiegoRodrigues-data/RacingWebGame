@@ -142,7 +142,8 @@ Base visual compartilhada por traçado, treino, classificação e corrida.
 Interação principal do jogador.
 
 - [x] Formato `{ points: Array<{ s, d }> }` com 64–1.024 pontos (o cliente envia 256)
-- [x] Ferramentas: desenhar, borracha, mover, desfazer/refazer (Ctrl+Z), linha sugerida, linha central, Chaikin
+- [x] Ferramentas (1ª versão): desenhar à mão, borracha, mover, desfazer/refazer (Ctrl+Z), linha sugerida, linha central, Chaikin
+- [x] Editor por pontos de controle: a linha começa no centro e o jogador arrasta pontos a cada ~60 m (spline Catmull-Rom), ajuste fino por botões e toque duplo para centralizar; substitui o desenho à mão
 - [x] Projeção para `(s, d)`; pontos fora da pista limitados à borda e destacados em vermelho
 - [x] Validação no servidor: monotonicidade, cobertura, `|d| ≤ 1`, taxa lateral, 1 envio a cada 2 s
 - [x] Envio automático a cada alteração; o último válido antes do prazo vale; rascunho local antes da janela é enviado ao abrir
@@ -156,12 +157,16 @@ Interação principal do jogador.
 Profundidade estratégica com balanceamento verificável.
 
 - [x] `CarSetup`: pneu, paradas, calibragem por eixo, asa, motor, câmbio, preparo de terreno, aposta de clima
+- [x] Corridas de 30 a 60 voltas e parada obrigatória nos boxes (validação, setup padrão, bots, migração dos dados)
+- [ ] Normalizar pela distância as chances de safety car, óleo, rodada e falha mecânica (hoje crescem com o número de voltas)
 - [x] Contexto da corrida: terreno, clima base, temperatura, chance de chuva por volta (previsão com 75% de acerto)
 - [x] `packages/sim`: perfil de velocidade por curvatura × aderência, aceleração/frenagem, desgaste, calibragem, determinístico
 - [x] Trade-offs explícitos (asa, pneu, câmbio, motor, terreno, clima)
 - [x] Efeito do traçado emergente da geometria da linha (a linha sugerida vence a central em ≥ 80% das pistas)
 - [x] Eventos semeados por categoria (safety car, óleo, falha mecânica, furo, rodada, clima)
 - [x] Tela de setup com prévia de tempo seco/chuva, velocidade, desgaste por volta e limites da categoria
+- [x] Setup gamificado: garagem com o carro, ficha técnica (velocidade, curvas, pneus, confiabilidade, chuva) e nota, cartões de pneu/motor/terreno/clima, manômetros com faixa ideal, barra de stints e dicas do engenheiro
+- [x] Escolha do carro na corrida (cor e modelo livres, só visual) com `PUT /races/:id/car`
 - [x] `PUT/GET /races/:id/setup` com limites por categoria
 - [x] Script de balanceamento (`pnpm balance`): estratégia mais vencedora 22%, maior lift 1,72
 - [x] Testes: determinismo, limites, setup após o travamento, trade-offs, Chromium = Node
@@ -171,6 +176,7 @@ Profundidade estratégica com balanceamento verificável.
 Fecha o ciclo de vida com resultados persistidos.
 
 - [x] **Treino:** volta e corrida de teste locais contra 5 fantasmas; tempos de referência do servidor
+- [x] Treino com o carro na pista: volta lançada animada (1×/2×/5×, parciais por setor) e corrida de teste em replay com os 6 carros, posições ao vivo e controles
 - [x] **Classificação:** volta lançada simulada no servidor; empate pela ordem de confirmação
 - [x] **Corrida:** simulação completa com replay a 4 Hz gravado comprimido em `race_replays`
 - [x] Transmissão: `race.started`, `race.tick`, `race.incident`, `race.finished`; replay sem revelar o futuro
@@ -217,6 +223,8 @@ Fecha o ciclo de vida com resultados persistidos.
 ## Fase 13 — Portal público, lobby, notificações e identidade visual ✅
 
 - [x] Portal: próximas corridas, destaques do ranking, últimos resultados, chamada para criar conta
+- [x] Cards de corrida com mini mapa da pista; corridas ao vivo mostram os carros andando (cauda do replay + `race.tick`)
+- [x] Animação da home dentro do SVG (carros na linha em qualquer largura) e sem rolagem horizontal no celular
 - [x] Lobby: minhas corridas com fase e atalhos para box, ao vivo e resultado
 - [x] Calendário por dia/semana com filtros
 - [x] Notificações in-app (central + toasts via WS) e lembretes por e-mail opcionais (e-mail ainda só no log)

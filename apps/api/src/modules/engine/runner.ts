@@ -2,6 +2,7 @@ import { gunzipSync, gzipSync } from 'node:zlib';
 import {
   DEFAULT_SETUP,
   checkSetupLimits,
+  defaultPitStops,
   xpForRace,
   type CarSetup,
   type CategoryConfig,
@@ -41,15 +42,18 @@ import { getGeometry } from '../tracks/service';
 export const START_LIGHTS_MS = 5000;
 const END_BUFFER_MS = 2000;
 
-/** Setup padrão ajustado aos limites da categoria (usado por quem não configurou o carro). */
-export function defaultSetupFor(cfg: CategoryConfig): CarSetup {
+/**
+ * Setup padrão ajustado aos limites da categoria (usado por quem não configurou o carro
+ * ou mandou um setup inválido). Já cumpre a parada obrigatória.
+ */
+export function defaultSetupFor(cfg: CategoryConfig, laps: number): CarSetup {
   const lim = cfg.setupLimits;
   return {
     ...DEFAULT_SETUP,
     tyre: lim.allowedTyres.includes('medium') ? 'medium' : lim.allowedTyres[0]!,
     engine: lim.allowedEngines.includes('balanced') ? 'balanced' : lim.allowedEngines[0]!,
     aero: Math.max(lim.aero.min, Math.min(lim.aero.max, DEFAULT_SETUP.aero)),
-    pitStops: [],
+    pitStops: defaultPitStops(laps, lim.allowedTyres),
   };
 }
 
@@ -64,6 +68,11 @@ export interface LoadedReplay {
   weatherByLap: Weather[];
 }
 
+/**
+ * Replays decodificados em memória. Uma corrida de 60 voltas com 22 carros passa de 20 mil
+ * frames (dezenas de MB depois do JSON.parse), então o cache fica pequeno.
+ */
+const REPLAY_CACHE_MAX = 6;
 const replayCache = new Map<string, LoadedReplay>();
 
 export async function loadReplay(ctx: Pick<Ctx, 'db'>, raceId: string): Promise<LoadedReplay | null> {
@@ -81,7 +90,7 @@ export async function loadReplay(ctx: Pick<Ctx, 'db'>, raceId: string): Promise<
     playbackSpeed: r.playbackSpeed,
     weatherByLap: r.weatherByLap as Weather[],
   };
-  if (replayCache.size > 30) replayCache.delete(replayCache.keys().next().value!);
+  if (replayCache.size >= REPLAY_CACHE_MAX) replayCache.delete(replayCache.keys().next().value!);
   replayCache.set(raceId, loaded);
   return loaded;
 }
@@ -119,7 +128,7 @@ export async function runSimulation(
   if (!confirmed.length) return null;
   const setupRows = await tx.select().from(setups).where(eq(setups.raceId, race.id));
   const traceRows = await tx.select().from(traces).where(eq(traces.raceId, race.id));
-  const fallback = defaultSetupFor(cat.config);
+  const fallback = defaultSetupFor(cat.config, race.laps);
   const flags = new Map<string, { defSetup: boolean; defTrace: boolean }>();
   const cars: SimCar[] = confirmed.map(({ e }) => {
     let setup = setupRows.find((s) => s.userId === e.userId)?.setup;
@@ -183,29 +192,31 @@ export async function runSimulation(
     };
   });
   const playbackSpeed = cat.config.playbackSpeed;
-  await tx.insert(raceReplays).values({
-    raceId: race.id,
-    simVersion: out.simVersion,
-    inputHash: out.inputHash,
-    resultHash: out.resultHash,
-    trackHash: g.hash,
-    durationMs: out.durationMs,
-    frameHz: out.frameHz,
-    playbackSpeed,
-    frames: gzipSync(JSON.stringify(out.frames)),
-    incidents: out.incidents,
-    weatherByLap: out.weatherByLap,
-    cars: liveCars,
-    simResults: { results: out.results, fastestLap: out.fastestLap },
-    simInput: {
-      cars: gridCars,
-      laps: race.laps,
-      seed: race.seed,
-      weather: race.weather,
-      randomEvents: cat.config.randomEvents,
-      trackVersionId: race.trackVersionId,
-    },
-  });
+  await tx
+    .insert(raceReplays)
+    .values({
+      raceId: race.id,
+      simVersion: out.simVersion,
+      inputHash: out.inputHash,
+      resultHash: out.resultHash,
+      trackHash: g.hash,
+      durationMs: out.durationMs,
+      frameHz: out.frameHz,
+      playbackSpeed,
+      frames: gzipSync(JSON.stringify(out.frames)),
+      incidents: out.incidents,
+      weatherByLap: out.weatherByLap,
+      cars: liveCars,
+      simResults: { results: out.results, fastestLap: out.fastestLap },
+      simInput: {
+        cars: gridCars,
+        laps: race.laps,
+        seed: race.seed,
+        weather: race.weather,
+        randomEvents: cat.config.randomEvents,
+        trackVersionId: race.trackVersionId,
+      },
+    });
   const raceEndsAt = new Date(
     race.raceAt.getTime() + START_LIGHTS_MS + Math.ceil(out.durationMs / playbackSpeed) + END_BUFFER_MS,
   );
@@ -276,23 +287,25 @@ export async function publishResults(ctx: Ctx, tx: Tx, race: RaceRow) {
       points: ranked ? computePoints(cat.config.scoring, r.position, r.status === 'finished', fl) : 0,
     };
   });
-  await tx.insert(raceResults).values(
-    scored.map(({ r, fl, points }) => ({
-      raceId: race.id,
-      userId: r.id,
-      seasonId: season.id,
-      position: r.position,
-      status: r.status,
-      totalTimeMs: r.totalTimeMs,
-      bestLapMs: r.bestLapMs,
-      lapsCompleted: r.lapsCompleted,
-      pitStops: r.pitStops,
-      points,
-      fastestLap: fl,
-      ranked,
-      createdAt: new Date(now),
-    })),
-  );
+  await tx
+    .insert(raceResults)
+    .values(
+      scored.map(({ r, fl, points }) => ({
+        raceId: race.id,
+        userId: r.id,
+        seasonId: season.id,
+        position: r.position,
+        status: r.status,
+        totalTimeMs: r.totalTimeMs,
+        bestLapMs: r.bestLapMs,
+        lapsCompleted: r.lapsCompleted,
+        pitStops: r.pitStops,
+        points,
+        fastestLap: fl,
+        ranked,
+        createdAt: new Date(now),
+      })),
+    );
   for (const { r } of scored) {
     if (r.status === 'dnf')
       await tx

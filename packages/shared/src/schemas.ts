@@ -1,5 +1,14 @@
 import { z } from 'zod';
-import { MAX_CARS_PER_RACE, TRACE_MAX_POINTS, TRACE_MIN_POINTS } from './constants';
+import {
+  CAR_COLORS,
+  CAR_MODELS,
+  MAX_CARS_PER_RACE,
+  MIN_PIT_STOPS,
+  RACE_LAPS_MAX,
+  RACE_LAPS_MIN,
+  TRACE_MAX_POINTS,
+  TRACE_MIN_POINTS,
+} from './constants';
 import { RACE_PHASES } from './phases';
 
 // ---------- Básicos ----------
@@ -78,6 +87,13 @@ export const updateProfileSchema = z.object({
   emailReminders: z.boolean().optional(),
 });
 export type UpdateProfileInput = z.infer<typeof updateProfileSchema>;
+
+/** Escolha do carro na corrida: cor e modelo do racing_pack, únicos entre os confirmados. */
+export const carChoiceSchema = z.object({
+  carColor: z.enum(CAR_COLORS),
+  carModel: z.number().int().min(1).max(CAR_MODELS.length),
+});
+export type CarChoiceInput = z.infer<typeof carChoiceSchema>;
 
 export interface MeDto {
   id: string;
@@ -181,7 +197,7 @@ export const DEFAULT_SCORING: Scoring = {
 };
 
 export const categoryConfigSchema = z.object({
-  laps: z.number().int().min(1).max(60),
+  laps: z.number().int().min(RACE_LAPS_MIN).max(RACE_LAPS_MAX),
   trackLength: z.object({ min: z.number().min(800).max(8000), max: z.number().min(800).max(8000) }),
   trackComplexity: z.number().min(0).max(1),
   terrains: z.array(trackTerrainSchema).min(1),
@@ -192,7 +208,7 @@ export const categoryConfigSchema = z.object({
     allowedTyres: z.array(tyreSchema).min(1),
     aero: z.object({ min: z.number().int().min(1).max(10), max: z.number().int().min(1).max(10) }),
     allowedEngines: z.array(engineSchema).min(1),
-    maxPitStops: z.number().int().min(0).max(3),
+    maxPitStops: z.number().int().min(MIN_PIT_STOPS).max(3),
   }),
   scoring: scoringSchema,
   entryRequirement: z.object({ minLevel: levelSchema, minRaces: z.number().int().min(0) }),
@@ -291,7 +307,7 @@ export const raceCreateSchema = z.object({
   qualifyingSeconds: z.number().int().min(10).max(1800).default(60),
   capacity: z.number().int().min(2).max(MAX_CARS_PER_RACE).default(MAX_CARS_PER_RACE),
   waitlistMax: z.number().int().min(0).max(50).default(10),
-  laps: z.number().int().min(1).max(60).optional(),
+  laps: z.number().int().min(RACE_LAPS_MIN).max(RACE_LAPS_MAX).optional(),
   weather: raceWeatherSchema.optional(),
   /** Pista: uma versão publicada (especial) ou geração procedural com seed. */
   track: z.discriminatedUnion('type', [

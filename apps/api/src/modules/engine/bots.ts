@@ -1,6 +1,7 @@
 import {
   CAR_COLORS,
   ENGINE_MAPS,
+  MIN_PIT_STOPS,
   TERRAINS,
   type CarSetup,
   type CategoryConfig,
@@ -63,12 +64,18 @@ function botSetup(seed: string, cfg: CategoryConfig, laps: number, wet: boolean)
   const allowed = cfg.setupLimits.allowedTyres;
   const dry = allowed.filter((t) => t !== 'wet');
   const tyre: Tyre = wet && allowed.includes('wet') ? 'wet' : r.pick(dry.length ? dry : allowed);
-  const stops = Math.min(cfg.setupLimits.maxPitStops, laps > 4 ? r.int(0, 1) : 0);
+  // Cumpre a parada obrigatória; às vezes arrisca uma parada a mais, espaçando as trocas.
+  const max = Math.max(MIN_PIT_STOPS, cfg.setupLimits.maxPitStops);
+  const stops = Math.min(max, MIN_PIT_STOPS + (r.chance(0.35) ? 1 : 0));
+  const pitStops: CarSetup['pitStops'] = [];
+  for (let k = 1; k <= stops; k++) {
+    const prev = pitStops.at(-1)?.lap ?? 0;
+    const lap = Math.min(laps - 1, Math.max(prev + 1, Math.round((laps * k) / (stops + 1)) + r.int(-2, 2)));
+    if (lap > prev) pitStops.push({ lap, tyre: r.pick(dry.length ? dry : allowed) });
+  }
   return {
     tyre,
-    pitStops: stops
-      ? [{ lap: Math.max(1, Math.round(laps / 2) + r.int(-1, 1)), tyre: r.pick(dry.length ? dry : allowed) }]
-      : [],
+    pitStops,
     tyrePressure: { front: r.int(21, 25), rear: r.int(21, 25) },
     aero: Math.max(cfg.setupLimits.aero.min, Math.min(cfg.setupLimits.aero.max, r.int(3, 8))),
     engine: r.pick(cfg.setupLimits.allowedEngines.length ? cfg.setupLimits.allowedEngines : ENGINE_MAPS),

@@ -2,8 +2,10 @@ import {
   AppError,
   CAR_COLORS,
   CAR_MODELS,
+  carChoiceSchema,
   MAX_OVERLAPPING_ENTRIES,
   meetsLevel,
+  SETUP_EDITABLE_PHASES,
   WITHDRAW_PHASES,
   type EntryStatus,
 } from '@tracado/shared';
@@ -12,6 +14,7 @@ import type { Ctx } from '../../context';
 import type { Tx } from '../../db/client';
 import { entries, profiles, races, users } from '../../db/schema';
 import type { AuthUser } from '../../lib/auth';
+import { parse } from '../../lib/validate';
 import { notify } from '../notifications/service';
 import { broadcastRace, capacityOf, getCategory, getRaceRow, type RaceRow } from './service';
 
@@ -197,4 +200,55 @@ export async function cancel(
   if (res.promoted) await notify(ctx, [res.promoted], 'entry_promoted', { raceId, raceName: res.raceName });
   await broadcastRace(ctx, raceId);
   return { status: res.status, promoted: res.promoted };
+}
+
+/**
+ * Troca de carro (cor e modelo) enquanto o setup ainda pode mudar. Só para inscrições confirmadas:
+ * quem está na fila recebe um carro livre ao ser promovido. A combinação é única entre os confirmados.
+ */
+export async function chooseCar(
+  ctx: Ctx,
+  raceId: string,
+  user: AuthUser,
+  body: unknown,
+): Promise<{ carColor: string; carModel: number; carNumber: number }> {
+  const choice = parse(carChoiceSchema, body);
+  const res = await ctx.mutex.run(`race:${raceId}`, () =>
+    ctx.db.transaction(async (tx) => {
+      const now = ctx.clock.now();
+      const race = await getRaceRow(tx, raceId, true);
+      if (!SETUP_EDITABLE_PHASES.includes(race.status) || now >= race.setupLockAt.getTime())
+        throw new AppError('SETUP_LOCKED', 'O carro não pode mais ser trocado (parque fechado).');
+      const [e] = await tx
+        .select()
+        .from(entries)
+        .where(and(eq(entries.raceId, raceId), eq(entries.userId, user.id)));
+      if (!e || (e.status !== 'confirmed' && e.status !== 'waitlisted'))
+        throw new AppError('NOT_REGISTERED', 'Você não está inscrito nesta corrida.');
+      if (e.status !== 'confirmed')
+        throw new AppError('CONFLICT', 'Quem está na fila de espera escolhe o carro ao ser confirmado.');
+      if (e.carColor === choice.carColor && e.carModel === choice.carModel) return e;
+      const [taken] = await tx
+        .select({ id: entries.id })
+        .from(entries)
+        .where(
+          and(
+            eq(entries.raceId, raceId),
+            eq(entries.status, 'confirmed'),
+            eq(entries.carColor, choice.carColor),
+            eq(entries.carModel, choice.carModel),
+            ne(entries.id, e.id),
+          ),
+        );
+      if (taken) throw new AppError('CAR_TAKEN', 'Outro piloto já está com este carro nesta corrida.');
+      const [row] = await tx
+        .update(entries)
+        .set({ ...choice, updatedAt: new Date(now) })
+        .where(eq(entries.id, e.id))
+        .returning();
+      return row!;
+    }),
+  );
+  await broadcastRace(ctx, raceId);
+  return { carColor: res.carColor, carModel: res.carModel, carNumber: res.carNumber };
 }

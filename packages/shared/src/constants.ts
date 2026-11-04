@@ -7,6 +7,11 @@ export const DEFAULT_SETUP_LOCK_MS = 30 * 1000;
 export const DEFAULT_QUALIFYING_MS = 60 * 1000;
 export const DEFAULT_PRACTICE_MS = 10 * 60 * 1000;
 export const ARCHIVE_AFTER_MS = 24 * 60 * 60 * 1000;
+/** Duração das corridas em voltas (categorias e corridas avulsas). */
+export const RACE_LAPS_MIN = 30;
+export const RACE_LAPS_MAX = 60;
+/** Toda corrida exige ao menos esta quantidade de paradas nos boxes. */
+export const MIN_PIT_STOPS = 1;
 /** Traçado enviado pelo cliente. */
 export const TRACE_MIN_POINTS = 64;
 export const TRACE_MAX_POINTS = 1024;

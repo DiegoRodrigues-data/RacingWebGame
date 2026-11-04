@@ -6,7 +6,7 @@ import { errorMessage, get, patch, post } from '../../lib/api';
 import { AdminPage } from './AdminNav';
 
 const TEMPLATE = {
-  laps: 5,
+  laps: 40,
   trackLength: { min: 2000, max: 3000 },
   trackComplexity: 0.5,
   terrains: ['asphalt'],

@@ -14,7 +14,7 @@ const expect200 = (r: { status: number; body: unknown }) => {
 export const T0 = Date.UTC(2026, 10, 3, 12, 0, 0);
 
 export const TEST_CATEGORY: CategoryConfig = {
-  laps: 3,
+  laps: 30,
   trackLength: { min: 1500, max: 1800 },
   trackComplexity: 0.4,
   terrains: ['asphalt'],

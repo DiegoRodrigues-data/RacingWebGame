@@ -21,7 +21,8 @@ test('fluxo crítico do jogador: inscrição → setup → traçado na janela �
   await page.getByRole('button', { name: 'Salvar setup' }).click();
   await expect(page.getByText('Setup salvo ✅')).toBeVisible();
 
-  // Traçado: desenha com o mouse sobre o canvas e aplica a linha sugerida (rascunho local antes da janela).
+  // Traçado: arrasta sobre o canvas (fora dos pontos de controle move a câmera) e aplica a linha sugerida
+  // (rascunho local antes da janela).
   await page.getByRole('tab', { name: /Traçado/ }).click();
   const canvas = page.locator('canvas').first();
   await expect(canvas).toBeVisible();

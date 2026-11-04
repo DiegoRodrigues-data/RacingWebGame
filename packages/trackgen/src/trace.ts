@@ -314,3 +314,47 @@ export function suggestedLine(g: TrackGeometry, aggressiveness = 0.85): Float64A
   }
   return enforceLateralRate(g, out);
 }
+
+/**
+ * Pontos de controle do editor de traçado: um a cada ~`spacingM` metros (entre 16 e 64), como índices
+ * de amostra da linha central. O jogador arrasta cada ponto para os lados e a linha passa por todos eles.
+ */
+export function traceHandleIndices(g: TrackGeometry, spacingM = 60): number[] {
+  const k = Math.max(16, Math.min(64, Math.round(g.length / spacingM)));
+  return Array.from({ length: k }, (_, i) => Math.round((i * g.count) / k) % g.count);
+}
+
+/** Valor de cada ponto de controle a partir de um traçado existente. */
+export function offsetsToHandles(offsets: Float64Array, indices: number[]): number[] {
+  return indices.map((i) => offsets[i] ?? 0);
+}
+
+/**
+ * Traçado a partir dos pontos de controle: spline Catmull-Rom fechada, que passa exatamente por cada ponto.
+ * O resultado fica em [-1, 1]; aplique `enforceLateralRate` antes de validar.
+ */
+export function handlesToOffsets(g: TrackGeometry, indices: number[], values: number[]): Float64Array {
+  const n = g.count,
+    k = indices.length;
+  const out = new Float64Array(n);
+  if (!k) return out;
+  const v = (j: number) => values[mod(j, k)] ?? 0;
+  for (let h = 0; h < k; h++) {
+    const a = indices[h]!,
+      span = mod(indices[mod(h + 1, k)]! - a, n) || n;
+    const p0 = v(h - 1),
+      p1 = v(h),
+      p2 = v(h + 1),
+      p3 = v(h + 2);
+    for (let s = 0; s < span; s++) {
+      const t = s / span,
+        t2 = t * t,
+        t3 = t2 * t;
+      const d =
+        0.5 *
+        (2 * p1 + (-p0 + p2) * t + (2 * p0 - 5 * p1 + 4 * p2 - p3) * t2 + (-p0 + 3 * p1 - 3 * p2 + p3) * t3);
+      out[mod(a + s, n)] = Math.max(-1, Math.min(1, d));
+    }
+  }
+  return out;
+}

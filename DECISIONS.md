@@ -17,6 +17,22 @@
 | E-mail                                          | Provedor real         | `LogMailer` (só registra no log)                                                                                                                                                                       | Provedor é decisão pendente                                                                                       |
 | Sentry/OpenTelemetry                            | Instalados            | Inicialização opcional por variável de ambiente; pacotes não vêm instalados                                                                                                                            | Evita peso sem uso; `pnpm add @sentry/node` ou `@opentelemetry/sdk-node` ativa                                    |
 
+### Interface do box (traçado, setup e treino)
+
+- **Traçado por pontos de controle.** O desenho à mão livre era difícil no celular e gerava linhas tortas. Agora a linha
+  começa no centro da pista e o jogador arrasta pontos colocados a cada ~60 m (16 a 64 pontos, `traceHandleIndices`);
+  uma spline Catmull-Rom fechada passa por todos (`handlesToOffsets`) e `enforceLateralRate` garante que a linha valide.
+  Arrastar fora de um ponto move a câmera. Um traçado antigo (feito à mão) é lido normalmente; ao mexer no primeiro
+  ponto, ele vira a spline que passa pelos pontos amostrados.
+- **Escolha do carro.** Cor e modelo são só visuais (todos os carros têm o mesmo desempenho) e únicos entre os
+  confirmados da corrida. A troca vale até o parque fechado; quem está na fila recebe um carro livre ao ser promovido.
+- **Ficha técnica do setup.** As barras saem do próprio modelo: velocidade final e velocidade nas curvas normalizadas
+  entre os setups extremos possíveis naquela pista, pneus pelo desgaste máximo previsto na estratégia, confiabilidade
+  pela chance de quebra do mapa de motor em N voltas e chuva pela volta no molhado. A "nota" é uma média ponderada
+  (chuva pesa conforme a chance de chuva); serve para comparar ajustes, não prevê a posição.
+- **Mini mapa ao vivo nos cards.** O card pede só a cauda do replay (`GET /races/:id/replay?tail=8`) e depois segue os
+  `race.tick` da sala da corrida, guardando 24 frames. A geometria só é baixada quando o card entra na tela.
+
 ## Modelo de simulação
 
 Determinístico (PRNG sfc32 semeado; nenhuma fonte de aleatoriedade externa). Por volta, cada carro tem um perfil de velocidade
@@ -26,6 +42,15 @@ A corrida avança em passos de 0,25 s com ultrapassagens probabilísticas (difer
 paradas planejadas e forçadas (furo), rodadas, falhas mecânicas, safety car e óleo, todos semeados.
 O resultado, os frames (4 Hz) e as entradas exatas ficam em `race_replays`; `POST /admin/races/:id/reprocess` refaz a simulação e compara o hash.
 
+### Corridas longas e parada obrigatória
+
+Corridas têm de 30 a 60 voltas (`RACE_LAPS_MIN`/`RACE_LAPS_MAX`) e todo setup precisa de ao menos uma parada nos boxes
+(`MIN_PIT_STOPS`); `checkSetupLimits` recusa o setup sem parada e o setup padrão de quem não configurou o carro já vem com uma.
+Seed: Novatos 30, Rali 35, Amadora 40, Pro 50, Elite 60 voltas; a velocidade de transmissão subiu (2, 3, 3, 4, 5×) para a
+corrida ao vivo durar de 12 a 22 minutos. Medido com 22 carros: a simulação de 60 voltas leva cerca de 0,2 s de CPU;
+o replay de 60 voltas numa pista de 4 km tem 13 MB de JSON e 3,8 MB em gzip, por isso o cache de replays em memória caiu de 31 para 6.
+A migração `0001_corridas_longas` atualiza categorias, corridas que ainda aceitam setup e setups salvos sem parada.
+
 Balanceamento (`pnpm balance`, 210 corridas, 7 cenários): estratégia de pneus mais vencedora com 22% das vitórias e maior
 "lift" por característica de 1,72. A melhor combinação muda por cenário (seco rápido, seco travado, chuva, clima instável, terra, areia, misto).
 
@@ -34,7 +59,8 @@ Balanceamento (`pnpm balance`, 210 corridas, 7 cenários): estratégia de pneus 
 - **Determinismo de ponto flutuante entre motores JS**: `Math.sin/cos/atan2` podem divergir no último bit entre V8, SpiderMonkey e JavaScriptCore. Mitigação: o servidor é a única autoridade sobre resultados; o cliente recebe a geometria pronta do servidor (não a regenera); hashes usam valores quantizados. Verificado: Chromium = Node (teste E2E). Firefox e Safari não foram testados.
 - **Balanceamento** é iterativo: duas paradas quase nunca vencem em corridas curtas e asa baixa rende pouco nas pistas atuais.
 - **Várias instâncias da API** exigem Redis (pub/sub do WebSocket e eleição do líder do motor). Sem Redis, rode uma instância.
-- **Armazenamento de replays**: cerca de 0,3 a 1 MB por corrida (gzip). Defina retenção conforme o volume.
+- **Armazenamento de replays**: de 1 a 4 MB por corrida (gzip) com 30 a 60 voltas. Defina retenção conforme o volume.
+- **Eventos por volta**: safety car, óleo, rodadas e falhas mecânicas são sorteados por volta, então crescem com a distância (em 60 voltas: cerca de 2,5 safety cars, 3,5 manchas de óleo e 5 abandonos por corrida). Se ficar excessivo, normalize as chances pela distância (mexe no `SIM_VERSION`).
 - **PGlite em produção** não é recomendado: use Postgres (o compose de produção já usa).
 
 ## O que não foi verificado nesta máquina

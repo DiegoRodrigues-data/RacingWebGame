@@ -105,3 +105,35 @@ describe('inscrições com limite de 22 carros', () => {
     );
   });
 });
+
+describe('escolha do carro', () => {
+  it('troca para um carro livre, recusa um carro ocupado e trava no parque fechado', async () => {
+    const race = await t.createRace({}, 15 * 3600_000);
+    const [a, b, c] = await users(3, 'car');
+    for (const u of [a, b]) await t.json('POST', `/races/${race}/entries`, {}, u!.token);
+    const det = await t.race(race);
+    const carB = det.entries.find((e: any) => e.userId === b!.userId);
+
+    const ok = await t.json('PUT', `/races/${race}/car`, { carColor: 'green', carModel: 4 }, a!.token);
+    expect(ok.status).toBe(200);
+    expect(ok.body).toMatchObject({ carColor: 'green', carModel: 4 });
+    expect((await t.race(race)).entries.find((e: any) => e.userId === a!.userId)).toMatchObject({
+      carColor: 'green',
+      carModel: 4,
+    });
+
+    const taken = await t.json(
+      'PUT',
+      `/races/${race}/car`,
+      { carColor: carB.carColor, carModel: carB.carModel },
+      a!.token,
+    );
+    expect(taken.body.error.code).toBe('CAR_TAKEN');
+    expect(
+      (await t.json('PUT', `/races/${race}/car`, { carColor: 'pink', carModel: 1 }, a!.token)).status,
+    ).toBe(400);
+    expect(
+      (await t.json('PUT', `/races/${race}/car`, { carColor: 'red', carModel: 2 }, c!.token)).body.error.code,
+    ).toBe('NOT_REGISTERED');
+  });
+});

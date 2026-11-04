@@ -8,6 +8,10 @@ import { useSession } from '../lib/session';
 
 const HERO_PATH = 'M 60 160 C 60 60, 200 40, 300 70 S 520 40, 560 120 S 480 250, 360 220 S 160 280, 60 160 Z';
 
+/**
+ * Pista animada da home. Os carros andam dentro do próprio SVG (animateMotion), então seguem a linha
+ * em qualquer largura de tela; com "reduzir animações" ficam parados em pontos fixos da pista.
+ */
 function HeroTrack() {
   const cars: [string, number][] = [
     ['red', 1],
@@ -16,9 +20,17 @@ function HeroTrack() {
     ['green', 4],
     ['black', 5],
   ];
+  const reduce =
+    typeof window !== 'undefined' &&
+    (window.matchMedia?.('(prefers-reduced-motion: reduce)').matches ||
+      document.documentElement.classList.contains('reduce-motion'));
+  const LAP_S = 11;
   return (
-    <div className="relative mx-auto aspect-[620/300] w-full max-w-xl" aria-hidden>
-      <svg viewBox="0 0 620 300" className="absolute inset-0 size-full">
+    <div className="relative mx-auto w-full max-w-xl" aria-hidden>
+      <svg viewBox="0 0 620 300" className="block h-auto w-full overflow-visible">
+        <defs>
+          <path id="hero-path" d={HERO_PATH} />
+        </defs>
         <path d={HERO_PATH} fill="none" stroke="#27ae60" strokeWidth="64" strokeLinejoin="round" />
         <path d={HERO_PATH} fill="none" stroke="#fff" strokeWidth="40" />
         <path d={HERO_PATH} fill="none" stroke="#ff5a5a" strokeWidth="40" strokeDasharray="10 10" />
@@ -32,26 +44,53 @@ function HeroTrack() {
           strokeLinecap="round"
           opacity="0.9"
         />
+        {cars.map(([c, m], i) => {
+          // Carros em fila, com leve diferença de ritmo; o sprite aponta para cima, por isso gira 90°.
+          const dur = LAP_S + i * 0.45;
+          const offset = (i * 0.09) % 1;
+          return (
+            <g key={c}>
+              {reduce ? null : (
+                <animateMotion
+                  dur={`${dur}s`}
+                  begin={`${-offset * dur}s`}
+                  repeatCount="indefinite"
+                  rotate="auto"
+                  keyPoints="0;1"
+                  keyTimes="0;1"
+                  calcMode="linear"
+                >
+                  <mpath href="#hero-path" />
+                </animateMotion>
+              )}
+              <g transform={reduce ? staticPose(offset + i * 0.11) : undefined}>
+                <image
+                  href={carImage(c, m)}
+                  width="14"
+                  height="26"
+                  x="-7"
+                  y="-13"
+                  transform={`translate(0 ${(i % 2 ? 1 : -1) * 6}) rotate(90)`}
+                />
+              </g>
+            </g>
+          );
+        })}
       </svg>
-      {cars.map(([c, m], i) => (
-        <img
-          key={c}
-          src={carImage(c, m)}
-          alt=""
-          className="absolute left-0 top-0 h-[26px] w-auto"
-          style={{
-            offsetPath: `path("${HERO_PATH}")`,
-            offsetRotate: 'auto 90deg',
-            animation: `hero-drive ${9 + i * 0.6}s linear infinite`,
-            animationDelay: `${-i * 1.7}s`,
-            transformOrigin: 'center',
-          }}
-        />
-      ))}
-      <style>{`@keyframes hero-drive { from { offset-distance: 0%; } to { offset-distance: 100%; } }
-      @media (max-width: 640px) { [style*="offset-path"] { height: 16px !important; } }`}</style>
     </div>
   );
+}
+
+/** Pose fixa (sem animação) a uma fração da volta. */
+function staticPose(frac: number): string {
+  if (typeof document === 'undefined') return '';
+  const p = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+  p.setAttribute('d', HERO_PATH);
+  const len = p.getTotalLength();
+  const a = p.getPointAtLength((frac % 1) * len),
+    b = p.getPointAtLength(((frac % 1) * len + 1) % len);
+  const deg = (Math.atan2(b.y - a.y, b.x - a.x) * 180) / Math.PI;
+  return `translate(${a.x} ${a.y}) rotate(${deg})`;
 }
 
 function Steps() {
@@ -141,14 +180,16 @@ export function Home() {
           {data && (
             <div className="mt-6 flex gap-6 text-sm text-muted">
               <div>
-                <b className="block font-display text-2xl text-ink">{data.stats.players}</b>pilotos
+                <b className="block font-display text-2xl text-ink">{data.stats.players}</b>
+                pilotos
               </div>
               <div>
-                <b className="block font-display text-2xl text-hot">{data.stats.liveRaces}</b>corridas em
-                andamento
+                <b className="block font-display text-2xl text-hot">{data.stats.liveRaces}</b>
+                corridas em andamento
               </div>
               <div>
-                <b className="block font-display text-2xl text-go">{data.stats.online}</b>online agora
+                <b className="block font-display text-2xl text-go">{data.stats.online}</b>
+                online agora
               </div>
             </div>
           )}
@@ -233,7 +274,7 @@ export function Home() {
       </section>
 
       <div className="mt-10 grid gap-6 lg:grid-cols-2">
-        <section aria-labelledby="recentes">
+        <section aria-labelledby="recentes" className="min-w-0">
           <h2 id="recentes" className="font-display text-2xl">
             Resultados recentes
           </h2>
@@ -243,13 +284,13 @@ export function Home() {
               <Link
                 key={race.id}
                 to={`/corridas/${race.id}/resultado`}
-                className="card flex items-center gap-4 hover:border-race/60"
+                className="card flex flex-wrap items-center gap-x-4 gap-y-2 hover:border-race/60"
               >
-                <div className="min-w-0 flex-1">
+                <div className="min-w-40 flex-1">
                   <div className="truncate font-bold">{race.name}</div>
                   <div className="text-xs text-muted">{race.track.name}</div>
                 </div>
-                <ol className="flex gap-3 text-sm">
+                <ol className="flex flex-wrap gap-x-3 gap-y-1 text-sm">
                   {podium.map((p) => (
                     <li key={p.userId} className="flex items-center gap-1">
                       <span>{['🥇', '🥈', '🥉'][p.position - 1]}</span>
@@ -261,7 +302,7 @@ export function Home() {
             ))}
           </div>
         </section>
-        <section aria-labelledby="top">
+        <section aria-labelledby="top" className="min-w-0">
           <h2 id="top" className="font-display text-2xl">
             Top 5 mundial
           </h2>
@@ -282,9 +323,9 @@ export function Home() {
               </li>
             ))}
           </ol>
-          <div className="mt-3 flex justify-center gap-2 opacity-80" aria-hidden>
+          <div className="mt-3 flex flex-wrap justify-center gap-2 opacity-80" aria-hidden>
             {(['red', 'blue', 'green', 'yellow', 'black'] as const).map((c, i) => (
-              <CarIcon key={c} color={c} model={i + 1} className="h-10" />
+              <CarIcon key={c} color={c} model={i + 1} className="h-7 sm:h-10" />
             ))}
           </div>
         </section>

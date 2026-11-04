@@ -2,6 +2,7 @@ import { LEVEL_LABELS, type RaceSummaryDto } from '@tracado/shared';
 import { motion } from 'motion/react';
 import { Link } from 'react-router';
 import { fmtDateTime, fmtKm, TERRAIN_LABEL, WEATHER_ICON, WEATHER_LABEL } from '../lib/format';
+import { RaceMiniMap } from './RaceMiniMap';
 import { CapacityMeter, Countdown, PhaseBadge } from './ui';
 
 export function RaceCard({ race, cta }: { race: RaceSummaryDto; cta?: React.ReactNode }) {
@@ -12,6 +13,15 @@ export function RaceCard({ race, cta }: { race: RaceSummaryDto; cta?: React.Reac
       animate={{ opacity: 1, y: 0 }}
       className="card flex flex-col gap-3 transition hover:border-race/60"
     >
+      <Link
+        to={race.status === 'race' ? `/corridas/${race.id}/ao-vivo` : `/corridas/${race.id}`}
+        aria-label={
+          race.status === 'race' ? `Assistir ${race.name} ao vivo` : `Mapa da pista ${race.track.name}`
+        }
+        className="block"
+      >
+        <RaceMiniMap race={race} className="aspect-[16/8] w-full" />
+      </Link>
       <div className="flex items-start justify-between gap-2">
         <div className="min-w-0">
           <Link to={`/corridas/${race.id}`} className="font-display text-lg leading-tight hover:text-race">

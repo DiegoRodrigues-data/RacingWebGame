@@ -43,9 +43,10 @@ export const SEED_CATEGORIES: {
     slug: 'copa-novatos',
     name: 'Copa Novatos',
     level: 'rookie',
-    description: 'Corridas curtas em asfalto para aprender a traçar e acertar o carro.',
+    description:
+      'Corridas mais curtas, em asfalto, para aprender a traçar, acertar o carro e planejar a parada.',
     config: base({
-      laps: 3,
+      laps: 30,
       trackLength: { min: 1400, max: 2000 },
       trackComplexity: 0.3,
       rainChance: 0.1,
@@ -66,7 +67,7 @@ export const SEED_CATEGORIES: {
     level: 'amateur',
     description: 'Pistas maiores, terra no caminho e safety car.',
     config: base({
-      laps: 5,
+      laps: 40,
       trackLength: { min: 2000, max: 3000 },
       terrains: ['asphalt', 'mixed'],
       weathers: ['dry', 'cloudy', 'light_rain'],
@@ -74,7 +75,7 @@ export const SEED_CATEGORIES: {
       randomEvents: { safetyCar: true, oil: true, mechanical: false },
       scoring: { ...DEFAULT_SCORING, multiplier: 1.2 },
       entryRequirement: { minLevel: 'amateur', minRaces: 0 },
-      playbackSpeed: 2,
+      playbackSpeed: 3,
     }),
   },
   {
@@ -83,13 +84,13 @@ export const SEED_CATEGORIES: {
     level: 'amateur',
     description: 'Terra e areia: acerto de suspensão faz diferença.',
     config: base({
-      laps: 4,
+      laps: 35,
       trackLength: { min: 1800, max: 2600 },
       trackComplexity: 0.7,
       terrains: ['dirt', 'sand', 'mixed'],
       rainChance: 0.2,
       entryRequirement: { minLevel: 'amateur', minRaces: 0 },
-      playbackSpeed: 2,
+      playbackSpeed: 3,
     }),
   },
   {
@@ -98,7 +99,7 @@ export const SEED_CATEGORIES: {
     level: 'pro',
     description: 'Estratégia de pneus de verdade: corridas longas e clima instável.',
     config: base({
-      laps: 8,
+      laps: 50,
       trackLength: { min: 2500, max: 4000 },
       trackComplexity: 0.7,
       terrains: ['asphalt', 'mixed'],
@@ -112,7 +113,7 @@ export const SEED_CATEGORIES: {
       },
       scoring: { ...DEFAULT_SCORING, multiplier: 1.5 },
       entryRequirement: { minLevel: 'pro', minRaces: 5 },
-      playbackSpeed: 3,
+      playbackSpeed: 4,
     }),
   },
   {
@@ -121,7 +122,7 @@ export const SEED_CATEGORIES: {
     level: 'elite',
     description: 'O topo: pistas técnicas, tudo pode acontecer.',
     config: base({
-      laps: 12,
+      laps: 60,
       trackLength: { min: 3000, max: 5000 },
       trackComplexity: 0.9,
       terrains: ['asphalt', 'mixed', 'dirt'],
@@ -135,7 +136,7 @@ export const SEED_CATEGORIES: {
       },
       scoring: { ...DEFAULT_SCORING, multiplier: 2 },
       entryRequirement: { minLevel: 'elite', minRaces: 10 },
-      playbackSpeed: 4,
+      playbackSpeed: 5,
     }),
   },
 ];

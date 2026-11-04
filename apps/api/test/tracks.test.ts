@@ -118,8 +118,8 @@ describe('administração de corridas', () => {
     );
     expect(batch.body.created).toBe(3);
     const id = batch.body.ids[0];
-    const upd = await t.json('PATCH', `/admin/races/${id}`, { laps: 5, name: 'Renomeada' }, t.admin);
-    expect(upd.body).toMatchObject({ laps: 5, name: 'Renomeada' });
+    const upd = await t.json('PATCH', `/admin/races/${id}`, { laps: 45, name: 'Renomeada' }, t.admin);
+    expect(upd.body).toMatchObject({ laps: 45, name: 'Renomeada' });
     const ev = await t.json(
       'POST',
       '/admin/events',

@@ -3,11 +3,14 @@ import { TRACE_MIN_POINTS } from '@tracado/shared';
 import {
   enforceLateralRate,
   generateProceduralTrack,
+  handlesToOffsets,
+  offsetsToHandles,
   offsetsToTrace,
   projectToTrack,
   racingLine,
   strokeToOffsets,
   traceToOffsets,
+  traceHandleIndices,
   traceToWorld,
   validateTrace,
 } from '../src';
@@ -95,5 +98,30 @@ describe('linha sugerida', () => {
     const off = suggestedLine(g);
     expect(Math.max(...off.map(Math.abs))).toBeLessThanOrEqual(1);
     expect(validateTrace(g, offsetsToTrace(off, 256))).toEqual({ ok: true });
+  });
+});
+
+describe('pontos de controle do editor', () => {
+  const idx = traceHandleIndices(g);
+  it('distribui um ponto a cada ~60 m, em ordem e sem repetir', () => {
+    expect(idx.length).toBe(Math.round(2500 / 60));
+    expect(new Set(idx).size).toBe(idx.length);
+    for (let k = 1; k < idx.length; k++) expect(idx[k]!).toBeGreaterThan(idx[k - 1]!);
+  });
+  it('todos no centro dão a linha central', () => {
+    const off = handlesToOffsets(
+      g,
+      idx,
+      idx.map(() => 0),
+    );
+    expect(Math.max(...Array.from(off, Math.abs))).toBe(0);
+  });
+  it('a linha passa pelos pontos, fica dentro da pista e valida depois de limitar a taxa lateral', () => {
+    const vals = idx.map((_, k) => (k % 2 ? 0.9 : -0.9));
+    const off = handlesToOffsets(g, idx, vals);
+    idx.forEach((i, k) => expect(off[i]).toBeCloseTo(vals[k]!, 6));
+    expect(Math.max(...Array.from(off, Math.abs))).toBeLessThanOrEqual(1);
+    expect(offsetsToHandles(off, idx)).toEqual(vals);
+    expect(validateTrace(g, offsetsToTrace(enforceLateralRate(g, off), 256)).ok).toBe(true);
   });
 });

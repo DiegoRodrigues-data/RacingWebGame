@@ -22,9 +22,26 @@ describe('ciclo de vida completo de uma corrida (fluxo crítico)', () => {
 
     // Setup pode ser salvo antes do treino; limites da categoria são respeitados.
     const [ana, bruno, caio] = players as [(typeof players)[0], (typeof players)[0], (typeof players)[0]];
+    const oneStop = [{ lap: 15, tyre: 'hard' as const }];
     expect(
-      (await t.json('PUT', `/races/${raceId}/setup`, { ...DEFAULT_SETUP, tyre: 'soft' }, ana.token)).status,
+      (
+        await t.json(
+          'PUT',
+          `/races/${raceId}/setup`,
+          { ...DEFAULT_SETUP, tyre: 'soft', pitStops: oneStop },
+          ana.token,
+        )
+      ).status,
     ).toBe(200);
+    // Parada nos boxes é obrigatória.
+    const noStop = await t.json(
+      'PUT',
+      `/races/${raceId}/setup`,
+      { ...DEFAULT_SETUP, pitStops: [] },
+      ana.token,
+    );
+    expect(noStop.body.error.code).toBe('SETUP_INVALID');
+    expect(noStop.body.error.message).toMatch(/obrigatória/);
     const bad = await t.json(
       'PUT',
       `/races/${raceId}/setup`,
@@ -126,6 +143,11 @@ describe('ciclo de vida completo de uma corrida (fluxo crítico)', () => {
     const lastT = partial.frames[partial.frames.length - 1].t;
     expect(lastT).toBeLessThanOrEqual(10_000 * partial.playbackSpeed);
     expect(partial.frames.length).toBeLessThan(partial.durationMs / 250);
+    // Mini mapa dos cards: só a cauda, com o índice do primeiro frame para encaixar os ticks do WebSocket.
+    const tail = (await t.json('GET', `/races/${raceId}/replay?tail=4`)).body;
+    expect(tail.frames).toEqual(partial.frames.slice(-4));
+    expect(tail.fromFrame).toBe(partial.frames.length - 4);
+    expect(tail.incidents).toEqual([]);
     expect((await t.json('GET', `/races/${raceId}/results`)).body.error.code).toBe('CONFLICT');
 
     // Fim: resultado persistido e ranking atualizado.

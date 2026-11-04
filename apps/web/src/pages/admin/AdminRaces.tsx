@@ -1,4 +1,4 @@
-import type { RaceSummaryDto } from '@tracado/shared';
+import { RACE_LAPS_MAX, RACE_LAPS_MIN, type RaceSummaryDto } from '@tracado/shared';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useState, type FormEvent } from 'react';
 import { Link } from 'react-router';
@@ -134,7 +134,7 @@ function CreateRace({ batch }: { batch: boolean }) {
       </label>
       <label>
         <span className="label">Voltas (padrão da categoria)</span>
-        <input name="laps" type="number" min={1} max={60} className="input" />
+        <input name="laps" type="number" min={RACE_LAPS_MIN} max={RACE_LAPS_MAX} className="input" />
       </label>
       <label>
         <span className="label">Vagas</span>

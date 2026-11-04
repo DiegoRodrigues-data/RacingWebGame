@@ -30,27 +30,28 @@ Tipos TypeScript e schemas Zod em `packages/shared/src/schemas.ts` e `packages/s
 
 ## REST
 
-| Método e rota                                                                                              | Acesso               | Descrição                                                                      |
-| ---------------------------------------------------------------------------------------------------------- | -------------------- | ------------------------------------------------------------------------------ |
-| `POST /auth/register`                                                                                      | público              | `{email, password, nickname, country, region, city}` → `AuthResponse` + cookie |
-| `POST /auth/login`                                                                                         | público              | `{email, password}` → `AuthResponse` + cookie                                  |
-| `POST /auth/refresh` · `POST /auth/logout`                                                                 | cookie + CSRF        | renova / encerra a sessão                                                      |
-| `POST /auth/forgot-password` · `/auth/reset-password` · `/auth/verify-email` · `/auth/resend-verification` | público / jogador    | tokens de uso único por e-mail                                                 |
-| `POST /auth/ws-ticket`                                                                                     | jogador              | `{ticket}` de uso único (60 s) para o WebSocket                                |
-| `GET /me` · `PATCH /me/profile`                                                                            | jogador              | perfil (mudança de região vale na próxima temporada)                           |
-| `GET /lobby`                                                                                               | público              | ao vivo, próximas, resultados recentes, top 5, minhas corridas                 |
-| `GET /races?from&to&category&status&ranked&limit`                                                          | público              | calendário (`RaceSummaryDto[]`)                                                |
-| `GET /races/:id`                                                                                           | público              | `RaceDetailDto` (inscritos, previsão por volta, `me` se logado)                |
-| `POST /races/:id/entries` · `DELETE /races/:id/entries/me`                                                 | jogador              | inscrever / cancelar ou desistir                                               |
-| `PUT /races/:id/trace` · `GET /races/:id/trace`                                                            | jogador confirmado   | enviar / ler o próprio traçado                                                 |
-| `PUT /races/:id/setup` · `GET /races/:id/setup`                                                            | jogador inscrito     | salvar / ler o próprio setup                                                   |
-| `GET /races/:id/practice`                                                                                  | público              | linha sugerida, tempos de referência e limites de setup                        |
-| `GET /races/:id/qualifying` · `/results` · `/replay`                                                       | público              | após cada fase; o replay revela só até o instante atual durante a corrida      |
-| `GET /tracks/versions/:id` · `/geometry`                                                                   | público (publicadas) | geometria imutável, cache de 1 ano                                             |
-| `GET /rankings?scope&key&season&page&pageSize`                                                             | público              | `RankingPageDto` (escopos `local`, `regional`, `national`, `world`)            |
-| `GET /seasons` · `GET /categories` · `GET /events` · `GET /users/:id` · `GET /time`                        | público              | apoio                                                                          |
-| `GET /notifications` · `POST /notifications/:id/read` (`id` ou `all`)                                      | jogador              | notificações                                                                   |
-| `GET /health` · `GET /metrics`                                                                             | público / token      | saúde (DB e Store) e Prometheus                                                |
+| Método e rota                                                                                              | Acesso               | Descrição                                                                                                    |
+| ---------------------------------------------------------------------------------------------------------- | -------------------- | ------------------------------------------------------------------------------------------------------------ |
+| `POST /auth/register`                                                                                      | público              | `{email, password, nickname, country, region, city}` → `AuthResponse` + cookie                               |
+| `POST /auth/login`                                                                                         | público              | `{email, password}` → `AuthResponse` + cookie                                                                |
+| `POST /auth/refresh` · `POST /auth/logout`                                                                 | cookie + CSRF        | renova / encerra a sessão                                                                                    |
+| `POST /auth/forgot-password` · `/auth/reset-password` · `/auth/verify-email` · `/auth/resend-verification` | público / jogador    | tokens de uso único por e-mail                                                                               |
+| `POST /auth/ws-ticket`                                                                                     | jogador              | `{ticket}` de uso único (60 s) para o WebSocket                                                              |
+| `GET /me` · `PATCH /me/profile`                                                                            | jogador              | perfil (mudança de região vale na próxima temporada)                                                         |
+| `GET /lobby`                                                                                               | público              | ao vivo, próximas, resultados recentes, top 5, minhas corridas                                               |
+| `GET /races?from&to&category&status&ranked&limit`                                                          | público              | calendário (`RaceSummaryDto[]`)                                                                              |
+| `GET /races/:id`                                                                                           | público              | `RaceDetailDto` (inscritos, previsão por volta, `me` se logado)                                              |
+| `POST /races/:id/entries` · `DELETE /races/:id/entries/me`                                                 | jogador              | inscrever / cancelar ou desistir                                                                             |
+| `PUT /races/:id/car`                                                                                       | jogador confirmado   | trocar cor e modelo do carro até o parque fechado (`CAR_TAKEN` se ocupado)                                   |
+| `PUT /races/:id/trace` · `GET /races/:id/trace`                                                            | jogador confirmado   | enviar / ler o próprio traçado                                                                               |
+| `PUT /races/:id/setup` · `GET /races/:id/setup`                                                            | jogador inscrito     | salvar / ler o próprio setup                                                                                 |
+| `GET /races/:id/practice`                                                                                  | público              | linha sugerida, tempos de referência e limites de setup                                                      |
+| `GET /races/:id/qualifying` · `/results` · `/replay`                                                       | público              | após cada fase; o replay revela só até o instante atual; `?tail=N` traz só os últimos N frames e `fromFrame` |
+| `GET /tracks/versions/:id` · `/geometry`                                                                   | público (publicadas) | geometria imutável, cache de 1 ano                                                                           |
+| `GET /rankings?scope&key&season&page&pageSize`                                                             | público              | `RankingPageDto` (escopos `local`, `regional`, `national`, `world`)                                          |
+| `GET /seasons` · `GET /categories` · `GET /events` · `GET /users/:id` · `GET /time`                        | público              | apoio                                                                                                        |
+| `GET /notifications` · `POST /notifications/:id/read` (`id` ou `all`)                                      | jogador              | notificações                                                                                                 |
+| `GET /health` · `GET /metrics`                                                                             | público / token      | saúde (DB e Store) e Prometheus                                                                              |
 
 ### Administração (`admin`, salvo indicação)
 
@@ -83,9 +84,12 @@ PUT /races/0b5c…/trace
 
 ```http
 PUT /races/0b5c…/setup
-{ "tyre": "soft", "pitStops": [{ "lap": 4, "tyre": "medium" }], "tyrePressure": { "front": 22.5, "rear": 23 },
+{ "tyre": "soft", "pitStops": [{ "lap": 18, "tyre": "medium" }], "tyrePressure": { "front": 22.5, "rear": 23 },
   "aero": 6, "engine": "balanced", "gearing": 4, "terrainPrep": "asphalt", "weatherBet": "mixed" }
 ```
+
+Toda corrida tem de 30 a 60 voltas e exige ao menos uma parada: `pitStops` vazio responde `422 SETUP_INVALID`
+("Parada obrigatória…"). Cada parada precisa ficar antes da última volta e respeitar o `maxPitStops` da categoria.
 
 ## WebSocket (`/ws`, protocolo v1)
 

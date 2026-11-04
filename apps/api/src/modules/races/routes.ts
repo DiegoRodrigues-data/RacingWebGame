@@ -21,7 +21,7 @@ import { parse } from '../../lib/validate';
 import { elapsedSim, loadReplay, resultRows } from '../engine/runner';
 import { currentSeason, getRanking, scopeKeys } from '../rankings/service';
 import { getGeometry } from '../tracks/service';
-import { cancel, register } from './entries';
+import { cancel, chooseCar, register } from './entries';
 import { getMySetup, getMyTrace, saveSetup, submitTrace } from './prep';
 import {
   getCategory,
@@ -85,6 +85,9 @@ export function raceRoutes(app: FastifyInstance, ctx: Ctx) {
     return { ...r, capacity: (await getSummary(ctx.db, id)).capacity };
   });
   app.get('/races/:id/entries', async (req) => listEntries(ctx.db, parse(idParam, req.params).id));
+  app.put('/races/:id/car', async (req) =>
+    chooseCar(ctx, parse(idParam, req.params).id, requireAuth(req), req.body),
+  );
 
   app.put('/races/:id/trace', { bodyLimit: 128 * 1024 }, async (req) =>
     submitTrace(ctx, parse(idParam, req.params).id, requireAuth(req), req.body),
@@ -160,6 +163,8 @@ export function raceRoutes(app: FastifyInstance, ctx: Ctx) {
   /** Replay: durante a corrida só até o instante atual; completo após o fim. */
   app.get('/races/:id/replay', async (req, reply) => {
     const id = parse(idParam, req.params).id;
+    // `tail`: só os últimos N frames (mini mapa dos cards ao vivo). O resto chega pelo WebSocket.
+    const { tail } = parse(z.object({ tail: z.coerce.number().int().min(1).max(40).optional() }), req.query);
     const race = await getRaceRow(ctx.db, id);
     if (!['race', 'finished', 'archived'].includes(race.status))
       throw new AppError('CONFLICT', 'A corrida ainda não começou.');
@@ -167,7 +172,13 @@ export function raceRoutes(app: FastifyInstance, ctx: Ctx) {
     if (!rep) throw new AppError('NOT_FOUND', 'Replay indisponível.');
     const done = race.status !== 'race';
     const elapsed = done ? Infinity : elapsedSim(race, rep, ctx.clock.now());
-    if (done) reply.header('cache-control', 'public, max-age=3600');
+    if (done && !tail) reply.header('cache-control', 'public, max-age=3600');
+    let frames = rep.frames.filter((f) => f.t <= elapsed);
+    let fromFrame = 0;
+    if (tail) {
+      fromFrame = Math.max(0, frames.length - tail);
+      frames = frames.slice(fromFrame);
+    }
     return {
       raceId: id,
       complete: done,
@@ -176,8 +187,9 @@ export function raceRoutes(app: FastifyInstance, ctx: Ctx) {
       playbackSpeed: rep.playbackSpeed,
       startedAt: race.raceAt.getTime() + 5000,
       cars: rep.cars,
-      frames: rep.frames.filter((f) => f.t <= elapsed),
-      incidents: rep.incidents.filter((i) => i.t <= elapsed),
+      fromFrame,
+      frames,
+      incidents: tail ? [] : rep.incidents.filter((i) => i.t <= elapsed),
       weatherByLap: done ? rep.weatherByLap : [],
     };
   });

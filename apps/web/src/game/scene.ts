@@ -30,6 +30,16 @@ interface LineSpec {
   colors?: number[];
 }
 
+export interface Marker {
+  x: number;
+  y: number;
+  color: number;
+  /** Raio em pixels de tela (constante com o zoom). */
+  r: number;
+  stroke?: number;
+  ring?: number;
+}
+
 export type PointerMode = 'pan' | 'draw';
 export interface ScenePointerEvent {
   type: 'down' | 'move' | 'up' | 'cancel';
@@ -48,11 +58,11 @@ export class TrackScene {
   private cars = new Container();
   private overlay = new Container();
   private lineSpecs = new Map<string, { spec: LineSpec; g: Graphics }>();
-  private markers = new Map<
+  private markers = new Map<string, { pts: Marker[]; g: Graphics }>();
+  private carNodes = new Map<
     string,
-    { pts: { x: number; y: number; color: number; r: number }[]; g: Graphics }
+    { root: Container; sprite: Sprite; badge: Container; ring: Graphics; look: string }
   >();
-  private carNodes = new Map<string, { root: Container; sprite: Sprite; badge: Container; ring: Graphics }>();
   private atlases: Atlases | null = null;
   private el: HTMLElement | null = null;
   private pointers = new Map<number, { x: number; y: number }>();
@@ -66,6 +76,11 @@ export class TrackScene {
   mode: PointerMode = 'pan';
   followId: string | null = null;
   onPointer: ((e: ScenePointerEvent) => void) | null = null;
+  /**
+   * No modo 'draw', decide se o toque em (x, y) do mundo pega algo editável (ex.: um ponto de controle).
+   * Se devolver false, o arraste move a câmera. Também define o cursor ao passar o mouse.
+   */
+  grabTest: ((x: number, y: number) => boolean) | null = null;
   onFrame: ((dtMs: number) => void) | null = null;
   onUserCamera: (() => void) | null = null;
 
@@ -192,14 +207,25 @@ export class TrackScene {
         this.dragging = null;
         return;
       }
-      if (this.mode === 'draw' && e.button === 0) {
+      const w = this.screenToWorld(p.x, p.y);
+      if (this.mode === 'draw' && e.button === 0 && (!this.grabTest || this.grabTest(w.x, w.y))) {
         this.drawingId = e.pointerId;
-        const w = this.screenToWorld(p.x, p.y);
+        c.style.cursor = this.grabTest ? 'grabbing' : '';
         this.onPointer?.({ type: 'down', ...w });
-      } else this.dragging = p;
+      } else {
+        this.dragging = p;
+        c.style.cursor = 'move';
+      }
     });
     c.addEventListener('pointermove', (e) => {
-      if (!this.pointers.has(e.pointerId)) return;
+      if (!this.pointers.has(e.pointerId)) {
+        if (e.pointerType === 'mouse' && this.mode === 'draw' && this.grabTest) {
+          const p = local(e);
+          const w = this.screenToWorld(p.x, p.y);
+          c.style.cursor = this.grabTest(w.x, w.y) ? 'grab' : '';
+        }
+        return;
+      }
       const p = local(e);
       this.pointers.set(e.pointerId, p);
       if (this.pinch && this.pointers.size === 2) {
@@ -235,7 +261,10 @@ export class TrackScene {
         this.onPointer?.({ type: 'up', ...this.screenToWorld(p.x, p.y) });
         this.drawingId = null;
       }
-      if (!this.pointers.size) this.dragging = null;
+      if (!this.pointers.size) {
+        this.dragging = null;
+        c.style.cursor = '';
+      }
     };
     c.addEventListener('pointerup', end);
     c.addEventListener('pointercancel', end);
@@ -450,7 +479,7 @@ export class TrackScene {
     if (s.closed) g.closePath();
     g.stroke({ width: w, color: s.color, alpha: s.alpha, cap: 'round', join: 'round' });
   }
-  setMarkers(key: string, pts: { x: number; y: number; color: number; r: number }[] | null) {
+  setMarkers(key: string, pts: Marker[] | null) {
     let e = this.markers.get(key);
     if (!pts) {
       if (e) {
@@ -467,13 +496,13 @@ export class TrackScene {
     e.pts = pts;
     this.drawMarkers(e);
   }
-  private drawMarkers(e: { pts: { x: number; y: number; color: number; r: number }[]; g: Graphics }) {
+  private drawMarkers(e: { pts: Marker[]; g: Graphics }) {
     e.g.clear();
     for (const p of e.pts)
       e.g
         .circle(p.x, p.y, p.r / this.zoom)
         .fill({ color: p.color })
-        .stroke({ width: 1.5 / this.zoom, color: 0xffffff });
+        .stroke({ width: (p.ring ?? 1.5) / this.zoom, color: p.stroke ?? 0xffffff });
   }
   private redrawScaled() {
     for (const { g, spec } of this.lineSpecs.values()) this.drawLine(g, spec);
@@ -492,6 +521,13 @@ export class TrackScene {
     for (const c of list) {
       seen.add(c.id);
       let node = this.carNodes.get(c.id);
+      const look = `${c.color}-${c.model}-${c.number}`;
+      if (node && node.look !== look) {
+        // Trocou de carro: recria o sprite e o número.
+        node.root.destroy({ children: true });
+        this.carNodes.delete(c.id);
+        node = undefined;
+      }
       if (!node) {
         const root = new Container();
         const tex = this.atlases?.vehicle(`car_${c.color}_${Math.min(5, Math.max(1, c.model))}`);
@@ -519,7 +555,7 @@ export class TrackScene {
         badge.addChild(bg, txt);
         root.addChild(sprite, ring, badge);
         this.cars.addChild(root);
-        node = { root, sprite, badge, ring };
+        node = { root, sprite, badge, ring, look };
         this.carNodes.set(c.id, node);
         node.badge.scale.set(1 / this.zoom);
         node.ring.scale.set(1 / this.zoom);
