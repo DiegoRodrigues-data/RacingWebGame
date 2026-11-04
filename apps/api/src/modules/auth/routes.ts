@@ -1,0 +1,117 @@
+import {
+  AppError,
+  forgotPasswordSchema,
+  loginSchema,
+  REFRESH_TOKEN_TTL_S,
+  registerSchema,
+  resetPasswordSchema,
+  updateProfileSchema,
+  verifyEmailSchema,
+} from '@tracado/shared';
+import { eq, sql } from 'drizzle-orm';
+import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
+import type { Ctx } from '../../context';
+import { profiles, users } from '../../db/schema';
+import { requireAuth } from '../../lib/auth';
+import { parse } from '../../lib/validate';
+import * as svc from './service';
+
+const COOKIE = 'tracado_rt';
+
+export function authRoutes(app: FastifyInstance, ctx: Ctx) {
+  const setCookie = (reply: FastifyReply, token: string) =>
+    reply.setCookie(COOKIE, token, {
+      httpOnly: true,
+      secure: ctx.config.COOKIE_SECURE,
+      sameSite: 'strict',
+      path: '/auth',
+      maxAge: REFRESH_TOKEN_TTL_S,
+    });
+  // Rotas que usam o cookie exigem um cabeçalho customizado (bloqueia CSRF simples entre sites).
+  const csrf = (req: FastifyRequest) => {
+    if (req.headers['x-tracado-csrf'] !== '1') throw new AppError('FORBIDDEN', 'Cabeçalho CSRF ausente.');
+  };
+  const authLimit = {
+    config: { rateLimit: { max: ctx.config.AUTH_RATE_LIMIT_PER_MINUTE, timeWindow: '1 minute' } },
+  };
+
+  app.post('/auth/register', authLimit, async (req, reply) => {
+    const r = await svc.register(ctx, parse(registerSchema, req.body), req.ip);
+    setCookie(reply, r.refresh);
+    const { refresh: _r, ...body } = r;
+    return reply.code(201).send(body);
+  });
+  app.post('/auth/login', authLimit, async (req, reply) => {
+    const b = parse(loginSchema, req.body);
+    const r = await svc.login(ctx, b.email, b.password, req.ip);
+    setCookie(reply, r.refresh);
+    const { refresh: _r, ...body } = r;
+    return body;
+  });
+  app.post(
+    '/auth/refresh',
+    { config: { rateLimit: { max: 30, timeWindow: '1 minute' } } },
+    async (req, reply) => {
+      csrf(req);
+      const token = req.cookies[COOKIE];
+      if (!token) throw new AppError('UNAUTHORIZED', 'Sem sessão.');
+      try {
+        const r = await svc.refresh(ctx, token, req.ip);
+        setCookie(reply, r.refresh);
+        const { refresh: _r, ...body } = r;
+        return body;
+      } catch (e) {
+        reply.clearCookie(COOKIE, { path: '/auth' });
+        throw e;
+      }
+    },
+  );
+  app.post('/auth/logout', async (req, reply) => {
+    csrf(req);
+    await svc.logout(ctx, req.cookies[COOKIE]);
+    reply.clearCookie(COOKIE, { path: '/auth' });
+    return { ok: true };
+  });
+  app.post('/auth/forgot-password', authLimit, async (req) => {
+    await svc.forgotPassword(ctx, parse(forgotPasswordSchema, req.body).email);
+    return { ok: true };
+  });
+  app.post('/auth/reset-password', authLimit, async (req) => {
+    const b = parse(resetPasswordSchema, req.body);
+    await svc.resetPassword(ctx, b.token, b.password);
+    return { ok: true };
+  });
+  app.post('/auth/verify-email', authLimit, async (req) => {
+    await svc.verifyEmail(ctx, parse(verifyEmailSchema, req.body).token);
+    return { ok: true };
+  });
+  app.post('/auth/resend-verification', authLimit, async (req) => {
+    const u = requireAuth(req);
+    const me = await svc.getMe(ctx, u.id);
+    if (!me.emailVerified) await svc.sendVerification(ctx, u.id, me.email);
+    return { ok: true };
+  });
+  app.post('/auth/ws-ticket', async (req) => {
+    const u = requireAuth(req);
+    return { ticket: await svc.issueWsTicket(ctx, u) };
+  });
+  app.get('/me', async (req) => svc.getMe(ctx, requireAuth(req).id));
+  app.patch('/me/profile', async (req) => {
+    const u = requireAuth(req);
+    const b = parse(updateProfileSchema, req.body);
+    if (b.nickname) {
+      const taken = await ctx.db
+        .select({ id: profiles.userId })
+        .from(profiles)
+        .where(sql`lower(${profiles.nickname}) = lower(${b.nickname}) and ${profiles.userId} <> ${u.id}`);
+      if (taken.length) throw new AppError('NICKNAME_TAKEN', 'Este apelido já está em uso.');
+    }
+    // Mudança de região vale para rankings apenas a partir da próxima temporada (vínculo da temporada é congelado).
+    await ctx.db
+      .update(profiles)
+      .set({ ...b, updatedAt: new Date(ctx.clock.now()) })
+      .where(eq(profiles.userId, u.id));
+    return svc.getMe(ctx, u.id);
+  });
+  void users;
+}

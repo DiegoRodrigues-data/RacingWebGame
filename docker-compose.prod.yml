@@ -1,0 +1,90 @@
+# Produção (Dokploy → Compose). Aponte o domínio para o serviço "web" na porta 80.
+# Variáveis obrigatórias: POSTGRES_PASSWORD, JWT_SECRET, ADMIN_EMAIL, ADMIN_PASSWORD, PUBLIC_WEB_URL.
+services:
+  web:
+    build:
+      context: .
+      dockerfile: apps/web/Dockerfile
+    restart: unless-stopped
+    depends_on:
+      api:
+        condition: service_healthy
+    expose: ['80']
+
+  api:
+    build:
+      context: .
+      dockerfile: apps/api/Dockerfile
+      args:
+        APP_VERSION: ${APP_VERSION:-prod}
+    restart: unless-stopped
+    environment:
+      NODE_ENV: production
+      DATABASE_URL: postgres://tracado:${POSTGRES_PASSWORD}@postgres:5432/tracado
+      REDIS_URL: redis://redis:6379
+      JWT_SECRET: ${JWT_SECRET}
+      ADMIN_EMAIL: ${ADMIN_EMAIL}
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD}
+      WEB_ORIGIN: ${PUBLIC_WEB_URL}
+      PUBLIC_WEB_URL: ${PUBLIC_WEB_URL}
+      COOKIE_SECURE: 'true'
+      SEED_DEMO: ${SEED_DEMO:-false}
+      DEMO_BOTS: ${DEMO_BOTS:-0}
+      METRICS_TOKEN: ${METRICS_TOKEN:-}
+      SENTRY_DSN: ${SENTRY_DSN:-}
+      OTEL_EXPORTER_OTLP_ENDPOINT: ${OTEL_EXPORTER_OTLP_ENDPOINT:-}
+      REQUIRE_VERIFIED_EMAIL_FOR_RANKED: ${REQUIRE_VERIFIED_EMAIL_FOR_RANKED:-false}
+      LOG_LEVEL: info
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    expose: ['3001']
+
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: tracado
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: tracado
+    volumes: [pgdata:/var/lib/postgresql/data]
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U tracado -d tracado']
+      interval: 5s
+      retries: 20
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    command:
+      ['redis-server', '--appendonly', 'yes', '--maxmemory', '256mb', '--maxmemory-policy', 'noeviction']
+    volumes: [redisdata:/data]
+    healthcheck:
+      test: ['CMD', 'redis-cli', 'ping']
+      interval: 5s
+      retries: 20
+
+  # Backup diário do Postgres com retenção de 14 dias (volume "backups").
+  backup:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      PGHOST: postgres
+      PGUSER: tracado
+      PGPASSWORD: ${POSTGRES_PASSWORD}
+      PGDATABASE: tracado
+      RETENTION_DAYS: 14
+    volumes:
+      - backups:/backups
+      - ./infra/backup/backup.sh:/backup.sh:ro
+    entrypoint: ['/bin/sh', '-c', 'while true; do /bin/sh /backup.sh; sleep 86400; done']
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+volumes:
+  pgdata:
+  redisdata:
+  backups:

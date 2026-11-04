@@ -1,0 +1,49 @@
+{
+  "name": "tracado",
+  "private": true,
+  "version": "0.1.0",
+  "description": "Traçado — jogo web multiplayer de corrida estratégica 2D top-down",
+  "packageManager": "pnpm@9.15.0",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "dev": "turbo run dev --parallel --filter=@tracado/api --filter=@tracado/web",
+    "build": "turbo run build",
+    "typecheck": "turbo run typecheck",
+    "lint": "eslint .",
+    "format": "prettier --write .",
+    "test": "turbo run test",
+    "test:e2e": "pnpm --filter @tracado/e2e e2e",
+    "db:migrate": "pnpm --filter @tracado/api db:migrate",
+    "db:seed": "pnpm --filter @tracado/api db:seed",
+    "db:generate": "pnpm --filter @tracado/api db:generate",
+    "balance": "pnpm --filter @tracado/sim balance",
+    "loadtest": "pnpm --filter @tracado/api loadtest",
+    "prepare": "husky || true"
+  },
+  "devDependencies": {
+    "@eslint/js": "^9.19.0",
+    "@types/node": "^22.10.0",
+    "eslint": "^9.19.0",
+    "eslint-plugin-react-hooks": "^5.1.0",
+    "globals": "^15.14.0",
+    "husky": "^9.1.7",
+    "lint-staged": "^15.4.3",
+    "prettier": "^3.4.2",
+    "turbo": "^2.4.0",
+    "typescript": "~5.7.3",
+    "typescript-eslint": "^8.22.0",
+    "vitest": "^3.0.5"
+  },
+  "type": "module",
+  "lint-staged": {
+    "*.{ts,tsx,js}": [
+      "eslint --fix",
+      "prettier --write"
+    ],
+    "*.{json,md,css,yml,yaml}": [
+      "prettier --write"
+    ]
+  }
+}
