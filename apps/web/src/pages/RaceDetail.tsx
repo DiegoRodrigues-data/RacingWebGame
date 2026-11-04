@@ -3,6 +3,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import confetti from 'canvas-confetti';
 import { useState } from 'react';
 import { Link, useParams } from 'react-router';
+import { LiveTrack } from '../components/LiveTrack';
 import { CameraControls, TrackCanvas } from '../components/TrackCanvas';
 import {
   CapacityMeter,
@@ -116,15 +117,19 @@ export default function RaceDetail() {
       </div>
       <div className="grid gap-6 lg:grid-cols-[1fr_380px]">
         <div className="space-y-4">
-          <div className="relative self-start">
-            <TrackCanvas
-              geometry={geo.data}
-              onReady={setScene}
-              className="h-[340px] sm:h-[420px]"
-              label={`Mapa da pista ${race.track.name}`}
-            />
-            <CameraControls scene={scene} />
-          </div>
+          {race.status === 'race' ? (
+            <LiveTrack race={race} geometry={geo.data} className="h-[340px] sm:h-[420px]" />
+          ) : (
+            <div className="relative self-start">
+              <TrackCanvas
+                geometry={geo.data}
+                onReady={setScene}
+                className="h-[340px] sm:h-[420px]"
+                label={`Mapa da pista ${race.track.name}`}
+              />
+              <CameraControls scene={scene} />
+            </div>
+          )}
           <div className="flex flex-wrap gap-2 text-sm">
             <span className="chip">🛣️ {race.track.name}</span>
             <span className="chip">{fmtKm(race.track.length)}</span>
