@@ -45,7 +45,7 @@ export async function getMe(ctx: Ctx, userId: string): Promise<MeDto> {
   };
 }
 
-async function issueTokens(ctx: Ctx, user: AuthUser, ip: string | null, familyId: string = randomUUID()) {
+export async function issueTokens(ctx: Ctx, user: AuthUser, ip: string | null, familyId: string = randomUUID()) {
   const now = ctx.clock.now();
   const refresh = randomToken(48);
   const [row] = await ctx.db
@@ -136,7 +136,7 @@ export async function sendVerification(ctx: Ctx, userId: string, email: string) 
     });
   await ctx.mailer.send(
     email,
-    'Confirme seu e-mail no Traçado',
+    'Confirme seu e-mail no Roda Presa',
     `${ctx.config.PUBLIC_WEB_URL}/verificar-email?token=${token}`,
   );
 }
@@ -237,7 +237,7 @@ export async function forgotPassword(ctx: Ctx, email: string) {
     });
   await ctx.mailer.send(
     email,
-    'Redefinição de senha do Traçado',
+    'Redefinição de senha do Roda Presa',
     `${ctx.config.PUBLIC_WEB_URL}/redefinir-senha?token=${token}`,
   );
 }

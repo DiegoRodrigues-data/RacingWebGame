@@ -10,6 +10,7 @@ import { get } from '../lib/api';
 import { fmtGap } from '../lib/format';
 import { useRace } from '../lib/queries';
 import { useSession } from '../lib/session';
+import { ShareRace } from '../components/ShareRace';
 
 export default function Results() {
   const { id } = useParams();
@@ -57,9 +58,12 @@ export default function Results() {
             </p>
           )}
         </div>
-        <Link to={`/corridas/${id}/replay`} className="btn-ghost">
-          📼 Ver replay
-        </Link>
+        <div className="flex flex-wrap gap-2">
+          <ShareRace race={race} position={mine?.position ?? null} />
+          <Link to={`/corridas/${id}/replay`} className="btn-ghost">
+            📼 Ver replay
+          </Link>
+        </div>
       </header>
       {mine &&
         (() => {

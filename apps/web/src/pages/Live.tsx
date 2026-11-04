@@ -23,6 +23,7 @@ import { TYRE_COLOR, TYRES_BY_CODE, WEATHER_ICON } from '../lib/format';
 import { useGeometry, useRace } from '../lib/queries';
 import { realtime, useRoom } from '../lib/realtime';
 import { useSession } from '../lib/session';
+import { ShareRace } from '../components/ShareRace';
 
 interface ReplayDto {
   complete: boolean;
@@ -200,6 +201,7 @@ export default function Live({ mode }: { mode: 'live' | 'replay' }) {
           </h1>
         </div>
         <div className="flex items-center gap-3">
+          {mode === 'live' && <ShareRace race={race} compact />}
           <PhaseBadge phase={race.status} />
           <span className="font-display text-xl">
             Volta {lapNow}/{race.laps}

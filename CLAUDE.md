@@ -2,7 +2,7 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
-**Traçado** é um jogo web multiplayer de corrida estratégica 2D top-down. O jogador não pilota: ele monta o setup e desenha o traçado antes da corrida. O servidor agenda as corridas, simula e transmite o replay. Código, comentários, mensagens de erro e documentação são em português.
+**Roda Presa** (nome interno do código: Traçado, pacotes `@tracado/*`) é um jogo web multiplayer de corrida estratégica 2D top-down. O jogador não pilota: ele monta o setup e desenha o traçado antes da corrida. O servidor agenda as corridas, simula e transmite o replay. Código, comentários, mensagens de erro e documentação são em português.
 
 Docs de referência: `README.md` (como rodar e as variáveis de ambiente), `DECISIONS.md` (por que cada escolha diverge do plano), `docs/API.md` (rotas REST e eventos WebSocket), `ROADMAP.md` (progresso, mantenha os checkboxes em dia).
 

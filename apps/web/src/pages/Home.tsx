@@ -96,28 +96,28 @@ function staticPose(frac: number): string {
 function Steps() {
   const steps = [
     [
-      '✍️',
-      'Desenhe o traçado',
-      'Você tem 5 minutos para riscar sua linha sobre a pista. Abrir antes da curva, tocar o ápice, sair acelerando.',
+      '📅',
+      'Escolha uma largada',
+      'Tem corrida toda hora cheia, o dia inteiro. Inscreva-se em qualquer uma: até 22 carros por grid.',
     ],
     [
       '🔧',
       'Acerte o carro',
-      'Pneus, paradas, calibragem, asa, motor, câmbio, terreno e aposta de clima. Nenhum acerto vence sempre.',
+      'Escolha seu carro e ajuste pneus, paradas (pelo menos uma é obrigatória), calibragem, asa, motor e câmbio.',
     ],
     [
-      '🚦',
-      'Classificação e corrida',
-      'O servidor simula tudo de forma justa e transmite ao vivo. Ninguém dirige melhor por ter internet mais rápida.',
+      '✍️',
+      'Desenhe o traçado',
+      'A linha começa no meio da pista: arraste os pontos para abrir antes da curva e tocar o ápice. Teste no treino.',
     ],
     [
-      '🏆',
-      'Suba nos rankings',
-      'Local, regional, nacional e mundial. Temporadas, níveis e rivalidade saudável.',
+      '🏁',
+      'Assista e suba no ranking',
+      'O servidor simula a corrida de forma justa e transmite ao vivo. Ranqueadas valem pontos local, regional e mundial.',
     ],
   ];
   return (
-    <section aria-labelledby="como" className="mt-12">
+    <section aria-labelledby="como" className="mt-10 scroll-mt-20" id="como-funciona">
       <h2 id="como" className="font-display text-2xl">
         Como funciona
       </h2>
@@ -160,8 +160,8 @@ export function Home() {
             <span className="text-race">Vença no detalhe.</span>
           </motion.h1>
           <p className="mt-4 max-w-lg text-muted">
-            Corridas multiplayer de estratégia com até <b className="text-ink">22 carros</b>, em horários
-            marcados. Treino, janela de traçado, classificação e corrida, tudo controlado pelo servidor.
+            Corridas multiplayer de estratégia com até <b className="text-ink">22 carros</b>, com largada toda
+            hora cheia. Treino, janela de traçado, classificação e corrida, tudo controlado pelo servidor.
           </p>
           <div className="mt-6 flex flex-wrap gap-3">
             {me ? (
@@ -173,9 +173,9 @@ export function Home() {
                 Criar conta e correr
               </Link>
             )}
-            <Link to="/rankings" className="btn-ghost">
-              Ver rankings
-            </Link>
+            <a href="#como-funciona" className="btn-ghost">
+              Como funciona
+            </a>
           </div>
           {data && (
             <div className="mt-6 flex gap-6 text-sm text-muted">
@@ -196,6 +196,8 @@ export function Home() {
         </div>
         <HeroTrack />
       </section>
+
+      <Steps />
 
       {me && data && data.mine.length > 0 && (
         <section className="mt-10" aria-labelledby="minhas">
@@ -330,7 +332,6 @@ export function Home() {
           </div>
         </section>
       </div>
-      <Steps />
     </div>
   );
 }

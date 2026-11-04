@@ -4,6 +4,7 @@ import { Link } from 'react-router';
 import { fmtDateTime, fmtKm, TERRAIN_LABEL, WEATHER_ICON, WEATHER_LABEL } from '../lib/format';
 import { RaceMiniMap } from './RaceMiniMap';
 import { CapacityMeter, Countdown, PhaseBadge } from './ui';
+import { ShareRace } from './ShareRace';
 
 export function RaceCard({ race, cta }: { race: RaceSummaryDto; cta?: React.ReactNode }) {
   return (
@@ -55,11 +56,14 @@ export function RaceCard({ race, cta }: { race: RaceSummaryDto; cta?: React.Reac
             <span>{fmtDateTime(race.timeline.practiceAt)}</span>
           )}
         </div>
-        {cta ?? (
-          <Link to={`/corridas/${race.id}`} className="btn-ghost !py-1.5">
-            Detalhes
-          </Link>
-        )}
+        <div className="flex items-center gap-2">
+          <ShareRace race={race} compact />
+          {cta ?? (
+            <Link to={`/corridas/${race.id}`} className="btn-ghost !py-1.5">
+              Detalhes
+            </Link>
+          )}
+        </div>
       </div>
     </motion.article>
   );

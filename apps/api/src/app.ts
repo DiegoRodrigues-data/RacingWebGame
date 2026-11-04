@@ -21,6 +21,7 @@ import { PhaseEngine } from './modules/engine/engine';
 import { elapsedSim, loadReplay } from './modules/engine/runner';
 import { devRoutes } from './modules/misc/dev';
 import { miscRoutes } from './modules/misc/routes';
+import { shareRoutes } from './modules/misc/share';
 import { raceRoutes } from './modules/races/routes';
 import { getRaceRow, listEntries, raceSummaries } from './modules/races/service';
 import { WsHub } from './modules/ws/hub';
@@ -170,6 +171,7 @@ export async function buildApp(
   authRoutes(app, ctx);
   raceRoutes(app, ctx);
   miscRoutes(app, ctx);
+  shareRoutes(app, ctx);
   adminRoutes(app, ctx, engine);
   if (config.ENABLE_DEV_ROUTES && config.NODE_ENV !== 'production') devRoutes(app, ctx, engine);
 

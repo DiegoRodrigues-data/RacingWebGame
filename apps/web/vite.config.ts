@@ -17,6 +17,8 @@ export default defineConfig({
         cookiePathRewrite: { '/auth': '/api/auth' },
       },
       '/ws': { target: API.replace(/^http/, 'ws'), ws: true },
+      // Links de compartilhamento: a API devolve a página com a prévia e redireciona.
+      '^/s/': { target: API, changeOrigin: true },
     },
   },
   preview: { port: 4173 },

@@ -46,6 +46,17 @@ os avisos que apontavam para elas e as pistas procedurais; usuários, categorias
 Risco: com bots ligados (`DEMO_BOTS`), as 24 corridas por dia são simuladas mesmo sem jogadores, e cada replay ocupa
 de 0,5 a 1 MB em gzip (cerca de 20 MB por dia no Postgres). Falta uma rotina que apague replays antigos.
 
+### Nome, login com Google e compartilhamento
+
+- **Nome do jogo: Roda Presa.** Só a marca mudou (título, cabeçalho, e-mails, prévia). O código continua com o nome
+  interno Traçado (pacotes `@tracado/*`, cookies `tracado_*`); "traçado" segue sendo o nome da linha do jogador.
+- **Google.** OAuth com código de autorização + PKCE feito no servidor; o perfil vem do endpoint userinfo do Google.
+  O state fica no Store (10 min, uso único) e preso ao navegador por um cookie SameSite=Lax. Conta nova recebe
+  apelido a partir do nome no Google e região/cidade "A definir" até o jogador completar (o vínculo regional da
+  temporada só é congelado na primeira corrida ranqueada). E-mail já cadastrado e verificado pelo Google é vinculado.
+- **Compartilhar.** O site é SPA, então as redes não veriam o título da corrida. O link `/s/corridas/:id` é servido pela
+  API com tags Open Graph (imagem `og.png`) e redireciona para a corrida; o texto muda para convite, "ao vivo" ou resultado.
+
 ## Modelo de simulação
 
 Determinístico (PRNG sfc32 semeado; nenhuma fonte de aleatoriedade externa). Por volta, cada carro tem um perfil de velocidade

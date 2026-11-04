@@ -1,4 +1,4 @@
-# ROADMAP — Traçado: corrida estratégica multiplayer (web, 2D top-down)
+# ROADMAP — Roda Presa: corrida estratégica multiplayer (web, 2D top-down)
 
 Acompanhamento da implementação completa e funcional do projeto.
 Marque cada item conforme for concluído: `[ ]` → `[x]`.
@@ -66,6 +66,8 @@ Jogar exige conta; regiões do perfil alimentam os rankings local/regional/nacio
 - [x] Rate limit em login/registro e bloqueio progressivo por conta
 - [x] Telas: cadastro, login, recuperação de senha (link registrado no log), confirmação de e-mail, edição de perfil com região
 - [x] Admin inicial via variáveis de ambiente
+- [x] Login com Google (OAuth + PKCE; vincula e-mail já cadastrado; conta nova completa região e cidade)
+- [ ] Criar o cliente OAuth no Google Cloud e definir `GOOGLE_CLIENT_ID`/`GOOGLE_CLIENT_SECRET` no Dokploy
 - [x] Testes: duplicidade, login inválido, bloqueio, refresh com rotação e reuso, expiração, acesso negado por papel
 
 ## Fase 2 — Domínio de corridas, agendamento e máquina de estados ✅
@@ -223,6 +225,9 @@ Fecha o ciclo de vida com resultados persistidos.
 ## Fase 13 — Portal público, lobby, notificações e identidade visual ✅
 
 - [x] Portal: próximas corridas, destaques do ranking, últimos resultados, chamada para criar conta
+- [x] Nome do jogo: Roda Presa
+- [x] "Como funciona" no topo do portal, acima das listas de corridas
+- [x] Compartilhar corrida nas redes (convite, ao vivo, resultado) com prévia Open Graph em `/s/corridas/:id`
 - [x] Grade automática: uma corrida amistosa por hora (24 por dia), inscrições abertas a todos; ranqueadas e competições pelo admin
 - [ ] Apagar replays antigos (a grade automática grava cerca de 20 MB por dia com bots ligados)
 - [x] Cards de corrida com mini mapa da pista; corridas ao vivo mostram os carros andando (cauda do replay + `race.tick`)

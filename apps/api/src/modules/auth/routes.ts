@@ -14,6 +14,7 @@ import type { Ctx } from '../../context';
 import { profiles, users } from '../../db/schema';
 import { requireAuth } from '../../lib/auth';
 import { parse } from '../../lib/validate';
+import { googleCallback, googleEnabled, googleStart, safeNext } from './google';
 import * as svc from './service';
 
 const COOKIE = 'tracado_rt';
@@ -47,6 +48,37 @@ export function authRoutes(app: FastifyInstance, ctx: Ctx) {
     setCookie(reply, r.refresh);
     const { refresh: _r, ...body } = r;
     return body;
+  });
+  // Login com Google. O cookie "tracado_og" (SameSite=Lax, volta na navegação vinda do Google) prende o state
+  // ao navegador que iniciou o login.
+  app.get('/auth/providers', async () => ({ google: googleEnabled(ctx) }));
+  app.get('/auth/google/start', authLimit, async (req, reply) => {
+    const { next } = req.query as { next?: string };
+    const { url, state } = await googleStart(ctx, safeNext(next));
+    reply.setCookie('tracado_og', state, {
+      httpOnly: true,
+      secure: ctx.config.COOKIE_SECURE,
+      sameSite: 'lax',
+      path: '/auth/google',
+      maxAge: 600,
+    });
+    return reply.redirect(url);
+  });
+  app.get('/auth/google/callback', authLimit, async (req, reply) => {
+    const q = req.query as { code?: string; state?: string; error?: string };
+    const web = ctx.config.PUBLIC_WEB_URL.replace(/\/$/, '');
+    const cookieState = req.cookies['tracado_og'];
+    reply.clearCookie('tracado_og', { path: '/auth/google' });
+    if (q.error || !q.code || !q.state || q.state !== cookieState)
+      return reply.redirect(`${web}/entrar?erro=google`);
+    try {
+      const r = await googleCallback(ctx, q.code, q.state, req.ip);
+      setCookie(reply, r.refresh);
+      return reply.redirect(r.created ? `${web}/conta?bemvindo=1` : `${web}${r.next}`);
+    } catch (e) {
+      req.log.warn({ err: e }, 'Login com Google falhou');
+      return reply.redirect(`${web}/entrar?erro=google`);
+    }
   });
   app.post(
     '/auth/refresh',

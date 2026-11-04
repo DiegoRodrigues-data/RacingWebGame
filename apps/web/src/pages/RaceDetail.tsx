@@ -20,6 +20,7 @@ import { del, errorMessage, get, post } from '../lib/api';
 import { fmtDateTime, fmtKm, TERRAIN_LABEL, WEATHER_ICON, WEATHER_LABEL } from '../lib/format';
 import { useGeometry, useRace } from '../lib/queries';
 import { useSession } from '../lib/session';
+import { ShareRace } from '../components/ShareRace';
 
 export default function RaceDetail() {
   const { id } = useParams();
@@ -96,16 +97,19 @@ export default function RaceDetail() {
             Treino {fmtDateTime(race.timeline.practiceAt)} · Largada {fmtDateTime(race.timeline.raceAt)}
           </p>
         </div>
-        {race.phaseDeadline && (
-          <div className="card !py-2 text-right">
-            <div className="text-xs font-bold uppercase text-muted">
-              {race.status === 'scheduled'
-                ? 'Inscrições abrem em'
-                : `${PHASE_LABELS[race.status]} termina em`}
+        <div className="flex flex-wrap items-start gap-3">
+          <ShareRace race={race} className="self-center" />
+          {race.phaseDeadline && (
+            <div className="card !py-2 text-right">
+              <div className="text-xs font-bold uppercase text-muted">
+                {race.status === 'scheduled'
+                  ? 'Inscrições abrem em'
+                  : `${PHASE_LABELS[race.status]} termina em`}
+              </div>
+              <Countdown to={race.phaseDeadline} className="text-3xl" />
             </div>
-            <Countdown to={race.phaseDeadline} className="text-3xl" />
-          </div>
-        )}
+          )}
+        </div>
       </header>
       <div className="card">
         <PhaseTimeline race={race} />

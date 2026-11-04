@@ -32,6 +32,9 @@ const schema = z.object({
   RANKING_MIN_RACES: z.coerce.number().int().min(0).default(1),
   ENGINE_TICK_MS: z.coerce.number().int().min(50).default(500),
   ENGINE_ENABLED: bool.default(true),
+  /** Login com Google (OAuth). Sem os dois, o botão não aparece. */
+  GOOGLE_CLIENT_ID: z.string().optional(),
+  GOOGLE_CLIENT_SECRET: z.string().optional(),
   METRICS_TOKEN: z.string().optional(),
   SENTRY_DSN: z.string().optional(),
   OTEL_EXPORTER_OTLP_ENDPOINT: z.string().optional(),

@@ -1,5 +1,6 @@
 import type { MeDto } from '@tracado/shared';
 import { useState, type FormEvent } from 'react';
+import { useSearchParams } from 'react-router';
 import { CarIcon, Segmented, toast } from '../components/ui';
 import { errorMessage, patch, post } from '../lib/api';
 import { useSession } from '../lib/session';
@@ -8,7 +9,9 @@ export default function Account() {
   const { me, setMe } = useSession();
   const [color, setColor] = useState(me!.profile.carColor);
   const [busy, setBusy] = useState(false);
+  const [params] = useSearchParams();
   if (!me) return null;
+  const incomplete = me.profile.region === 'A definir' || me.profile.city === 'A definir';
   async function submit(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
     const f = new FormData(e.currentTarget);
@@ -34,6 +37,15 @@ export default function Account() {
   return (
     <div className="mx-auto max-w-2xl space-y-4">
       <h1 className="font-display text-3xl">Minha conta</h1>
+      {(params.get('bemvindo') || incomplete) && (
+        <div className="card border-race">
+          <div className="font-display text-lg">Bem-vindo ao Roda Presa! 🏁</div>
+          <p className="mt-1 text-sm text-muted">
+            Confira seu apelido e informe estado e cidade: eles definem seus rankings regional e local da
+            temporada (ficam valendo a partir da sua primeira corrida ranqueada).
+          </p>
+        </div>
+      )}
       {!me.emailVerified && (
         <div className="card flex flex-wrap items-center justify-between gap-2 border-race">
           <span className="text-sm">Seu e-mail ainda não foi confirmado.</span>

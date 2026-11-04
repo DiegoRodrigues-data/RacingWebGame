@@ -52,9 +52,12 @@ export const users = pgTable(
     flaggedForReview: boolean('flagged_for_review').notNull().default(false),
     createdAt: ts('created_at').notNull().defaultNow(),
     lastLoginAt: ts('last_login_at'),
+    /** Conta Google vinculada (claim `sub`), para o login pelo Google. */
+    googleSub: text('google_sub'),
   },
   (t) => [
     uniqueIndex('users_email_uq').on(t.email),
+    uniqueIndex('users_google_sub_uq').on(t.googleSub),
     index('users_signup_ip_idx').on(t.signupIp, t.createdAt),
   ],
 );

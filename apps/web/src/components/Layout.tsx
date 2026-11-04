@@ -94,10 +94,10 @@ export function Layout({ children }: { children: ReactNode }) {
       </a>
       <header className="sticky top-0 z-40 border-b border-line/70 bg-night/85 backdrop-blur">
         <div className="mx-auto flex h-14 max-w-7xl items-center gap-3 px-4">
-          <Link to="/" className="flex items-center gap-2" aria-label="Traçado, início">
+          <Link to="/" className="flex items-center gap-2" aria-label="Roda Presa, início">
             <span className="checkered size-7 rounded-md" aria-hidden />
             <span className="font-display text-xl tracking-wide">
-              TRA<span className="text-race">Ç</span>ADO
+              RODA <span className="text-race">PRESA</span>
             </span>
           </Link>
           <nav className="ml-4 hidden gap-1 md:flex" aria-label="Principal">
@@ -200,7 +200,7 @@ export function Layout({ children }: { children: ReactNode }) {
         {children}
       </main>
       <footer className="border-t border-line/60 py-6 text-center text-xs text-muted">
-        <FlagIcon size={12} className="mr-1 inline" /> Traçado · arte do{' '}
+        <FlagIcon size={12} className="mr-1 inline" /> Roda Presa · arte do{' '}
         <a className="underline hover:text-ink" href="https://kenney.nl" target="_blank" rel="noreferrer">
           Racing Pack da Kenney
         </a>{' '}

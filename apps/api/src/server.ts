@@ -21,7 +21,7 @@ const { app, engine } = await buildApp({ config, dbHandle, store, clock });
 
 await app.listen({ port: config.PORT, host: config.HOST });
 app.log.info(
-  `API Traçado em http://${config.HOST}:${config.PORT} (db=${dbHandle.kind}, store=${store.kind})`,
+  `API Roda Presa em http://${config.HOST}:${config.PORT} (db=${dbHandle.kind}, store=${store.kind})`,
 );
 if (config.ENGINE_ENABLED) engine.start();
 
