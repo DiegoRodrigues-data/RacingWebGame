@@ -71,7 +71,13 @@ export function CameraControls({ scene, extra }: { scene: TrackScene | null; ext
       <button
         className="btn-ghost size-10 !p-0 text-xs"
         aria-label="Enquadrar pista"
-        onClick={() => scene?.fit()}
+        onClick={() => {
+          if (!scene) return;
+          // Ver a pista inteira: para de seguir um carro.
+          scene.followId = null;
+          scene.onUserCamera?.();
+          scene.fit();
+        }}
       >
         ⤢
       </button>

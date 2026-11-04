@@ -125,9 +125,17 @@ export default function Live({ mode }: { mode: 'live' | 'replay' }) {
     }
   });
 
+  // Câmera: segue o próprio carro (ou o líder, para quem só assiste) com zoom de perto, para ver os carros.
+  const autoFollowed = useRef(false);
   useEffect(() => {
-    if (!follow && me && cars.some((c) => c.userId === me.id)) setFollow(me.id);
-  }, [cars, me, follow]);
+    if (autoFollowed.current || !cars.length || !scene) return;
+    const mine = me && cars.some((c) => c.userId === me.id) ? me.id : null;
+    const target = mine ?? standings[0]?.car.userId ?? null;
+    if (!target) return;
+    autoFollowed.current = true;
+    setFollow(target);
+    if (scene.zoom < 4) scene.setZoom(5.5);
+  }, [cars, me, scene, standings]);
 
   // Laço de renderização.
   useEffect(() => {

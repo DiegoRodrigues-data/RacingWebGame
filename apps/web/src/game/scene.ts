@@ -5,6 +5,9 @@ import { CAR_HEX, loadAtlases, type Atlases } from './assets';
 
 /** 1 m em pixels dos sprites do racing_pack (carro de 131 px ≈ 5 m). */
 const PX_PER_M = 26.2;
+/** Comprimento do sprite do carro (px no atlas) e tamanho mínimo dele na tela. */
+const CAR_SPRITE_PX = 131;
+const CAR_MIN_PX = 30;
 const TERRAIN_COLOR: Record<Terrain, number> = { asphalt: 0xa6c9cb, dirt: 0xbb8044, sand: 0xecdcb8 };
 const GRASS = 0x27ae60;
 
@@ -507,15 +510,26 @@ export class TrackScene {
   private redrawScaled() {
     for (const { g, spec } of this.lineSpecs.values()) this.drawLine(g, spec);
     for (const e of this.markers.values()) this.drawMarkers(e);
-    const showBadge = this.zoom < 6;
-    for (const n of this.carNodes.values()) {
-      n.badge.scale.set(1 / this.zoom);
-      n.badge.visible = showBadge;
-      n.ring.scale.set(1 / this.zoom);
-    }
+    for (const n of this.carNodes.values()) this.scaleCar(n);
   }
 
   // ------------------------------------------------------------------ Carros
+  /**
+   * Com a pista inteira na tela, o carro em escala real teria poucos pixels. O sprite nunca fica menor que
+   * CAR_MIN_PX na tela, e o número fica acima dele (sem cobrir o desenho do carro).
+   */
+  private scaleCar(n: { sprite: Sprite; badge: Container; ring: Graphics }) {
+    const real = 1 / PX_PER_M;
+    const min = CAR_MIN_PX / (CAR_SPRITE_PX * this.zoom);
+    const k = Math.max(real, min);
+    n.sprite.scale.set(k);
+    const lenPx = CAR_SPRITE_PX * k * this.zoom;
+    n.badge.scale.set(1 / this.zoom);
+    n.badge.position.set(0, -(lenPx / 2 + 11) / this.zoom);
+    n.badge.visible = this.zoom < 6;
+    n.ring.scale.set(Math.max(1, lenPx / 28) / this.zoom);
+  }
+
   setCars(list: CarView[]) {
     const seen = new Set<string>();
     for (const c of list) {
@@ -557,9 +571,7 @@ export class TrackScene {
         this.cars.addChild(root);
         node = { root, sprite, badge, ring, look };
         this.carNodes.set(c.id, node);
-        node.badge.scale.set(1 / this.zoom);
-        node.ring.scale.set(1 / this.zoom);
-        node.badge.visible = this.zoom < 6;
+        this.scaleCar(node);
       }
       node.root.position.set(c.x, c.y);
       node.sprite.rotation = c.heading + Math.PI / 2;
