@@ -204,7 +204,14 @@ export function Layout({ children }: { children: ReactNode }) {
         <a className="underline hover:text-ink" href="https://kenney.nl" target="_blank" rel="noreferrer">
           Racing Pack da Kenney
         </a>{' '}
-        (CC0)
+        (CC0) ·{' '}
+        <Link to="/privacidade" className="underline hover:text-ink">
+          Privacidade
+        </Link>{' '}
+        ·{' '}
+        <Link to="/termos" className="underline hover:text-ink">
+          Termos
+        </Link>
       </footer>
       <Toaster />
     </div>

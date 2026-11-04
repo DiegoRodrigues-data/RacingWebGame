@@ -15,6 +15,8 @@ const Rankings = lazy(() => import('./pages/Rankings'));
 const Profile = lazy(() => import('./pages/Profile'));
 const Account = lazy(() => import('./pages/Account'));
 const Notifications = lazy(() => import('./pages/Notifications'));
+const Privacy = lazy(() => import('./pages/Legal').then((m) => ({ default: m.Privacy })));
+const Terms = lazy(() => import('./pages/Legal').then((m) => ({ default: m.Terms })));
 const Determinism = lazy(() => import('./pages/Determinism'));
 const AdminHome = lazy(() => import('./pages/admin/AdminHome'));
 const AdminRaces = lazy(() => import('./pages/admin/AdminRaces'));
@@ -73,6 +75,8 @@ export function App() {
           <Route path="/corridas/:id/replay" element={<Live mode="replay" />} />
           <Route path="/corridas/:id/resultado" element={<Results />} />
           <Route path="/rankings" element={<Rankings />} />
+          <Route path="/privacidade" element={<Privacy />} />
+          <Route path="/termos" element={<Terms />} />
           <Route path="/pilotos/:id" element={<Profile />} />
           <Route
             path="/conta"

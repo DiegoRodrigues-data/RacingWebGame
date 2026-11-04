@@ -67,7 +67,8 @@ Jogar exige conta; regiões do perfil alimentam os rankings local/regional/nacio
 - [x] Telas: cadastro, login, recuperação de senha (link registrado no log), confirmação de e-mail, edição de perfil com região
 - [x] Admin inicial via variáveis de ambiente
 - [x] Login com Google (OAuth + PKCE; vincula e-mail já cadastrado; conta nova completa região e cidade)
-- [ ] Criar o cliente OAuth no Google Cloud e definir `GOOGLE_CLIENT_ID`/`GOOGLE_CLIENT_SECRET` no Dokploy
+- [x] Cliente OAuth criado no Google Cloud (projeto Roda Presa, app publicado) e páginas `/privacidade` e `/termos`
+- [ ] Definir `GOOGLE_CLIENT_ID`/`GOOGLE_CLIENT_SECRET` no Dokploy e testar o login com Google em produção
 - [x] Testes: duplicidade, login inválido, bloqueio, refresh com rotação e reuso, expiração, acesso negado por papel
 
 ## Fase 2 — Domínio de corridas, agendamento e máquina de estados ✅
