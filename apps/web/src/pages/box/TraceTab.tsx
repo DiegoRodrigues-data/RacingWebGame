@@ -71,13 +71,21 @@ export function TraceTab({
   const [status, setStatus] = useState<{ tone: 'ok' | 'err' | 'pending' | 'idle'; text: string }>(
     serverVersion
       ? { tone: 'ok', text: `Traçado oficial v${serverVersion} salvo no servidor.` }
-      : { tone: 'idle', text: 'Nenhum traçado enviado ainda.' },
+      : {
+          tone: 'idle',
+          text: 'Nenhum traçado salvo ainda: sem ele o carro corre na linha central, 1,5% mais lento.',
+        },
   );
   const offsetsRef = useRef(offsets);
   offsetsRef.current = offsets;
   const now = useServerNow(500);
   const deadline = Date.parse(race.timeline.setupLockAt);
   const windowOpen = race.status === 'trace_window' && now < deadline;
+  // Quem está confirmado salva o traçado no servidor a cada ajuste até o parque fechado.
+  const canSend =
+    ['registration_open', 'practice', 'trace_window'].includes(race.status) &&
+    now < deadline &&
+    race.me?.entry?.status === 'confirmed';
   const editable = ['registration_open', 'practice', 'trace_window'].includes(race.status) && now < deadline;
   const submitTimer = useRef<number | null>(null);
   const lastSent = useRef(0);
@@ -206,12 +214,12 @@ export function TraceTab({
       setOffsets(next);
       const pts = offsetsToTrace(next, 256);
       saveDraft(draftKey(race.id, 'trace'), pts);
-      if (windowOpen && validateTrace(g, pts).ok) {
+      if (canSend && validateTrace(g, pts).ok) {
         if (submitTimer.current) clearTimeout(submitTimer.current);
         submitTimer.current = window.setTimeout(() => void submit(pts), 600);
       }
     },
-    [setOffsets, race.id, windowOpen, g, submit],
+    [setOffsets, race.id, canSend, g, submit],
   );
   const fromHandles = useCallback(
     (vals: number[]) => enforceLateralRate(g, handlesToOffsets(g, idx, vals)),
@@ -223,18 +231,16 @@ export function TraceTab({
     commit(fromHandles(vals));
   };
 
-  // Envio automático do rascunho quando a janela abre com a página aberta.
+  // Rascunho feito antes (neste aparelho) e ainda não salvo no servidor: envia assim que for possível.
+  // A linha central intocada não é enviada (sem traçado, a corrida já usa a central, com penalidade).
+  const drawn = useMemo(() => offsets.some((v) => Math.abs(v) > 1e-6), [offsets]);
   useEffect(() => {
-    if (windowOpen && !serverVersion && !autoSubmitted.has(race.id) && validation.ok) {
+    if (canSend && drawn && !serverVersion && !autoSubmitted.has(race.id) && validation.ok) {
       autoSubmitted.add(race.id);
       void submit(trace);
-      toast(
-        'Janela de traçado aberta!',
-        'Seu rascunho foi enviado. Você pode continuar ajustando por 5 minutos.',
-        'warn',
-      );
+      toast('Traçado salvo', 'Seu desenho foi salvo no servidor e já vale para a corrida.', 'ok');
     }
-  }, [windowOpen, serverVersion, validation.ok, submit, trace, race.id]);
+  }, [canSend, drawn, serverVersion, validation.ok, submit, trace, race.id]);
   useRoom(me ? ROOM.user(me.id) : null, (env) => {
     if (env.type === 'trace.rejected')
       setStatus({ tone: 'err', text: (env.payload as { message: string }).message });
@@ -495,20 +501,26 @@ export function TraceTab({
           <div className="label">
             {windowOpen
               ? 'Janela de traçado aberta'
-              : race.status === 'trace_window'
-                ? 'Janela encerrada'
-                : ['registration_open', 'practice'].includes(race.status)
-                  ? 'Rascunho local'
+              : canSend
+                ? 'Traçado salvo a cada ajuste'
+                : editable
+                  ? 'Rascunho neste aparelho'
                   : 'Traçado travado'}
           </div>
           {windowOpen ? (
             <Countdown to={deadline} className="text-4xl" />
-          ) : ['registration_open', 'practice'].includes(race.status) ? (
+          ) : canSend ? (
             <p className="text-sm text-muted">
-              A janela de 5 minutos abre às{' '}
-              <b className="text-ink">{new Date(race.timeline.traceWindowAt).toLocaleTimeString('pt-BR')}</b>.
-              Seu rascunho fica salvo neste aparelho e é enviado automaticamente quando a janela abrir, se
-              esta página estiver aberta.
+              Cada ajuste é salvo no servidor e já vale para a corrida, mesmo se você fechar a página. A
+              janela final de 5 minutos abre às{' '}
+              <b className="text-ink">{new Date(race.timeline.traceWindowAt).toLocaleTimeString('pt-BR')}</b>{' '}
+              e o traçado trava às{' '}
+              <b className="text-ink">{new Date(race.timeline.setupLockAt).toLocaleTimeString('pt-BR')}</b>.
+            </p>
+          ) : editable ? (
+            <p className="text-sm text-muted">
+              Você está na fila de espera: o desenho fica neste aparelho e é salvo no servidor quando sua vaga
+              for confirmada (com esta página aberta).
             </p>
           ) : (
             <p className="text-sm text-muted">Não é mais possível alterar o traçado.</p>
@@ -526,7 +538,7 @@ export function TraceTab({
           >
             {status.text}
           </p>
-          {windowOpen && (
+          {canSend && (
             <button
               className="btn-primary mt-2 w-full"
               disabled={!validation.ok}

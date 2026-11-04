@@ -56,12 +56,13 @@ describe('ciclo de vida completo de uma corrida (fluxo crítico)', () => {
     );
     expect(bad.body.error.code).toBe('SETUP_INVALID');
 
-    // Traçado antes da janela é recusado.
+    // Traçado antes da janela já fica salvo no servidor (vale mesmo se o jogador fechar a página).
     const g: TrackGeometry = (await t.json('GET', `/tracks/versions/${race.track.versionId}/geometry`)).body;
     const trace = offsetsToTrace(suggestedLine(g), 256);
-    expect(
-      (await t.json('PUT', `/races/${raceId}/trace`, { points: trace }, ana.token)).body.error.code,
-    ).toBe('TRACE_WINDOW_CLOSED');
+    expect((await t.json('PUT', `/races/${raceId}/trace`, { points: trace }, ana.token)).body.version).toBe(
+      1,
+    );
+    expect((await t.json('GET', `/races/${raceId}`, undefined, ana.token)).body.me.hasTrace).toBe(true);
 
     // Treino.
     await t.advanceTo(Date.parse(race.timeline.practiceAt));
@@ -81,7 +82,7 @@ describe('ciclo de vida completo de uma corrida (fluxo crítico)', () => {
     expect(Date.parse(race.phaseDeadline) - Date.parse(race.timeline.traceWindowAt)).toBe(TRACE_WINDOW_MS);
     const ok = await t.json('PUT', `/races/${raceId}/trace`, { points: trace }, ana.token);
     expect(ok.status).toBe(200);
-    expect(ok.body.version).toBe(1);
+    expect(ok.body.version).toBe(2); // a v1 foi salva antes da janela
     // Limite de envio (2 s).
     expect(
       (await t.json('PUT', `/races/${raceId}/trace`, { points: trace }, ana.token)).body.error.code,
@@ -102,7 +103,7 @@ describe('ciclo de vida completo de uma corrida (fluxo crítico)', () => {
           ana.token,
         )
       ).body.version,
-    ).toBe(2);
+    ).toBe(3);
     expect((await t.json('PUT', `/races/${raceId}/trace`, { points: trace }, bruno.token)).status).toBe(200);
     // Caio não envia traçado: correrá com a linha central e penalidade.
     // Notificação de 1 minuto restante.

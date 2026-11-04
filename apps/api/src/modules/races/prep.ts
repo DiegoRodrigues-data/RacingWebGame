@@ -44,12 +44,10 @@ export async function submitTrace(ctx: Ctx, raceId: string, user: AuthUser, body
   const input = parse(traceSubmitSchema, body);
   const race = await getRaceRow(ctx.db, raceId);
   const now = ctx.clock.now();
-  if (
-    race.status !== 'trace_window' ||
-    now < race.traceWindowAt.getTime() ||
-    now >= race.setupLockAt.getTime()
-  )
-    return reject(new AppError('TRACE_WINDOW_CLOSED', 'A janela de traçado não está aberta.'));
+  // O traçado pode ser salvo desde a inscrição até o parque fechado (como o setup): o que o jogador desenha
+  // antes da janela vale mesmo que ele feche a página. A janela de 5 minutos é a última chance de ajustar.
+  if (!SETUP_EDITABLE_PHASES.includes(race.status) || now >= race.setupLockAt.getTime())
+    return reject(new AppError('TRACE_WINDOW_CLOSED', 'O traçado está travado (parque fechado).'));
   await requireEntry(ctx, raceId, user.id, ['confirmed']);
   if (!(await ctx.store.setNx(`trace:rl:${raceId}:${user.id}`, '1', TRACE_SUBMIT_MIN_INTERVAL_MS)))
     throw new AppError('TRACE_RATE_LIMITED', 'Aguarde 2 segundos entre envios.');

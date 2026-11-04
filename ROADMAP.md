@@ -151,6 +151,7 @@ Interação principal do jogador.
 - [x] Validação no servidor: monotonicidade, cobertura, `|d| ≤ 1`, taxa lateral, 1 envio a cada 2 s
 - [x] Envio automático a cada alteração; o último válido antes do prazo vale; rascunho local antes da janela é enviado ao abrir
 - [x] Contagem regressiva sincronizada; `TRACE_WINDOW_CLOSED` após o prazo
+- [x] Traçado salvo no servidor desde a inscrição (antes só na janela, e o desenho feito antes ficava só no aparelho)
 - [x] Sem traçado válido: linha central com penalidade de 1,5% de ritmo
 - [x] Eventos WS: `trace.window_opened`, `trace.saved`, `trace.rejected`, `trace.window_closed`
 - [x] Testes: fora da pista, após o prazo, parcial, invertido, zigue-zague, rascunho persistido, E2E pela interface

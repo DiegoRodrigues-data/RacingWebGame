@@ -22,7 +22,7 @@ test('fluxo crítico do jogador: inscrição → setup → traçado na janela �
   await expect(page.getByText('Setup salvo ✅')).toBeVisible();
 
   // Traçado: arrasta sobre o canvas (fora dos pontos de controle move a câmera) e aplica a linha sugerida
-  // (rascunho local antes da janela).
+  // (salvo no servidor desde já).
   await page.getByRole('tab', { name: /Traçado/ }).click();
   const canvas = page.locator('canvas').first();
   await expect(canvas).toBeVisible();
@@ -33,9 +33,10 @@ test('fluxo crítico do jogador: inscrição → setup → traçado na janela �
     await page.mouse.move(box.x + box.width * (0.45 + k * 0.01), box.y + box.height * (0.3 + k * 0.01));
   await page.mouse.up();
   await page.getByRole('button', { name: 'Linha sugerida' }).click();
-  await expect(page.getByText('Rascunho local')).toBeVisible();
+  // O traçado já fica salvo no servidor antes da janela.
+  await expect(page.getByText(/Traçado oficial v\d+ salvo/)).toBeVisible({ timeout: 15_000 });
 
-  // Abre a janela de 5 minutos: o rascunho é enviado automaticamente.
+  // Abre a janela de 5 minutos: o traçado salvo continua valendo.
   const r = await race(request, id);
   await advanceTo(request, r.timeline.traceWindowAt, 300);
   await expect(page.getByText(/Traçado oficial v\d+ salvo/)).toBeVisible({ timeout: 30_000 });

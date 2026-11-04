@@ -66,6 +66,14 @@ andamento e a próxima aberta) e ficam fora do calendário, das próximas largad
 (`GET /races?test=true|all` para vê-las). Para não encher o banco (288 por dia), são apagadas com replay, resultados e
 pista 3 h depois de encerradas (`AUTO_TEST_RACES_KEEP_HOURS`).
 
+### Traçado salvo desde a inscrição
+
+Antes, o servidor só aceitava o traçado durante a janela de 5 minutos; o que o jogador desenhava antes ficava como
+rascunho no navegador e só era enviado se o Box estivesse aberto quando a janela abrisse. Quem fechava a página
+corria com a linha central e penalidade, e via "sem traçado" sem entender. Agora `PUT /races/:id/trace` vale das
+inscrições até o parque fechado (como o setup), cada ajuste no Box é salvo na hora e a janela de 5 minutos é a
+última chance de ajustar. A linha central intocada não é enviada sozinha: sem desenho, a penalidade continua.
+
 ## Modelo de simulação
 
 Determinístico (PRNG sfc32 semeado; nenhuma fonte de aleatoriedade externa). Por volta, cada carro tem um perfil de velocidade

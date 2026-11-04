@@ -182,8 +182,25 @@ export default function RaceDetail() {
                     <div>
                       <b className="text-go">Confirmado</b> · carro #{entry!.carNumber}
                       <div className="text-xs text-muted">
-                        {race.me?.hasSetup ? '✅ setup salvo' : '⚠️ sem setup (padrão)'} ·{' '}
-                        {race.me?.hasTrace ? '✅ traçado enviado' : '⚠️ sem traçado'}
+                        {race.me?.hasSetup ? '✅ setup salvo' : '⚠️ setup padrão (você não salvou um)'} ·{' '}
+                        {race.me?.hasTrace ? (
+                          '✅ traçado salvo'
+                        ) : (
+                          <>
+                            ⚠️ traçado não salvo: o carro corre na linha central, 1,5% mais lento
+                            {prepPhase && (
+                              <>
+                                {' · '}
+                                <Link
+                                  className="font-bold text-race underline"
+                                  to={`/corridas/${race.id}/box?aba=tracado`}
+                                >
+                                  desenhar agora
+                                </Link>
+                              </>
+                            )}
+                          </>
+                        )}
                       </div>
                     </div>
                   </div>
