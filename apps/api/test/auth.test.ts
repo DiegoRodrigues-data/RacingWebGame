@@ -1,4 +1,8 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { loadConfig } from '../src/config';
+import { ensureAdmin } from '../src/db/bootstrap';
+import { users } from '../src/db/schema';
+import { hashPassword } from '../src/lib/crypto';
 import { setupApp, type TestApp } from './helpers';
 
 let t: TestApp;
@@ -110,6 +114,55 @@ describe('autenticação', () => {
       (await t.json('POST', '/auth/reset-password', { token: reset, password: 'nova-senha-123' })).status,
     ).toBe(200);
     expect((await t.login('bia@teste.dev', 'nova-senha-123')).status).toBe(200);
+  });
+});
+
+describe('admin inicial', () => {
+  it('a senha só vale na criação; ADMIN_RESET_PASSWORD redefine e desbloqueia', async () => {
+    const cfg = { ...t.config, ADMIN_EMAIL: 'chefe@teste.dev', ADMIN_PASSWORD: 'primeira-1' };
+    await ensureAdmin(t.ctx.db, cfg);
+    expect((await t.login('chefe@teste.dev', 'primeira-1')).status).toBe(200);
+    // Trocar a variável sem o reset não muda a senha de quem já existe.
+    await ensureAdmin(t.ctx.db, { ...cfg, ADMIN_PASSWORD: 'segunda-22' });
+    expect((await t.login('chefe@teste.dev', 'segunda-22')).status).toBe(401);
+    for (let i = 0; i < 5; i++) await t.login('chefe@teste.dev', 'errada-000');
+    expect((await t.login('chefe@teste.dev', 'primeira-1')).body.error.code).toBe('ACCOUNT_LOCKED');
+    const logs: string[] = [];
+    await ensureAdmin(
+      t.ctx.db,
+      {
+        ...cfg,
+        ADMIN_EMAIL: ' Chefe@Teste.dev '.trim().toLowerCase(),
+        ADMIN_PASSWORD: 'segunda-22',
+        ADMIN_RESET_PASSWORD: true,
+      },
+      (m) => logs.push(m),
+    );
+    expect(logs[0]).toMatch(/redefinida/);
+    expect((await t.login('chefe@teste.dev', 'segunda-22')).status).toBe(200);
+  });
+  it('conserta o admin que ficou sem perfil (apelido repetido em versões antigas)', async () => {
+    const [u] = await t.ctx.db
+      .insert(users)
+      .values({
+        email: 'sem-perfil@teste.dev',
+        passwordHash: await hashPassword('sem-perfil-1'),
+        roles: ['player'],
+      })
+      .returning();
+    expect((await t.login('sem-perfil@teste.dev', 'sem-perfil-1')).status).toBe(401);
+    const logs: string[] = [];
+    await ensureAdmin(t.ctx.db, { ...t.config, ADMIN_EMAIL: 'sem-perfil@teste.dev' }, (m) => logs.push(m));
+    expect(logs[0]).toMatch(/Perfil do admin/);
+    const r = await t.login('sem-perfil@teste.dev', 'sem-perfil-1');
+    expect(r.status).toBe(200);
+    expect(r.body.me.roles).toContain('admin');
+    expect(r.body.me.profile.nickname).toMatch(/^DiretorDeProva\d+$/);
+    void u;
+  });
+  it('e-mail do admin com espaço ou maiúscula é normalizado', () => {
+    const c = loadConfig({ NODE_ENV: 'test', ADMIN_EMAIL: ' Admin@Admin.com ' });
+    expect(c.ADMIN_EMAIL).toBe('admin@admin.com');
   });
 });
 

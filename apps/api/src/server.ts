@@ -14,7 +14,7 @@ const clock =
   config.ENABLE_DEV_ROUTES && config.NODE_ENV !== 'production' ? new OffsetClock() : new SystemClock();
 const dbHandle = await createDb({ url: config.DATABASE_URL, pgliteDir: config.PGLITE_DIR ?? '.data/pglite' });
 await dbHandle.migrate();
-await ensureAdmin(dbHandle.db, config);
+await ensureAdmin(dbHandle.db, config, (m) => console.warn(m));
 if (config.SEED_DEMO) await seedDemo(dbHandle.db, config, clock, (m) => console.log(m));
 const store = createStore(config.REDIS_URL, () => clock.now());
 const { app, engine } = await buildApp({ config, dbHandle, store, clock });

@@ -25,6 +25,8 @@ services:
       JWT_SECRET: ${JWT_SECRET}
       ADMIN_EMAIL: ${ADMIN_EMAIL}
       ADMIN_PASSWORD: ${ADMIN_PASSWORD}
+      # Recuperação de acesso: "true" redefine a senha do admin para ADMIN_PASSWORD no boot (desligue depois).
+      ADMIN_RESET_PASSWORD: ${ADMIN_RESET_PASSWORD:-false}
       WEB_ORIGIN: ${PUBLIC_WEB_URL}
       PUBLIC_WEB_URL: ${PUBLIC_WEB_URL}
       COOKIE_SECURE: 'true'

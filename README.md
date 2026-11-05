@@ -85,7 +85,7 @@ O andamento está em [ROADMAP.md](ROADMAP.md).
 ## Deploy (VPS com Dokploy)
 
 1. No Dokploy, crie um serviço **Compose** apontando para este repositório e o arquivo `docker-compose.prod.yml`.
-2. Defina as variáveis: `POSTGRES_PASSWORD`, `JWT_SECRET` (longo e aleatório), `ADMIN_EMAIL`, `ADMIN_PASSWORD`, `PUBLIC_WEB_URL` (ex.: `https://tracado.seudominio.com`) e, se quiser, `METRICS_TOKEN`, `SENTRY_DSN`.
+2. Defina as variáveis: `POSTGRES_PASSWORD`, `JWT_SECRET` (longo e aleatório), `ADMIN_EMAIL`, `ADMIN_PASSWORD`, `PUBLIC_WEB_URL` (ex.: `https://tracado.seudominio.com`) e, se quiser, `METRICS_TOKEN`, `SENTRY_DSN`. Perdeu o acesso de admin? Ponha `ADMIN_RESET_PASSWORD=true`, faça o deploy (a senha do admin volta a ser `ADMIN_PASSWORD` e o bloqueio por tentativas é zerado), entre e remova a variável. A senha só é gravada quando o admin é criado: trocar `ADMIN_PASSWORD` sozinho não muda a de quem já existe.
    Login com Google (opcional): no Google Cloud Console, crie um "ID do cliente OAuth" do tipo **Aplicativo da Web** com o URI de redirecionamento `https://SEU_DOMINIO/api/auth/google/callback` e defina `GOOGLE_CLIENT_ID` e `GOOGLE_CLIENT_SECRET`. Sem as duas, o botão não aparece.
    A grade automática vem ligada: `AUTO_RACES_PER_DAY` (padrão 24; 0 desliga), `AUTO_RACES_CATEGORY` (slug, padrão `copa-novatos`) e `AUTO_RACES_RANKED` (padrão `false`).
 3. Em **Domains**, aponte o domínio para o serviço **web**, porta **80**, com HTTPS. Se aparecer `404 page not found` com o certificado `TRAEFIK DEFAULT CERT` e os containers saudáveis, o domínio foi criado depois do container: confira serviço/porta e faça um novo Deploy.

@@ -15,8 +15,14 @@ const schema = z.object({
   WEB_ORIGIN: z.string().default('http://localhost:5173'),
   PUBLIC_WEB_URL: z.string().default('http://localhost:5173'),
   COOKIE_SECURE: bool.default(false),
-  ADMIN_EMAIL: z.string().email().default('admin@tracado.local'),
+  // O login compara o e-mail em minúsculas e sem espaços: o do admin precisa estar igual.
+  ADMIN_EMAIL: z.string().trim().toLowerCase().email().default('admin@tracado.local'),
   ADMIN_PASSWORD: z.string().min(8).default('admin12345'),
+  /**
+   * Recuperação de acesso: com "true", a cada boot a senha do admin volta a ser ADMIN_PASSWORD (e o bloqueio por
+   * tentativas é zerado). Ligue, faça o deploy, entre e desligue (senão a troca de senha não dura).
+   */
+  ADMIN_RESET_PASSWORD: bool.default(false),
   ENABLE_DEV_ROUTES: bool.default(false),
   SEED_DEMO: bool.default(false),
   DEMO_BOTS: z.coerce.number().int().min(0).max(21).default(0),
