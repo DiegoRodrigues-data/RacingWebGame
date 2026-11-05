@@ -2,6 +2,13 @@ import type { TrackGeometry } from '@tracado/trackgen';
 import { useMemo } from 'react';
 import { CAR_CSS } from '../game/assets';
 
+/** Fundo das miniaturas por cenário (tons um pouco mais escuros que o da pista grande, para o traçado aparecer). */
+export const BIOME_MINI_BG: Record<string, string> = {
+  grass: '#1f6b43',
+  desert: '#b8986a',
+  canyon: '#7f4f2a',
+};
+
 /** Cores do piso no minimapa (as mesmas da pista desenhada). */
 const SURFACE: Record<string, string> = { asphalt: '#a6c9cb', dirt: '#bb8044', sand: '#ecdcb8' };
 

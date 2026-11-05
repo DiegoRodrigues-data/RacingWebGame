@@ -132,7 +132,13 @@ export function LiveTrack({
 
   return (
     <div className={`relative ${className}`}>
-      <TrackCanvas geometry={geometry} onReady={setScene} className="h-full" label="Corrida ao vivo" />
+      <TrackCanvas
+        geometry={geometry}
+        biome={race.track.biome}
+        onReady={setScene}
+        className="h-full"
+        label="Corrida ao vivo"
+      />
       <CameraControls scene={scene} />
       {geometry && dots.length > 0 && (
         <div className="pointer-events-none absolute left-3 top-3 hidden size-32 rounded-xl bg-night/70 p-1.5 backdrop-blur sm:block">

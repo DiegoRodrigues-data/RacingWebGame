@@ -80,6 +80,12 @@ export const gameSettingsSchema = z
         .trim()
         .max(24)
         .regex(/^[a-z0-9-]*$/i, 'Use letras, números e -'),
+      /** Peso de cada cenário (autódromo, deserto, cânion); combinações em que a pista some são evitadas. */
+      biomes: z.object({
+        grass: z.number().min(0).max(100),
+        desert: z.number().min(0).max(100),
+        canyon: z.number().min(0).max(100),
+      }),
       /** Pistas salvas no rodízio (versões publicadas) e a chance de usar uma delas em vez de gerar. */
       pool: z.array(z.string().uuid()).max(50),
       poolChance: z.number().min(0).max(1),
@@ -97,6 +103,7 @@ export const gameSettingsSchema = z
     (s) => Object.values(s.tracks.terrains).some((w) => w > 0),
     'Libere pelo menos um terreno (peso maior que zero).',
   )
+  .refine((s) => Object.values(s.tracks.biomes).some((w) => w > 0), 'Libere pelo menos um cenário.')
   .refine(
     (s) =>
       s.tracks.lengthMin == null || s.tracks.lengthMax == null || s.tracks.lengthMin <= s.tracks.lengthMax,
@@ -119,6 +126,7 @@ export const DEFAULT_GAME_SETTINGS: GameSettings = {
   adminRaceBots: 0,
   tracks: {
     terrains: { asphalt: 100, dirt: 0, sand: 0, mixed: 0 },
+    biomes: { grass: 100, desert: 0, canyon: 0 },
     lengthMin: null,
     lengthMax: null,
     complexity: null,

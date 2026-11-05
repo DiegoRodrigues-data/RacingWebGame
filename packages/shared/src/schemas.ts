@@ -36,6 +36,30 @@ export const terrainSchema = z.enum(TERRAINS);
 export type Terrain = z.infer<typeof terrainSchema>;
 export const TRACK_TERRAINS = [...TERRAINS, 'mixed'] as const;
 export const trackTerrainSchema = z.enum(TRACK_TERRAINS);
+
+/**
+ * Cenário em volta da pista (só visual): autódromo de grama, deserto de areia ou cânion de terra. As cores e os
+ * objetos vêm do Racing Pack. Um trecho da pista não pode sumir no fundo: pista de areia não vai para o deserto e
+ * pista de terra não vai para o cânion.
+ */
+export const BIOMES = ['grass', 'desert', 'canyon'] as const;
+export const biomeSchema = z.enum(BIOMES);
+export type Biome = z.infer<typeof biomeSchema>;
+export const BIOME_LABEL: Record<Biome, string> = { grass: 'Autódromo', desert: 'Deserto', canyon: 'Cânion' };
+const BIOME_CLASHES: Record<Biome, readonly string[]> = { grass: [], desert: ['sand'], canyon: ['dirt'] };
+export const biomeFits = (b: Biome, terrain: string) => !BIOME_CLASHES[b].includes(terrain);
+/** Sorteio ponderado de cenário compatível com o terreno da pista (u em [0, 1)). */
+export function pickBiome(w: Record<Biome, number>, terrain: string, u: number): Biome {
+  const keys = BIOMES.filter((b) => w[b] > 0 && biomeFits(b, terrain));
+  if (!keys.length) return 'grass';
+  const total = keys.reduce((a, k) => a + w[k], 0);
+  let x = u * total;
+  for (const k of keys) {
+    x -= w[k];
+    if (x < 0) return k;
+  }
+  return keys[keys.length - 1]!;
+}
 export type TrackTerrain = z.infer<typeof trackTerrainSchema>;
 
 export const WEATHERS = ['dry', 'cloudy', 'light_rain', 'rain'] as const;
@@ -319,6 +343,8 @@ export const raceCreateSchema = z.object({
   waitlistMax: z.number().int().min(0).max(50).default(10),
   laps: z.number().int().min(RACE_LAPS_MIN).max(RACE_LAPS_MAX).optional(),
   weather: raceWeatherSchema.optional(),
+  /** Cenário em volta da pista (padrão: autódromo). */
+  biome: biomeSchema.optional(),
   /** Pista: uma versão publicada (especial) ou geração procedural com seed. */
   track: z.discriminatedUnion('type', [
     z.object({ type: z.literal('version'), trackVersionId: uuid }),
@@ -394,7 +420,7 @@ export interface RaceSummaryDto {
   laps: number;
   weather: RaceWeather;
   capacity: CapacityDto;
-  track: { versionId: string; name: string; length: number; terrain: TrackTerrain };
+  track: { versionId: string; name: string; length: number; terrain: TrackTerrain; biome: Biome };
   /** Corrida de um grupo da Corrida Maluca (fechada, fora das listas públicas). */
   crazy: RaceCrazyDto | null;
 }

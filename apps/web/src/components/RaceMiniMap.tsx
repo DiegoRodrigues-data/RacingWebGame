@@ -11,7 +11,7 @@ import { decode } from '../game/playback';
 import { get } from '../lib/api';
 import { useGeometry } from '../lib/queries';
 import { realtime, useRoom } from '../lib/realtime';
-import { Minimap } from './Minimap';
+import { BIOME_MINI_BG, Minimap } from './Minimap';
 
 interface TailDto {
   startedAt: number;
@@ -103,8 +103,9 @@ export function RaceMiniMap({ race, className = '' }: { race: RaceSummaryDto; cl
   return (
     <div
       ref={ref}
-      className={`relative overflow-hidden rounded-xl border border-line bg-[#1f6b43] ${className}`}
+      className={`relative overflow-hidden rounded-xl border border-line ${className}`}
       style={{
+        backgroundColor: BIOME_MINI_BG[race.track.biome] ?? BIOME_MINI_BG.grass,
         backgroundImage: 'repeating-linear-gradient(90deg, rgb(0 0 0 / 0.06) 0 12px, transparent 12px 24px)',
       }}
     >

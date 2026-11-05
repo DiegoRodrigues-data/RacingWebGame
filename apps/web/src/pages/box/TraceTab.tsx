@@ -377,6 +377,7 @@ export function TraceTab({
         <div className="relative">
           <TrackCanvas
             geometry={g}
+            biome={race.track.biome}
             onReady={setScene}
             className="h-[62dvh] min-h-[380px]"
             label="Pista para ajustar o traçado arrastando os pontos de controle"

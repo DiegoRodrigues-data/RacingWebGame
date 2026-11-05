@@ -158,6 +158,7 @@ export default function RaceDetail() {
             <div className="relative self-start">
               <TrackCanvas
                 geometry={geo.data}
+                biome={race.track.biome}
                 onReady={setScene}
                 className="h-[340px] sm:h-[420px]"
                 label={`Mapa da pista ${race.track.name}`}

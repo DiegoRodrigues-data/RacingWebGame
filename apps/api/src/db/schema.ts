@@ -17,6 +17,7 @@ import type {
   CarSetup,
   CategoryConfig,
   EditorTrack,
+  Biome,
   EntryStatus,
   GameSettings,
   Level,
@@ -227,6 +228,8 @@ export const races = pgTable(
     flags: jsonb('flags').$type<Record<string, boolean>>().notNull().default({}),
     cancelReason: text('cancel_reason'),
     seasonId: uuid('season_id').references(() => seasons.id),
+    /** Cenário em volta da pista (só visual). */
+    biome: text('biome').$type<Biome>().notNull().default('grass'),
     /** Corrida de um grupo da Corrida Maluca (etapa `crazyRound`). */
     crazyGroupId: uuid('crazy_group_id').references(() => crazyGroups.id, { onDelete: 'cascade' }),
     crazyRound: integer('crazy_round'),

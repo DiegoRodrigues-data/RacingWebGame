@@ -1,7 +1,12 @@
 import {
   DEFAULT_SETUP,
   formatLapTime,
+  BIOME_LABEL,
+  BIOMES,
+  biomeFits,
+  pickBiome,
   pickTerrain,
+  type Biome,
   TRACK_TERRAINS,
   type GameSettings,
   type TrackParams,
@@ -19,7 +24,8 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import clsx from 'clsx';
 import { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router';
-import { Minimap } from '../../components/Minimap';
+import { BIOME_MINI_BG, Minimap } from '../../components/Minimap';
+import { BIOME_CSS, TrackCanvas } from '../../components/TrackCanvas';
 import { Spinner, toast } from '../../components/ui';
 import { errorMessage, get, post } from '../../lib/api';
 import { fmtKm, TERRAIN_LABEL } from '../../lib/format';
@@ -30,6 +36,7 @@ const randomSeed = () => Math.random().toString(36).slice(2, 10);
 interface Built {
   seed: string;
   params: TrackParams;
+  biome?: Biome;
   g: TrackGeometry | null;
   issues: string[];
 }
@@ -65,6 +72,7 @@ export default function AdminTrackGen() {
   const [batch, setBatch] = useState(0);
   const [name, setName] = useState('');
   const [toPool, setToPool] = useState(true);
+  const [biome, setBiome] = useState<Biome>('grass');
   const [busy, setBusy] = useState(false);
   useEffect(() => {
     if (!tr) return;
@@ -100,14 +108,16 @@ export default function AdminTrackGen() {
       const sd = `${tr.seedPrefix ? `${tr.seedPrefix}-` : ''}${randomSeed()}`;
       const min = tr.lengthMin ?? 1400;
       const max = Math.max(min, tr.lengthMax ?? 2400);
-      out.push(
-        build(sd, {
+      const terrain = pickTerrain(tr.terrains, Math.random());
+      out.push({
+        ...build(sd, {
           length: Math.round((min + Math.random() * (max - min)) / 50) * 50,
           complexity: tr.complexity ?? 0.4,
           width: tr.width,
-          terrain: pickTerrain(tr.terrains, Math.random()),
+          terrain,
         }),
-      );
+        biome: pickBiome(tr.biomes, terrain, Math.random()),
+      });
     }
     return out;
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -137,22 +147,35 @@ export default function AdminTrackGen() {
     <AdminPage title="Gerador de pistas">
       <div className="grid gap-4 lg:grid-cols-[1fr_360px]">
         <section className="card space-y-3">
-          <div
-            className="relative aspect-[16/10] overflow-hidden rounded-xl border border-line bg-[#1f6b43]"
-            style={{
-              backgroundImage:
-                'repeating-linear-gradient(90deg, rgb(0 0 0 / 0.06) 0 12px, transparent 12px 24px)',
-            }}
-          >
-            {current.g ? (
-              <div className="absolute inset-3">
-                <Minimap g={current.g} cars={[]} />
-              </div>
-            ) : (
-              <div className="grid h-full place-items-center text-sm text-hot">
-                Esta combinação não gera pista.
-              </div>
-            )}
+          {current.g ? (
+            <TrackCanvas
+              geometry={current.g}
+              biome={biome}
+              className="aspect-[16/10] w-full border border-line"
+              label="Prévia da pista"
+            />
+          ) : (
+            <div className="grid aspect-[16/10] place-items-center rounded-xl border border-line text-sm text-hot">
+              Esta combinação não gera pista.
+            </div>
+          )}
+          <div className="flex flex-wrap items-center gap-1.5">
+            <span className="label !mb-0 mr-1">Ver no cenário</span>
+            {BIOMES.map((b) => (
+              <button
+                key={b}
+                type="button"
+                onClick={() => setBiome(b)}
+                className={clsx(
+                  'flex items-center gap-1.5 rounded-xl border px-3 py-1 text-sm font-bold',
+                  biome === b ? 'border-race bg-race/15 text-race' : 'border-line text-muted',
+                )}
+              >
+                <span className="inline-block size-3 rounded" style={{ background: BIOME_CSS[b] }} />
+                {BIOME_LABEL[b]}
+                {!biomeFits(b, params.terrain) && <span className="text-[10px] text-hot">(some)</span>}
+              </button>
+            ))}
           </div>
           {current.g && (
             <div className="flex flex-wrap gap-1.5 text-xs">
@@ -304,10 +327,14 @@ export default function AdminTrackGen() {
               onClick={() => {
                 setSeed(b.seed);
                 setParams(b.params);
+                if (b.biome) setBiome(b.biome);
               }}
               className="card !p-2 text-left transition hover:border-race"
             >
-              <div className="relative aspect-[16/10] overflow-hidden rounded-lg bg-[#1f6b43]">
+              <div
+                className="relative aspect-[16/10] overflow-hidden rounded-lg"
+                style={{ background: BIOME_MINI_BG[b.biome ?? 'grass'] }}
+              >
                 {b.g && (
                   <div className="absolute inset-1.5">
                     <Minimap g={b.g} cars={[]} />
@@ -316,7 +343,8 @@ export default function AdminTrackGen() {
               </div>
               <div className="mt-1 truncate font-mono text-[11px] text-muted">{b.seed}</div>
               <div className="text-xs">
-                {TERRAIN_LABEL[b.params.terrain]} · {fmtKm(b.g?.length ?? b.params.length)}
+                {TERRAIN_LABEL[b.params.terrain]} · {BIOME_LABEL[b.biome ?? 'grass']} ·{' '}
+                {fmtKm(b.g?.length ?? b.params.length)}
                 {b.issues.length > 0 && <span className="text-hot"> · com problemas</span>}
               </div>
             </button>

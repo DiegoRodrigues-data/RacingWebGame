@@ -146,6 +146,16 @@ traçado e corrida contra fantasmas rodam no aparelho e nada é enviado ao servi
 - **Fora por enquanto:** coeficientes da física (`COEF`). Mudá-los muda resultados e precisa valer igual no servidor e
   no treino do navegador; exigiria versionar a simulação por corrida.
 
+### Cenários em volta da pista
+
+- **Três cenários com a arte do Racing Pack** (sem arte nova): Autódromo (grama, árvores), Deserto (areia, pedras) e
+  Cânion (terra, pedras e barris). O fundo usa as cores das peças `land_*` do pacote, com pintas fixas pela pista; as
+  árvores do gerador viram pedras e barris na hora de desenhar, então a geometria e o hash da pista não mudam.
+- **O cenário é da corrida** (`races.biome`, padrão Autódromo), não da pista: a mesma pista pode aparecer em cenários
+  diferentes. As corridas automáticas sorteiam pelos pesos das configurações; o admin escolhe nas corridas que cria.
+- **Legibilidade:** pista de areia nunca vai para o Deserto e pista de terra nunca vai para o Cânion
+  (`biomeFits`); além disso toda pista ganhou um contorno escuro fino nas bordas.
+
 ### Trilha sonora e efeitos
 
 - **Tudo sintetizado no navegador** (Web Audio, `game/audio.ts`), sem arquivos de áudio: canais de pulso (melodia

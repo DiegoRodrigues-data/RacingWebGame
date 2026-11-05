@@ -71,6 +71,13 @@
       "when": 1794251155963,
       "tag": "0009_sem_janela_de_tracado",
       "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1794337555963,
+      "tag": "0010_cenarios",
+      "breakpoints": true
     }
   ]
 }

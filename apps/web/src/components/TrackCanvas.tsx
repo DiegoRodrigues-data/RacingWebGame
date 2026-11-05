@@ -1,6 +1,10 @@
 import type { TrackGeometry } from '@tracado/trackgen';
 import { useEffect, useRef, useState } from 'react';
+import type { Biome } from '@tracado/shared';
 import { TrackScene } from '../game/scene';
+
+/** Cor de fundo de cada cenário (CSS), igual à do desenho da pista. */
+export const BIOME_CSS: Record<Biome, string> = { grass: '#27ae60', desert: '#dcbb8a', canyon: '#a86b3a' };
 
 /** Monta uma TrackScene no elemento e entrega a instância pronta via callback. */
 export function TrackCanvas({
@@ -8,8 +12,11 @@ export function TrackCanvas({
   onReady,
   className = '',
   label = 'Pista de corrida',
+  biome = 'grass',
 }: {
   geometry: TrackGeometry | null | undefined;
+  /** Cenário em volta da pista. */
+  biome?: Biome;
   onReady?: (scene: TrackScene) => void;
   className?: string;
   label?: string;
@@ -27,18 +34,23 @@ export function TrackCanvas({
   }, []);
   useEffect(() => {
     if (scene && geometry) {
+      scene.biome = biome;
       scene.setGeometry(geometry);
       onReady?.(scene);
     }
     // onReady é estável por contrato do chamador
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [scene, geometry]);
+  useEffect(() => {
+    scene?.setBiome(biome);
+  }, [scene, biome]);
   return (
     <div
       ref={ref}
       role="img"
       aria-label={label}
-      className={`relative overflow-hidden rounded-2xl bg-grass ${className}`}
+      className={`relative overflow-hidden rounded-2xl ${className}`}
+      style={{ background: BIOME_CSS[biome] }}
     >
       {!geometry && (
         <div className="absolute inset-0 grid place-items-center text-sm font-bold text-night/70">

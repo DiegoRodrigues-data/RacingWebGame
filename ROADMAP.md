@@ -322,6 +322,13 @@ Fecha o ciclo de vida com resultados persistidos.
 - [x] Motor acompanhando a velocidade do carro em foco, semáforo, box e bandeirada
 - [x] Controles de volume (música, efeitos, mudo) no topo, salvos por aparelho
 
+## Fase 20 — Cenários ✅
+
+- [x] Autódromo, Deserto e Cânion com a arte do Racing Pack, contorno da pista e decoração por cenário
+- [x] Sorteio por peso nas configurações, sem combinar pista e fundo da mesma cor; escolha manual nas corridas do admin
+- [x] Prévia de cada cenário no gerador de pistas; miniaturas com o fundo do cenário
+- [ ] Entardecer e noite (filtros de cor e luzes da pista)
+
 ---
 
 ## Ordem recomendada (próximos passos)

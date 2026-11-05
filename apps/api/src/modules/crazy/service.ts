@@ -14,6 +14,7 @@ import {
   type CrazyInviteDto,
   type CrazyRaceDto,
   type CrazyStandingDto,
+  type Biome,
   type GuestJoinInput,
   type RaceCreate,
   type RaceSummaryDto,
@@ -34,7 +35,7 @@ import {
 import type { AuthUser } from '../../lib/auth';
 import { hashPassword, randomToken, sha256 } from '../../lib/crypto';
 import { getMe, issueTokens, sendVerification } from '../auth/service';
-import { autoTrack, phaseInput } from '../engine/autoRaces';
+import { autoBiome, autoTrack, phaseInput } from '../engine/autoRaces';
 import { getSettings } from '../settings/service';
 import { assertPlayer, assignCar } from '../races/entries';
 import {
@@ -121,7 +122,11 @@ export async function createGroup(ctx: Ctx, user: AuthUser, input: CrazyCreateIn
   const step = input.intervalMinutes * 60_000;
   // Pistas sorteadas fora da transação (consultam o rodízio de pistas salvas).
   const trackFor: RaceCreate['track'][] = [];
-  for (let i = 0; i < input.races; i++) trackFor.push(await autoTrack(ctx, st, cat));
+  const biomeFor: Biome[] = [];
+  for (let i = 0; i < input.races; i++) {
+    trackFor.push(await autoTrack(ctx, st, cat));
+    biomeFor.push(await autoBiome(ctx, st, trackFor[i]!));
+  }
   const groupId = await ctx.db.transaction(async (tx) => {
     const [g] = await tx
       .insert(crazyGroups)
@@ -153,6 +158,7 @@ export async function createGroup(ctx: Ctx, user: AuthUser, input: CrazyCreateIn
           waitlistMax: 0,
           laps: input.laps,
           track: trackFor[i]!,
+          biome: biomeFor[i]!,
         },
         user.id,
         tx,

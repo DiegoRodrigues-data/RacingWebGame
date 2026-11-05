@@ -1,4 +1,4 @@
-import { DEFAULT_GAME_SETTINGS, pickTerrain, type GameSettings } from '@tracado/shared';
+import { DEFAULT_GAME_SETTINGS, pickBiome, pickTerrain, type GameSettings } from '@tracado/shared';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { setupApp, T0, type TestApp } from './helpers';
 
@@ -124,6 +124,40 @@ describe('configurações do jogo (admin)', () => {
     expect(notes.some((n) => n.type === 'trace_window_open')).toBe(false);
     // O padrão das configurações é sem janela (um teste acima salvou 90 s de propósito).
     expect(DEFAULT_GAME_SETTINGS.phases.traceWindowSec).toBe(0);
+  });
+
+  it('cenário: sorteado pelos pesos, nunca da mesma cor da pista', () => {
+    // Deserto liberado: pista de asfalto pode ir; pista de areia nunca (cai no autódromo).
+    expect(pickBiome({ grass: 0, desert: 100, canyon: 0 }, 'asphalt', 0.5)).toBe('desert');
+    expect(pickBiome({ grass: 0, desert: 100, canyon: 0 }, 'sand', 0.5)).toBe('grass');
+    expect(pickBiome({ grass: 0, desert: 50, canyon: 50 }, 'dirt', 0.9)).toBe('desert');
+    expect(pickBiome({ grass: 0, desert: 50, canyon: 50 }, 'sand', 0.1)).toBe('canyon');
+  });
+
+  it('grade automática grava o cenário da corrida', async () => {
+    const base: GameSettings = (await t.json('GET', '/admin/settings', undefined, t.admin)).body.settings;
+    await t.json(
+      'PUT',
+      '/admin/settings',
+      {
+        ...base,
+        autoRaces: { ...base.autoRaces, enabled: true, lookaheadHours: 8 },
+        tracks: {
+          ...base.tracks,
+          terrains: { asphalt: 100, dirt: 0, sand: 0, mixed: 0 },
+          biomes: { grass: 0, desert: 0, canyon: 100 },
+        },
+      },
+      t.admin,
+    );
+    await t.advance(5 * HOUR);
+    const rs = (await t.json('GET', `/races?from=${t.clock.now() + 3 * HOUR}&to=${t.clock.now() + 9 * HOUR}`))
+      .body as any[];
+    expect(rs.length).toBeGreaterThan(0);
+    for (const r of rs) expect(r.track.biome).toBe('canyon');
+    // Corrida do admin sem cenário escolhido: autódromo.
+    const id = await t.createRace({}, 2 * HOUR);
+    expect((await t.race(id)).track.biome).toBe('grass');
   });
 
   it('sorteio de terreno respeita os pesos', () => {

@@ -334,6 +334,7 @@ export default function Live({ mode }: { mode: 'live' | 'replay' }) {
         <div className="relative self-start">
           <TrackCanvas
             geometry={geo.data}
+            biome={race.track.biome}
             onReady={setScene}
             className="h-[64dvh] min-h-[360px]"
             label="Corrida ao vivo"

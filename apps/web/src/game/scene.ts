@@ -1,4 +1,4 @@
-import type { Terrain } from '@tracado/shared';
+import type { Biome, Terrain } from '@tracado/shared';
 import type { TrackGeometry } from '@tracado/trackgen';
 import { Application, Container, Graphics, Sprite, Text, TextStyle } from 'pixi.js';
 import { CAR_HEX, loadAtlases, type Atlases } from './assets';
@@ -10,6 +10,29 @@ const CAR_SPRITE_PX = 131;
 const CAR_MIN_PX = 30;
 const TERRAIN_COLOR: Record<Terrain, number> = { asphalt: 0xa6c9cb, dirt: 0xbb8044, sand: 0xecdcb8 };
 const GRASS = 0x27ae60;
+
+/**
+ * Cenários (cores do Racing Pack): fundo, pintas de textura e troca de decoração. As árvores do gerador viram
+ * pedras e barris no deserto e no cânion (a posição continua a mesma, então nada muda na pista).
+ */
+export const BIOME_STYLE: Record<
+  Biome,
+  { ground: number; stripes: boolean; speckles: number[]; deco: Partial<Record<string, string>> }
+> = {
+  grass: { ground: GRASS, stripes: true, speckles: [], deco: {} },
+  desert: {
+    ground: 0xdcbb8a,
+    stripes: false,
+    speckles: [0xc5935d, 0xe9d9b5],
+    deco: { tree_large: 'rock1', tree_small: 'rock3' },
+  },
+  canyon: {
+    ground: 0xa86b3a,
+    stripes: false,
+    speckles: [0x8e5a30, 0xc58d55],
+    deco: { tree_large: 'rock2', tree_small: 'barrel_red' },
+  },
+};
 
 export interface CarView {
   id: string;
@@ -91,7 +114,7 @@ export class TrackScene {
     this.el = el;
     await this.app.init({
       resizeTo: el,
-      background: GRASS,
+      background: BIOME_STYLE[this.biome].ground,
       antialias: true,
       autoDensity: true,
       resolution: Math.min(2, window.devicePixelRatio || 1),
@@ -274,8 +297,18 @@ export class TrackScene {
   }
 
   // ------------------------------------------------------------------ Pista
+  /** Cenário em volta da pista; redesenha se a pista já estiver na tela. */
+  biome: Biome = 'grass';
+  setBiome(b: Biome) {
+    if (b === this.biome) return;
+    this.biome = b;
+    if (this.geometry) this.setGeometry(this.geometry, false);
+  }
+
   setGeometry(g: TrackGeometry, fit = true) {
     this.geometry = g;
+    const style = BIOME_STYLE[this.biome];
+    this.app.renderer.background.color = style.ground;
     this.ground.clear();
     this.road.removeChildren().forEach((c) => c.destroy());
     this.deco.removeChildren().forEach((c) => c.destroy());
@@ -283,10 +316,25 @@ export class TrackScene {
       m = 400;
     this.ground
       .rect(b.minX - m, b.minY - m, b.maxX - b.minX + 2 * m, b.maxY - b.minY + 2 * m)
-      .fill({ color: GRASS });
-    // Faixas de grama "aparada".
-    for (let x = b.minX - m; x < b.maxX + m; x += 40)
-      this.ground.rect(x, b.minY - m, 20, b.maxY - b.minY + 2 * m).fill({ color: 0x000000, alpha: 0.035 });
+      .fill({ color: style.ground });
+    if (style.stripes)
+      // Faixas de grama "aparada".
+      for (let x = b.minX - m; x < b.maxX + m; x += 40)
+        this.ground.rect(x, b.minY - m, 20, b.maxY - b.minY + 2 * m).fill({ color: 0x000000, alpha: 0.035 });
+    if (style.speckles.length) {
+      // Pintas de areia/terra (posições fixas pela pista, sem aleatoriedade entre telas).
+      let seed = Number.parseInt(g.hash.slice(0, 8), 16) || 1;
+      const rnd = () => (seed = (seed * 1664525 + 1013904223) >>> 0) / 4294967296;
+      const w = b.maxX - b.minX + 2 * m,
+        h = b.maxY - b.minY + 2 * m;
+      const count = Math.min(4000, Math.round((w * h) / 900));
+      for (let k = 0; k < count; k++) {
+        const r = 1.5 + rnd() * 5;
+        this.ground
+          .ellipse(b.minX - m + rnd() * w, b.minY - m + rnd() * h, r, r * (0.5 + rnd() * 0.5))
+          .fill({ color: style.speckles[k % style.speckles.length]!, alpha: 0.35 });
+      }
+    }
 
     const n = g.count;
     const L = (i: number) => [g.left[(i % n) * 2]!, g.left[(i % n) * 2 + 1]!] as const;
@@ -324,6 +372,18 @@ export class TrackScene {
       surface.poly(pts, true).fill({ color: TERRAIN_COLOR[seg.terrain] });
     }
     this.road.addChild(surface);
+    // Contorno escuro nas bordas: a pista nunca some no fundo, em qualquer cenário.
+    const edge = new Graphics();
+    for (const side of [L, R]) {
+      const [x0, y0] = side(0);
+      edge.moveTo(x0, y0);
+      for (let i = 1; i <= n; i++) {
+        const [x, y] = side(i);
+        edge.lineTo(x, y);
+      }
+      edge.stroke({ width: 0.5, color: 0x1b1b1b, alpha: this.biome === 'grass' ? 0.18 : 0.35 });
+    }
+    this.road.addChild(edge);
 
     // Zebras vermelho/branco nas curvas.
     const curbs = new Graphics();
@@ -427,7 +487,7 @@ export class TrackScene {
     // Decoração com sprites do racing_pack.
     if (this.atlases) {
       for (const d of g.decorations) {
-        const sp = new Sprite(this.atlases.object(d.kind));
+        const sp = new Sprite(this.atlases.object(style.deco[d.kind] ?? d.kind));
         sp.anchor.set(0.5);
         sp.scale.set(d.scale / PX_PER_M);
         sp.rotation = d.rot + (d.kind.startsWith('tribune') || d.kind.startsWith('tent') ? Math.PI / 2 : 0);

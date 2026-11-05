@@ -112,6 +112,7 @@ export async function createRace(
       capacity: input.capacity,
       waitlistMax: input.waitlistMax,
       laps: input.laps ?? cfg.laps,
+      biome: input.biome ?? 'grass',
       weather: input.weather ?? defaultWeather(seed, cfg),
       seed,
       registrationOpensAt: new Date(tl.registrationOpensAt),
@@ -235,7 +236,13 @@ export async function raceSummaries(db: Db | Tx, rows: RaceRow[]): Promise<RaceS
         waitlistMax: r.waitlistMax,
         free: Math.max(0, r.capacity - confirmed),
       },
-      track: { versionId: tv.v.id, name: tv.t.name, length: tv.v.length, terrain: tv.v.terrain },
+      track: {
+        versionId: tv.v.id,
+        name: tv.t.name,
+        length: tv.v.length,
+        terrain: tv.v.terrain,
+        biome: r.biome,
+      },
       crazy: cg
         ? {
             groupId: cg.id,

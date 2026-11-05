@@ -285,6 +285,7 @@ export function PracticeTab({
       <div className="relative self-start">
         <TrackCanvas
           geometry={g}
+          biome={race.track.biome}
           onReady={setScene}
           className="h-[55dvh] min-h-[340px]"
           label="Treino: seu carro na pista"

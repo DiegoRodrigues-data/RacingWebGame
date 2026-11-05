@@ -1,0 +1,1 @@
+ALTER TABLE "races" ADD COLUMN "biome" text DEFAULT 'grass' NOT NULL;

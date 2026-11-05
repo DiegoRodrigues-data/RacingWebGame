@@ -1,4 +1,4 @@
-import { pickTerrain, type GameSettings, type RaceCreate } from '@tracado/shared';
+import { pickBiome, pickTerrain, type Biome, type GameSettings, type RaceCreate } from '@tracado/shared';
 import { createRng } from '@tracado/trackgen';
 import { and, desc, eq, gte, inArray, lte, sql } from 'drizzle-orm';
 import type { Ctx } from '../../context';
@@ -57,6 +57,24 @@ export async function autoTrack(
   };
 }
 
+/** Cenário sorteado pelos pesos das configurações, compatível com o terreno da pista escolhida. */
+export async function autoBiome(
+  ctx: Pick<Ctx, 'db'>,
+  s: GameSettings,
+  track: RaceCreate['track'],
+): Promise<Biome> {
+  let terrain = 'asphalt';
+  if (track.type === 'procedural') terrain = track.params?.terrain ?? 'asphalt';
+  else {
+    const [v] = await ctx.db
+      .select({ t: trackVersions.terrain })
+      .from(trackVersions)
+      .where(eq(trackVersions.id, track.trackVersionId));
+    terrain = v?.t ?? 'asphalt';
+  }
+  return pickBiome(s.tracks.biomes, terrain, Math.random());
+}
+
 async function categoryBySlug(ctx: Pick<Ctx, 'db'>, slug: string) {
   const [c] = await ctx.db.select().from(categories).where(eq(categories.slug, slug));
   return c && c.active ? c : null;
@@ -110,6 +128,7 @@ export async function ensureAutoRaces(ctx: Ctx): Promise<number> {
     for (let k = 0; k < a.categories.length && !cat; k++)
       cat = await categoryBySlug(ctx, a.categories[(slot + k) % a.categories.length]!);
     if (!cat) break;
+    const track = await autoTrack(ctx, st, cat);
     const row = await createRace(
       ctx,
       {
@@ -123,7 +142,8 @@ export async function ensureAutoRaces(ctx: Ctx): Promise<number> {
         capacity: 22,
         waitlistMax: 10,
         ...(a.laps ? { laps: a.laps } : {}),
-        track: await autoTrack(ctx, st, cat),
+        track,
+        biome: await autoBiome(ctx, st, track),
       },
       null,
     );
@@ -166,6 +186,7 @@ export async function ensureAutoTestRaces(ctx: Ctx): Promise<boolean> {
   let cat: CategoryRow | null = null;
   for (const slug of st.autoRaces.categories) if (!cat) cat = await categoryBySlug(ctx, slug);
   if (!cat) return false;
+  const track = await autoTrack(ctx, st, cat);
   const row = await createRace(
     ctx,
     {
@@ -178,7 +199,8 @@ export async function ensureAutoTestRaces(ctx: Ctx): Promise<boolean> {
       capacity: 22,
       waitlistMax: 10,
       laps: tr.laps,
-      track: await autoTrack(ctx, st, cat),
+      track,
+      biome: await autoBiome(ctx, st, track),
     },
     null,
   );

@@ -1,8 +1,9 @@
-import type { GameSettings, TerrainWeights } from '@tracado/shared';
+import { BIOME_LABEL, BIOMES, type GameSettings, type TerrainWeights } from '@tracado/shared';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import clsx from 'clsx';
 import { useEffect, useState, type ReactNode } from 'react';
 import { Link } from 'react-router';
+import { BIOME_CSS } from '../../components/TrackCanvas';
 import { Spinner, toast } from '../../components/ui';
 import { errorMessage, get, put } from '../../lib/api';
 import { fmtKm, TERRAIN_LABEL } from '../../lib/format';
@@ -140,6 +141,7 @@ export default function AdminSettings() {
   const set = <K extends keyof GameSettings>(k: K, v: Partial<GameSettings[K]>) =>
     setS({ ...s, [k]: { ...(s[k] as object), ...v } } as GameSettings);
   const terrainTotal = TERRAIN_KEYS.reduce((a, k) => a + s.tracks.terrains[k], 0);
+  const biomeTotal = BIOMES.reduce((a, k) => a + s.tracks.biomes[k], 0);
   const p = s.phases;
   const prelude = p.practiceMin * 60_000 + (p.traceWindowSec + p.setupLockSec + p.qualifyingSec) * 1000;
 
@@ -330,6 +332,38 @@ export default function AdminSettings() {
               ))}
             </div>
             {!terrainTotal && <p className="text-xs text-hot">Libere pelo menos um terreno.</p>}
+          </div>
+          <div>
+            <span className="label">Cenários (peso no sorteio)</span>
+            <div className="space-y-2">
+              {BIOMES.map((k) => (
+                <label key={k} className="flex items-center gap-3 text-sm">
+                  <span className="flex w-24 items-center gap-1.5 font-semibold">
+                    <span className="inline-block size-3 rounded" style={{ background: BIOME_CSS[k] }} />
+                    {BIOME_LABEL[k]}
+                  </span>
+                  <input
+                    type="range"
+                    min={0}
+                    max={100}
+                    step={5}
+                    value={s.tracks.biomes[k]}
+                    onChange={(e) =>
+                      set('tracks', { biomes: { ...s.tracks.biomes, [k]: Number(e.target.value) } })
+                    }
+                    className="flex-1 accent-[#ffcc00]"
+                  />
+                  <span className="w-12 text-right font-mono text-xs">
+                    {biomeTotal ? Math.round((s.tracks.biomes[k] / biomeTotal) * 100) : 0}%
+                  </span>
+                </label>
+              ))}
+            </div>
+            <p className="mt-1 text-xs text-muted">
+              Só visual. Pista de areia não vai para o deserto e pista de terra não vai para o cânion
+              (sumiriam no fundo).
+            </p>
+            {!biomeTotal && <p className="text-xs text-hot">Libere pelo menos um cenário.</p>}
           </div>
           <div className="grid grid-cols-2 gap-3">
             <Num
