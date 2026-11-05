@@ -264,7 +264,9 @@ export default function AdminSettings() {
               onChange={(v) => set('autoRaces', { laps: v })}
             />
             <Num
-              label="Bots completando o grid"
+              label={
+                s.botPool.enabled ? 'Bots fixos (desligado: há pilotos simulados)' : 'Bots completando o grid'
+              }
               value={s.autoRaces.bots}
               min={0}
               max={21}

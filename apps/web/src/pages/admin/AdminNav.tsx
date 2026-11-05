@@ -10,6 +10,7 @@ export function AdminNav() {
         ['/admin/configuracoes', 'Configurações'],
         ['/admin/corridas', 'Corridas'],
         ['/admin/corridas-teste', 'Corridas teste'],
+        ['/admin/pilotos-simulados', 'Pilotos simulados'],
         ['/admin/categorias', 'Categorias'],
         ['/admin/eventos', 'Eventos'],
         ['/admin/pistas', 'Pistas'],

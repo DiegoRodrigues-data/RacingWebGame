@@ -10,6 +10,7 @@ import { parse } from '../../lib/validate';
 import { audit } from '../admin/routes';
 import type { PhaseEngine } from '../engine/engine';
 import { saveProceduralTrack } from '../tracks/service';
+import { ensureBotPool, forgetOnlineBotCache } from '../bots/service';
 import { getSettings, publicSettings, saveSettings, settingsFromConfig } from './service';
 
 async function poolTracks(ctx: Ctx, ids: string[]) {
@@ -72,6 +73,9 @@ export function settingsRoutes(app: FastifyInstance, ctx: Ctx, engine: PhaseEngi
     const saved = await saveSettings(ctx, next, u.id);
     await audit(ctx, u, 'settings.update', 'settings', 'main', { before, after: saved });
     engine.nudgeAutoRaces();
+    // Pilotos simulados ligados: as personas já existem antes da próxima corrida automática abrir.
+    if (saved.botPool.enabled) await ensureBotPool(ctx, saved.botPool);
+    forgetOnlineBotCache();
     return { settings: saved, pool: await poolTracks(ctx, saved.tracks.pool) };
   });
 

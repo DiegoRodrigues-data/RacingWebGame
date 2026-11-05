@@ -87,6 +87,8 @@ Configurações e painel (admin):
 | `GET /admin/settings` · `PUT /admin/settings` | configurações do jogo (`GameSettings`), categorias disponíveis e pistas do rodízio; o PUT valida categorias e pistas publicadas e vai para a auditoria |
 | `POST /admin/tracks/from-seed`                | `{name?, seed, params, addToPool}`: salva a pista da seed como oficial (e no rodízio)                                                                  |
 | `GET /admin/stats`                            | jogadores, corridas por dia (14 dias), terrenos, grupos ativos e próximas corridas                                                                     |
+| `GET /admin/bots`                             | pilotos simulados: configuração (`botPool`), resumo (ligados, ativos hoje, online agora, inscrições na fila) e lista com persona, corridas e pontos    |
+| `PATCH /admin/bots/:id`                       | `{active?, skill?, joinRate?, hourFrom?, hourTo?}`; desligar tira o piloto das corridas ainda abertas (`leftRaces`) e vai para a auditoria             |
 
 ### Exemplos
 

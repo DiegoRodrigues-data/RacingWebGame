@@ -344,6 +344,18 @@ Fecha o ciclo de vida com resultados persistidos.
 - [x] Autoria com foto e link para o LinkedIn
 - [x] Agradecimento ao Kenney pelo Racing Pack (CC0), com link para kenney.nl, e créditos de fontes e ícones
 
+## Fase 22 — Pilotos simulados ✅
+
+- [x] Personas com habilidade, estilo, horário de jogo e vontade de correr; apelido, cidade, nível e carreira de gente
+- [x] Entre 14 e 30 ativos por dia (configurável), cada um online só no horário dele
+- [x] Inscrição aos poucos na grade automática (planejada na abertura, executada pelo motor), já com traçado e setup
+- [x] Nunca tiram vaga de gente: vagas guardadas e, com o grid cheio, um deles cede a vaga
+- [x] Camuflados para o jogador (sem marca de bot); ranking misto, com opção de mostrar só gente
+- [x] Somam na contagem de online, com opção de desligar
+- [x] Página "Pilotos simulados" no admin: ligar o recurso, limites e ligar/desligar cada piloto (conferida no navegador, desktop e celular)
+- [x] Ligado com a grade já aberta: o motor planeja as corridas abertas na checagem por minuto
+- [ ] Ligar em produção (Admin → Pilotos simulados) e acompanhar as primeiras corridas
+
 ---
 
 ## Ordem recomendada (próximos passos)

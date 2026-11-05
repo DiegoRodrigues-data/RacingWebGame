@@ -20,6 +20,7 @@ import { and, asc, desc, eq, gte, inArray, isNull, lte, sql, type SQL } from 'dr
 import type { Ctx } from '../../context';
 import type { Db, Tx } from '../../db/client';
 import {
+  botPersonas,
   categories,
   crazyGroups,
   entries,
@@ -267,7 +268,8 @@ export async function listEntries(db: Db | Tx, raceId: string): Promise<EntryDto
     .select({
       e: entries,
       p: profiles,
-      bot: users.isBot,
+      // Pilotos simulados (com persona) aparecem como gente; só os bots de demonstração levam a marca.
+      bot: sql<boolean>`${users.isBot} and not exists (select 1 from ${botPersonas} where ${botPersonas.userId} = ${users.id})`,
       hasTrace: sql<boolean>`exists (select 1 from ${traces} where ${traces.raceId} = ${entries.raceId} and ${traces.userId} = ${entries.userId})`,
       hasSetup: sql<boolean>`exists (select 1 from ${setups} where ${setups.raceId} = ${entries.raceId} and ${setups.userId} = ${entries.userId})`,
     })

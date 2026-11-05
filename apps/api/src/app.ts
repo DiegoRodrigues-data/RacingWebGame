@@ -14,6 +14,7 @@ import { LogMailer } from './lib/mailer';
 import { createMetrics } from './lib/metrics';
 import { KeyedMutex } from './lib/mutex';
 import type { Store } from './lib/store';
+import { botRoutes } from './modules/bots/routes';
 import { adminRoutes } from './modules/admin/routes';
 import { authRoutes } from './modules/auth/routes';
 import { crazyRoutes } from './modules/crazy/routes';
@@ -177,6 +178,7 @@ export async function buildApp(
   miscRoutes(app, ctx);
   shareRoutes(app, ctx);
   adminRoutes(app, ctx, engine);
+  botRoutes(app, ctx);
   if (config.ENABLE_DEV_ROUTES && config.NODE_ENV !== 'production') devRoutes(app, ctx, engine);
 
   // ---------------------------------------------------------------- WebSocket

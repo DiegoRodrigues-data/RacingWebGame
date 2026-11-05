@@ -78,6 +78,13 @@
       "when": 1794337555963,
       "tag": "0010_cenarios",
       "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "7",
+      "when": 1794423955963,
+      "tag": "0011_pilotos_simulados",
+      "breakpoints": true
     }
   ]
 }

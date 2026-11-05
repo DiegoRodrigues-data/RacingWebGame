@@ -58,7 +58,10 @@ export const gameSettingsSchema = z
         .max(MAX_CARS_PER_RACE - 1),
       keepHours: z.number().min(0.5).max(168),
       /** Rodízio de terrenos, na ordem: cada corrida teste usa o próximo da lista. */
-      terrains: z.array(z.enum(['asphalt', 'dirt', 'sand', 'mixed'])).min(1).max(4),
+      terrains: z
+        .array(z.enum(['asphalt', 'dirt', 'sand', 'mixed']))
+        .min(1)
+        .max(4),
     }),
     /** Bots nas corridas criadas pelo admin (0 = só gente). */
     adminRaceBots: z
@@ -92,6 +95,28 @@ export const gameSettingsSchema = z
       pool: z.array(z.string().uuid()).max(50),
       poolChance: z.number().min(0).max(1),
     }),
+    /**
+     * Pilotos simulados da grade automática: personagens do sistema que se inscrevem sozinhos, aos poucos, como
+     * gente. Têm nível, estilo e horário próprios e o resultado entra no ranking. Para o jogador são pilotos comuns.
+     */
+    botPool: z.object({
+      enabled: z.boolean(),
+      /** Quantos ficam ativos em cada dia (sorteado entre os dois, por dia). */
+      activeMin: z.number().int().min(0).max(60),
+      activeMax: z.number().int().min(0).max(60),
+      /** No máximo quantos entram numa mesma corrida. */
+      perRaceMax: z
+        .number()
+        .int()
+        .min(1)
+        .max(MAX_CARS_PER_RACE - 1),
+      /** Vagas que nunca ficam com eles (sobram para gente); com o grid cheio, um piloto simulado cede a vaga. */
+      reserveSeats: z.number().int().min(0).max(10),
+      /** Aparecem no ranking (desligado: o ranking mostra só gente). */
+      inRanking: z.boolean(),
+      /** Os que estão "online" no horário somam na contagem de online da página inicial. */
+      countOnline: z.boolean(),
+    }),
     crazy: z.object({
       maxRaces: z.number().int().min(1).max(20),
       maxMembers: z.number().int().min(2).max(MAX_CARS_PER_RACE),
@@ -105,6 +130,7 @@ export const gameSettingsSchema = z
     (s) => Object.values(s.tracks.terrains).some((w) => w > 0),
     'Libere pelo menos um terreno (peso maior que zero).',
   )
+  .refine((s) => s.botPool.activeMin <= s.botPool.activeMax, 'Pilotos simulados: o mínimo passa do máximo.')
   .refine((s) => Object.values(s.tracks.biomes).some((w) => w > 0), 'Libere pelo menos um cenário.')
   .refine(
     (s) =>
@@ -143,6 +169,15 @@ export const DEFAULT_GAME_SETTINGS: GameSettings = {
     seedPrefix: '',
     pool: [],
     poolChance: 0,
+  },
+  botPool: {
+    enabled: false,
+    activeMin: 14,
+    activeMax: 30,
+    perRaceMax: 10,
+    reserveSeats: 2,
+    inRanking: true,
+    countOnline: true,
   },
   crazy: { maxRaces: 10, maxMembers: 20, lapsDefault: 8, chaosDefault: true, botFillDefault: 0 },
 };

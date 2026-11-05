@@ -8,9 +8,9 @@ import {
   type Tyre,
 } from '@tracado/shared';
 import { createRng, offsetsToTrace, suggestedLine, enforceLateralRate } from '@tracado/trackgen';
-import { and, eq, notInArray, sql } from 'drizzle-orm';
+import { and, eq, isNull, notInArray, sql } from 'drizzle-orm';
 import type { Ctx } from '../../context';
-import { crazyGroups, entries, profiles, setups, traces, users } from '../../db/schema';
+import { botPersonas, crazyGroups, entries, profiles, setups, traces, users } from '../../db/schema';
 import { broadcastRace, getCategory, getRaceRow } from '../races/service';
 import { getGeometry } from '../tracks/service';
 
@@ -25,7 +25,15 @@ export async function fillBots(ctx: Ctx, raceId: string, count: number) {
     .select({ id: users.id, color: profiles.carColor })
     .from(users)
     .innerJoin(profiles, eq(profiles.userId, users.id))
-    .where(and(eq(users.isBot, true), taken.length ? notInArray(users.id, taken) : undefined))
+    // Só os bots de demonstração: os pilotos simulados (com persona) correm só na grade automática, como gente.
+    .leftJoin(botPersonas, eq(botPersonas.userId, users.id))
+    .where(
+      and(
+        eq(users.isBot, true),
+        isNull(botPersonas.userId),
+        taken.length ? notInArray(users.id, taken) : undefined,
+      ),
+    )
     .limit(Math.min(count, race.capacity - 1));
   const r = createRng(`${race.seed}|bots`);
   const used = new Set<string>();
@@ -57,6 +65,50 @@ export async function fillBots(ctx: Ctx, raceId: string, count: number) {
   }
   await broadcastRace(ctx, raceId);
   return n;
+}
+
+type Persona = Pick<typeof botPersonas.$inferSelect, 'skill' | 'aggression' | 'pitRisk'>;
+
+/** Setup de um piloto simulado: o estilo da persona puxa motor, pneus, asa e o risco de parar mais. */
+function personaSetup(seed: string, cfg: CategoryConfig, laps: number, wet: boolean, p: Persona): CarSetup {
+  const r = createRng(seed);
+  const allowed = cfg.setupLimits.allowedTyres;
+  const dry = allowed.filter((t) => t !== 'wet');
+  const pool = dry.length ? dry : allowed;
+  const pref: Tyre[] =
+    p.aggression > 0.66 ? ['soft', 'medium'] : p.aggression < 0.33 ? ['hard', 'medium'] : ['medium'];
+  const pickTyre = () => {
+    const ok = pool.filter((t) => pref.includes(t));
+    // Quem tem menos habilidade erra mais a escolha do pneu.
+    return ok.length && r.chance(0.5 + p.skill * 0.45) ? r.pick(ok) : r.pick(pool);
+  };
+  const tyre: Tyre = wet && allowed.includes('wet') && r.chance(0.6 + p.skill * 0.4) ? 'wet' : pickTyre();
+  const max = Math.max(MIN_PIT_STOPS, cfg.setupLimits.maxPitStops);
+  const stops = Math.min(max, MIN_PIT_STOPS + (r.chance(p.pitRisk * 0.6) ? 1 : 0));
+  const pitStops: CarSetup['pitStops'] = [];
+  const jitter = Math.round(3 * (1 - p.skill));
+  for (let k = 1; k <= stops; k++) {
+    const prev = pitStops.at(-1)?.lap ?? 0;
+    const lap = Math.min(
+      laps - 1,
+      Math.max(prev + 1, Math.round((laps * k) / (stops + 1)) + r.int(-jitter, jitter)),
+    );
+    if (lap > prev) pitStops.push({ lap, tyre: pickTyre() });
+  }
+  const engines = cfg.setupLimits.allowedEngines.length ? cfg.setupLimits.allowedEngines : ENGINE_MAPS;
+  const wantEngine = p.aggression > 0.66 ? 'power' : p.aggression < 0.25 ? 'economy' : 'balanced';
+  const pressure = () => Math.round(23 + r.range(-2, 2) * (1 - p.skill * 0.7));
+  const aero = Math.round(5.5 + (p.aggression - 0.5) * -4 + r.range(-2, 2) * (1 - p.skill * 0.6));
+  return {
+    tyre,
+    pitStops,
+    tyrePressure: { front: pressure(), rear: pressure() },
+    aero: Math.max(cfg.setupLimits.aero.min, Math.min(cfg.setupLimits.aero.max, aero)),
+    engine: engines.includes(wantEngine) && r.chance(0.8) ? wantEngine : r.pick(engines),
+    gearing: Math.max(1, Math.min(10, Math.round(5.5 + r.range(-2.5, 2.5) * (1 - p.skill * 0.6)))),
+    terrainPrep: r.chance(0.5 + p.skill * 0.5) ? 'asphalt' : r.pick(TERRAINS),
+    weatherBet: wet ? (r.chance(0.5 + p.skill * 0.5) ? 'wet' : 'mixed') : r.pick(['dry', 'mixed'] as const),
+  };
 }
 
 function botSetup(seed: string, cfg: CategoryConfig, laps: number, wet: boolean): CarSetup {
@@ -107,9 +159,10 @@ export async function fillCrazyBots(ctx: Ctx, race: { id: string; crazyGroupId: 
 export async function prepareBots(ctx: Ctx, raceId: string) {
   const race = await getRaceRow(ctx.db, raceId);
   const bots = await ctx.db
-    .select({ id: users.id })
+    .select({ id: users.id, persona: botPersonas })
     .from(entries)
     .innerJoin(users, eq(users.id, entries.userId))
+    .leftJoin(botPersonas, eq(botPersonas.userId, users.id))
     .where(and(eq(entries.raceId, raceId), eq(entries.status, 'confirmed'), eq(users.isBot, true)));
   if (!bots.length) return;
   const g = await getGeometry(ctx, race.trackVersionId);
@@ -118,10 +171,15 @@ export async function prepareBots(ctx: Ctx, raceId: string) {
   const wet = race.weather.base === 'rain';
   for (const b of bots) {
     const r = createRng(`${race.seed}|bot|${b.id}`);
-    const aggr = r.range(0.4, 1.1);
+    const p = b.persona;
+    // Persona: quanto mais habilidade, mais perto da linha ideal e menos ondulação no traçado.
+    const aggr = p
+      ? Math.max(0.4, Math.min(1.1, 0.55 + 0.45 * p.skill + r.range(-0.1, 0.1)))
+      : r.range(0.4, 1.1);
+    const wobble = p ? 0.03 + 0.12 * (1 - p.skill) : 0.08;
     const off = enforceLateralRate(
       g,
-      base.map((d, i) => Math.max(-1, Math.min(1, d * aggr + Math.sin(i / 23 + r.range(0, 6)) * 0.08))),
+      base.map((d, i) => Math.max(-1, Math.min(1, d * aggr + Math.sin(i / 23 + r.range(0, 6)) * wobble))),
     );
     const now = new Date(ctx.clock.now());
     await ctx.db
@@ -133,7 +191,9 @@ export async function prepareBots(ctx: Ctx, raceId: string) {
       .values({
         raceId,
         userId: b.id,
-        setup: botSetup(`${race.seed}|setup|${b.id}`, cat.config, race.laps, wet),
+        setup: p
+          ? personaSetup(`${race.seed}|setup|${b.id}`, cat.config, race.laps, wet, p)
+          : botSetup(`${race.seed}|setup|${b.id}`, cat.config, race.laps, wet),
         updatedAt: now,
       })
       .onConflictDoNothing();

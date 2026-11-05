@@ -10,10 +10,10 @@ import {
   WITHDRAW_PHASES,
   type EntryStatus,
 } from '@tracado/shared';
-import { and, asc, eq, gt, inArray, lt, ne, notInArray, sql } from 'drizzle-orm';
+import { and, asc, desc, eq, gt, inArray, lt, ne, notInArray, sql } from 'drizzle-orm';
 import type { Ctx } from '../../context';
 import type { Tx } from '../../db/client';
-import { crazyMembers, entries, profiles, races, users } from '../../db/schema';
+import { botPersonas, crazyMembers, entries, profiles, races, users } from '../../db/schema';
 import type { AuthUser } from '../../lib/auth';
 import { parse } from '../../lib/validate';
 import { notify } from '../notifications/service';
@@ -65,7 +65,7 @@ async function checkEligibility(ctx: Ctx, tx: Tx, race: RaceRow, user: AuthUser)
   return p;
 }
 
-async function checkScheduleConflict(tx: Tx, race: RaceRow, userId: string) {
+export async function checkScheduleConflict(tx: Tx, race: RaceRow, userId: string) {
   const start = race.practiceAt;
   const end = new Date((race.raceEndsAt ?? race.raceAt).getTime() + RACE_WINDOW_AFTER_MS);
   const rows = await tx
@@ -99,6 +99,41 @@ async function checkCrazyAccess(tx: Tx, race: RaceRow, userId: string, guest: bo
       'FORBIDDEN',
       'Convidados correm só na Corrida Maluca. Crie sua conta para disputar as corridas abertas.',
     );
+}
+
+/** Vaga liberada com as inscrições abertas: o primeiro da fila de espera é confirmado. */
+export async function promoteNext(tx: Tx, raceId: string, now: number): Promise<string | null> {
+  const [next] = await tx
+    .select({ e: entries, color: profiles.carColor })
+    .from(entries)
+    .innerJoin(profiles, eq(profiles.userId, entries.userId))
+    .where(and(eq(entries.raceId, raceId), eq(entries.status, 'waitlisted')))
+    .orderBy(asc(entries.createdAt))
+    .limit(1);
+  if (!next) return null;
+  const car = await assignCar(tx, raceId, next.color);
+  await tx
+    .update(entries)
+    .set({ status: 'confirmed', ...car, confirmedAt: new Date(now), updatedAt: new Date(now) })
+    .where(eq(entries.id, next.e.id));
+  return next.e.userId;
+}
+
+/** Tira do grid o piloto simulado (com persona) que entrou por último. Devolve se liberou uma vaga. */
+async function yieldBotSeat(tx: Tx, raceId: string, now: number): Promise<boolean> {
+  const [bot] = await tx
+    .select({ id: entries.id })
+    .from(entries)
+    .innerJoin(botPersonas, eq(botPersonas.userId, entries.userId))
+    .where(and(eq(entries.raceId, raceId), eq(entries.status, 'confirmed')))
+    .orderBy(desc(entries.confirmedAt))
+    .limit(1);
+  if (!bot) return false;
+  await tx
+    .update(entries)
+    .set({ status: 'cancelled', updatedAt: new Date(now) })
+    .where(eq(entries.id, bot.id));
+  return true;
 }
 
 export interface RegisterResult {
@@ -142,6 +177,8 @@ export async function register(ctx: Ctx, raceId: string, user: AuthUser): Promis
           throw new AppError('ALREADY_REGISTERED', 'Você já está inscrito nesta corrida.');
         await checkScheduleConflict(tx, race, user.id);
         const cap = await capacityOf(tx, race);
+        // Grid cheio: um piloto simulado cede a vaga (o último que entrou), como se tivesse desistido.
+        if (cap.confirmed >= race.capacity && (await yieldBotSeat(tx, raceId, now))) cap.confirmed--;
         let status: EntryStatus;
         let car = { carColor: profile.carColor, carModel: 0, carNumber: 0 };
         if (cap.confirmed < race.capacity) {
@@ -205,23 +242,7 @@ export async function cancel(
           .update(entries)
           .set({ status: 'cancelled', updatedAt: new Date(now) })
           .where(eq(entries.id, e.id));
-        if (e.status === 'confirmed') {
-          const [next] = await tx
-            .select({ e: entries, color: profiles.carColor })
-            .from(entries)
-            .innerJoin(profiles, eq(profiles.userId, entries.userId))
-            .where(and(eq(entries.raceId, raceId), eq(entries.status, 'waitlisted')))
-            .orderBy(asc(entries.createdAt))
-            .limit(1);
-          if (next) {
-            const car = await assignCar(tx, raceId, next.color);
-            await tx
-              .update(entries)
-              .set({ status: 'confirmed', ...car, confirmedAt: new Date(now), updatedAt: new Date(now) })
-              .where(eq(entries.id, next.e.id));
-            promoted = next.e.userId;
-          }
-        }
+        if (e.status === 'confirmed') promoted = await promoteNext(tx, raceId, now);
         return { status: 'cancelled' as EntryStatus, promoted, raceName: race.name };
       }
       await tx

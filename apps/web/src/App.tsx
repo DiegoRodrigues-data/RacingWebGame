@@ -37,6 +37,7 @@ const AdminAudit = lazy(() => import('./pages/admin/AdminAudit'));
 const AdminSettings = lazy(() => import('./pages/admin/AdminSettings'));
 const AdminTrackGen = lazy(() => import('./pages/admin/AdminTrackGen'));
 const AdminTestRaces = lazy(() => import('./pages/admin/AdminTestRaces'));
+const AdminBots = lazy(() => import('./pages/admin/AdminBots'));
 
 function RequireAuth({ children, role }: { children: ReactNode; role?: 'admin' | 'editor' }) {
   const { me, ready } = useSession();
@@ -236,6 +237,14 @@ export function App() {
             element={
               <RequireAuth role="admin">
                 <AdminTestRaces />
+              </RequireAuth>
+            }
+          />
+          <Route
+            path="/admin/pilotos-simulados"
+            element={
+              <RequireAuth role="admin">
+                <AdminBots />
               </RequireAuth>
             }
           />

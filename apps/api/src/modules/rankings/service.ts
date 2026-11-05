@@ -12,7 +12,16 @@ import {
 import { and, asc, desc, eq, gte, lte, sql } from 'drizzle-orm';
 import type { Ctx } from '../../context';
 import type { Db, Tx } from '../../db/client';
-import { profiles, raceResults, races, rankingEntries, seasonMemberships, seasons } from '../../db/schema';
+import {
+  profiles,
+  raceResults,
+  races,
+  rankingEntries,
+  seasonMemberships,
+  seasons,
+  users,
+} from '../../db/schema';
+import { getSettings } from '../settings/service';
 import { notify } from '../notifications/service';
 
 type SeasonRow = typeof seasons.$inferSelect;
@@ -228,8 +237,10 @@ export async function getRanking(
     key = scopeKeys(p).find((k) => k.scope === q.scope)!.key;
   }
   if (q.scope === 'world') key = 'world';
+  // Configurações do jogo → pilotos simulados: com `inRanking` desligado, o ranking mostra só gente.
+  const withBots = (await getSettings(ctx)).botPool.inRanking;
   const ver = (await ctx.store.get('ranking:ver')) ?? '0';
-  const cacheKey = `ranking:${ver}:${season.id}:${q.scope}:${key}:${q.page}:${q.pageSize}`;
+  const cacheKey = `ranking:${ver}:${withBots ? 'b' : 'h'}:${season.id}:${q.scope}:${key}:${q.page}:${q.pageSize}`;
   let base: Omit<RankingPageDto, 'me'> | null = null;
   const cached = await ctx.store.get(cacheKey);
   if (cached) base = JSON.parse(cached) as Omit<RankingPageDto, 'me'>;
@@ -239,6 +250,9 @@ export async function getRanking(
     eq(rankingEntries.scope, q.scope),
     eq(rankingEntries.scopeKey, key),
     gte(rankingEntries.races, minRaces),
+    withBots
+      ? undefined
+      : sql`not exists (select 1 from ${users} where ${users.id} = ${rankingEntries.userId} and ${users.isBot})`,
   );
   const toRow = (
     r: { e: typeof rankingEntries.$inferSelect; p: typeof profiles.$inferSelect },

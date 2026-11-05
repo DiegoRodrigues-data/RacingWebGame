@@ -490,4 +490,47 @@ export const gameSettings = pgTable('game_settings', {
   updatedBy: uuid('updated_by').references(() => users.id),
 });
 
+// ---------------------------------------------------------------- Pilotos simulados (grade automática)
+/**
+ * Personagem de um piloto simulado (`users.is_bot` com linha aqui). Os bots sem persona são os de demonstração
+ * das corridas teste e da Corrida Maluca; os com persona se passam por gente na grade automática.
+ */
+export const botPersonas = pgTable('bot_personas', {
+  userId: uuid('user_id')
+    .primaryKey()
+    .references(() => users.id, { onDelete: 'cascade' }),
+  /** Desligado pelo admin: não se inscreve mais e sai das corridas ainda abertas. */
+  active: boolean('active').notNull().default(true),
+  /** 0..1: quão perto da linha ideal ele desenha e quão bem acerta o setup. */
+  skill: real('skill').notNull(),
+  /** 0..1: mapa de motor e pneus mais agressivos. */
+  aggression: real('aggression').notNull(),
+  /** 0..1: chance de arriscar uma parada a mais. */
+  pitRisk: real('pit_risk').notNull(),
+  /** Horário em que costuma jogar (hora de Brasília, [de, até), pode virar a meia-noite; de == até = o dia todo). */
+  hourFrom: integer('hour_from').notNull(),
+  hourTo: integer('hour_to').notNull(),
+  /** Chance de entrar numa corrida em que está online. */
+  joinRate: real('join_rate').notNull(),
+  createdAt: ts('created_at').notNull().defaultNow(),
+});
+
+/** Inscrição planejada de um piloto simulado: o motor inscreve quando chega a hora (idempotente). */
+export const botPlans = pgTable(
+  'bot_plans',
+  {
+    raceId: uuid('race_id')
+      .notNull()
+      .references(() => races.id, { onDelete: 'cascade' }),
+    userId: uuid('user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    joinAt: ts('join_at').notNull(),
+    doneAt: ts('done_at'),
+    /** joined | skipped (persona desligada, grid sem vaga, corrida fechada...). */
+    outcome: text('outcome'),
+  },
+  (t) => [primaryKey({ columns: [t.raceId, t.userId] }), index('bot_plans_due_idx').on(t.doneAt, t.joinAt)],
+);
+
 export type EditorTrackJson = EditorTrack;

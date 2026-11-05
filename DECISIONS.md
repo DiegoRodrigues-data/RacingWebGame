@@ -180,6 +180,30 @@ traçado e corrida contra fantasmas rodam no aparelho e nada é enviado ao servi
   (`localStorage`). O som só começa depois do primeiro toque ou clique (regra dos navegadores) e pausa com a aba
   escondida.
 
+### Pilotos simulados (grade automática)
+
+- **Personas fixas** (`bot_personas`, módulo `modules/bots`): cada piloto simulado é um usuário `is_bot` com
+  habilidade, agressividade, risco de parada, horário em que joga e vontade de correr. Assim o resultado é
+  coerente de uma corrida para outra e o ranking faz sentido: numa amostra de 11 corridas, os de habilidade 0,9
+  chegaram em média na posição relativa 0,30 e os de 0,1 na 0,75. A habilidade muda o traçado (quanto segue a
+  linha ideal e quanto ondula) e o setup (pneu, motor, asa, pressões); a simulação não muda (`SIM_VERSION` igual).
+- **Camuflados, por escolha do dono do jogo**: para o jogador são pilotos comuns. A lista do grid não traz a marca
+  `bot` para eles (só para os bots de demonstração das corridas teste e da Corrida Maluca), têm apelido, cidade,
+  nível e histórico de carreira, e somam na contagem de online quando estão no horário deles
+  (`botPool.countOnline`). O ranking é misto; `botPool.inRanking` desligado mostra só gente. Com prêmios de valor
+  no ranking, desligue `inRanking` ou exclua-os na apuração.
+- **Inscrição aos poucos**: na abertura das inscrições de uma corrida automática, o motor planeja quem entra e
+  quando (`bot_plans`, entre 3 h antes do treino e a metade do treino, mais denso perto da largada); o tick
+  inscreve quem chegou a hora, com o mesmo mutex e `FOR UPDATE` da inscrição de gente. Traçado e setup são gravados
+  já na inscrição, para o piloto aparecer "pronto" como alguém que já preparou.
+- **Nunca tiram vaga de gente**: deixam `reserveSeats` vagas livres e, com o grid cheio, o último piloto simulado
+  que entrou cede a vaga na hora (`yieldBotSeat` em `races/entries.ts`).
+- **Rodízio diário**: entre `activeMin` e `activeMax` personas ficam ativas por dia (sorteio estável pela data de
+  Brasília). São criadas `activeMax + 10`, para variar quem aparece. Os bots de demonstração (`DEMO_BOTS`, seed)
+  não entram nesse rodízio, e as personas não entram nas corridas teste nem na Corrida Maluca.
+- **Desligar**: um piloto desligado pelo admin sai das corridas ainda abertas (como uma desistência) e perde os
+  planos pendentes. Desligar o recurso inteiro só para as inscrições novas; quem já entrou corre.
+
 ## Modelo de simulação
 
 Determinístico (PRNG sfc32 semeado; nenhuma fonte de aleatoriedade externa). Por volta, cada carro tem um perfil de velocidade
@@ -239,4 +263,5 @@ Balanceamento (`pnpm balance`, 210 corridas, 7 cenários): estratégia de pneus 
 - Idiomas além do pt-BR.
 - Mínimo de corridas para aparecer no ranking (`RANKING_MIN_RACES`, hoje 1) e limiares de promoção/rebaixamento.
 - Velocidade de transmissão por categoria (hoje 2× a 4×) versus duração real desejada das corridas.
-- Uso de pilotos-bot em produção (hoje desligado por padrão: `DEMO_BOTS=0`).
+- Uso de pilotos-bot de demonstração em produção (hoje desligado por padrão: `DEMO_BOTS=0`). Os pilotos simulados
+  da grade automática são ligados no admin (Pilotos simulados).

@@ -14,6 +14,7 @@ import { notify } from '../notifications/service';
 import { bumpRankingCache } from '../rankings/service';
 import { getRaceRow, listEntries, raceSummaries, timelineOf, type RaceRow } from '../races/service';
 import { getSettings } from '../settings/service';
+import { planBotEntries, planOpenAutoRaces, runBotPlans } from '../bots/service';
 import { ensureAutoRaces, ensureAutoTestRaces } from './autoRaces';
 import { fillBots, fillCrazyBots, prepareBots } from './bots';
 import { forgetQualiLive, qualifyingRows } from './qualiLive';
@@ -85,12 +86,16 @@ export class PhaseEngine {
         for (const r of due) await this.advance(r);
       }
       await this.traceWarnings();
+      // Pilotos simulados cuja hora de se inscrever chegou.
+      await runBotPlans(this.ctx);
       // Grade automática: uma checagem por minuto basta (cada função vê nas configurações se está ligada).
       if (this.ctx.clock.now() - this.lastAutoRaces >= 60_000) {
         this.lastAutoRaces = this.ctx.clock.now();
         const created = (await ensureAutoRaces(this.ctx)) + ((await ensureAutoTestRaces(this.ctx)) ? 1 : 0);
         // Corrida recém-criada já abre as inscrições neste mesmo ciclo.
         if (created) for (const r of await this.dueRaces()) await this.advance(r);
+        // Pilotos simulados ligados com a grade já aberta: planeja as corridas que ficaram sem plano.
+        await planOpenAutoRaces(this.ctx);
       }
       await this.broadcastPlayback();
     } catch (e) {
@@ -249,6 +254,11 @@ export class PhaseEngine {
         if (!race.crazyGroupId) {
           // Bots por tipo de corrida (configurações do jogo).
           const st = await getSettings(ctx);
+          // Grade automática com pilotos simulados: eles se inscrevem aos poucos, no lugar do preenchimento fixo.
+          if (race.flags.auto && !race.flags.autoTest && st.botPool.enabled) {
+            await planBotEntries(ctx, fresh);
+            break;
+          }
           const n = race.flags.autoTest
             ? st.testRaces.bots
             : race.flags.auto

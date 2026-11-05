@@ -26,6 +26,7 @@ import {
 } from '../engine/qualiLive';
 import { elapsedSim, loadReplay, resultRows } from '../engine/runner';
 import { publicEvents } from '../events/service';
+import { onlineBotCount } from '../bots/service';
 import { currentSeason, getRanking, scopeKeys } from '../rankings/service';
 import { getGeometry } from '../tracks/service';
 import { cancel, chooseCar, register } from './entries';
@@ -356,7 +357,8 @@ export function raceRoutes(app: FastifyInstance, ctx: Ctx) {
       stats: {
         players: players?.n ?? 0,
         liveRaces: live.filter((r) => r.status === 'race').length,
-        online: ctx.hub.connectionCount,
+        // Pilotos simulados no horário deles somam (configurações do jogo → pilotos simulados).
+        online: ctx.hub.connectionCount + (await onlineBotCount(ctx)),
       },
     };
   });
