@@ -354,7 +354,8 @@ Fecha o ciclo de vida com resultados persistidos.
 - [x] Somam na contagem de online, com opção de desligar
 - [x] Página "Pilotos simulados" no admin: ligar o recurso, limites e ligar/desligar cada piloto (conferida no navegador, desktop e celular)
 - [x] Ligado com a grade já aberta: o motor planeja as corridas abertas na checagem por minuto
-- [ ] Ligar em produção (Admin → Pilotos simulados) e acompanhar as primeiras corridas
+- [x] Ligados por padrão (`SIMULATED_DRIVERS=true`) e em produção desde 05/11/2026; bots de demonstração saem da grade automática
+- [ ] Acompanhar o preenchimento à noite e ajustar horários e vontade de correr se os grids ficarem vazios à tarde
 
 ---
 
