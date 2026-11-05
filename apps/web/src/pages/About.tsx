@@ -1,5 +1,6 @@
 import { ExternalLink, Heart } from 'lucide-react';
 import type { ReactNode } from 'react';
+import authorPhoto from '../assets/about/diego.jpg';
 
 const AUTHOR = 'Diego de Castro Rodrigues';
 const LINKEDIN = 'https://www.linkedin.com/in/diego-rodrigues-ph-d-914a395a/';
@@ -35,18 +36,29 @@ export default function About() {
       </header>
 
       <Section title="Autoria">
-        <p>
-          Criado, desenvolvido e mantido por <strong>{AUTHOR}</strong>.
-        </p>
-        <a
-          className="btn-ghost w-fit"
-          href={LINKEDIN}
-          target="_blank"
-          rel="noreferrer"
-          aria-label="Perfil no LinkedIn (abre em nova aba)"
-        >
-          LinkedIn <ExternalLink size={16} aria-hidden />
-        </a>
+        <div className="flex flex-col items-center gap-4 text-center sm:flex-row sm:text-left">
+          <img
+            src={authorPhoto}
+            alt={`Foto de ${AUTHOR}`}
+            width={112}
+            height={112}
+            className="size-28 shrink-0 rounded-full border-2 border-race object-cover object-top"
+          />
+          <div className="space-y-3">
+            <p>
+              Criado, desenvolvido e mantido por <strong>{AUTHOR}</strong>.
+            </p>
+            <a
+              className="btn-ghost w-fit"
+              href={LINKEDIN}
+              target="_blank"
+              rel="noreferrer"
+              aria-label="Perfil no LinkedIn (abre em nova aba)"
+            >
+              LinkedIn <ExternalLink size={16} aria-hidden />
+            </a>
+          </div>
+        </div>
       </Section>
 
       <Section title="Agradecimentos">
