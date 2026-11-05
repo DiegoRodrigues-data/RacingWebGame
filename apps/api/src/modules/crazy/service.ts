@@ -3,6 +3,9 @@ import {
   AppError,
   CRAZY_AWARDS,
   CRAZY_MAX_MEMBERS,
+  CRAZY_SKIP_LOCK_MS,
+  CRAZY_SKIPPABLE_PHASES,
+  crazyStartAllowed,
   crazyPointsFor,
   DEFAULT_PRACTICE_MINUTES,
   type AuthResponse,
@@ -14,6 +17,7 @@ import {
   type CrazyRaceDto,
   type CrazyStandingDto,
   type GuestJoinInput,
+  type RaceSummaryDto,
 } from '@tracado/shared';
 import { and, asc, eq, gt, inArray, sql } from 'drizzle-orm';
 import type { Ctx } from '../../context';
@@ -32,7 +36,14 @@ import type { AuthUser } from '../../lib/auth';
 import { hashPassword, randomToken, sha256 } from '../../lib/crypto';
 import { getMe, issueTokens, sendVerification } from '../auth/service';
 import { assignCar } from '../races/entries';
-import { broadcastRace, createRace, raceSummaries, type RaceRow } from '../races/service';
+import {
+  broadcastRace,
+  createRace,
+  getRaceRow,
+  publishEntries,
+  raceSummaries,
+  type RaceRow,
+} from '../races/service';
 import { raceAwards } from './awards';
 
 type GroupRow = typeof crazyGroups.$inferSelect;
@@ -365,8 +376,29 @@ async function ownerNick(ctx: Pick<Ctx, 'db'>, ownerId: string) {
   return p?.n ?? '—';
 }
 
-function summaryOf(g: GroupRow, rs: RaceRow[], members: number, owner: string): CrazyGroupSummaryDto {
+/** Etapa em destaque: a que está rolando ou a próxima; com tudo encerrado, a última que correu. */
+function featuredOf(rs: RaceRow[]): RaceRow | null {
+  return (
+    rs.find((r) => !DONE.includes(r.status)) ??
+    [...rs].reverse().find((r) => r.status !== 'cancelled') ??
+    rs.at(-1) ??
+    null
+  );
+}
+
+async function summaryOf(
+  ctx: Pick<Ctx, 'db'>,
+  g: GroupRow,
+  rs: RaceRow[],
+  members: number,
+  owner: string,
+  sums?: RaceSummaryDto[],
+): Promise<CrazyGroupSummaryDto> {
   const next = rs.find((r) => !DONE.includes(r.status));
+  const feat = featuredOf(rs);
+  const featured = feat
+    ? (sums?.find((x) => x.id === feat.id) ?? (await raceSummaries(ctx.db, [feat]))[0]!)
+    : null;
   return {
     id: g.id,
     name: g.name,
@@ -376,6 +408,7 @@ function summaryOf(g: GroupRow, rs: RaceRow[], members: number, owner: string): 
     members,
     nextRaceAt: next ? next.practiceAt.toISOString() : null,
     status: statusOf(rs),
+    featured,
   };
 }
 
@@ -389,6 +422,7 @@ export async function myGroups(ctx: Ctx, user: AuthUser): Promise<CrazyGroupSumm
   const out = await Promise.all(
     gs.map(async ({ g }) =>
       summaryOf(
+        ctx,
         g,
         await groupRaces(ctx, g.id),
         (await memberIds(ctx, g.id)).length,
@@ -414,7 +448,7 @@ export async function invitePreview(ctx: Ctx, code: string, user: AuthUser | nul
     .innerJoin(profiles, eq(profiles.userId, crazyMembers.userId))
     .where(eq(crazyMembers.groupId, g.id))
     .orderBy(asc(crazyMembers.joinedAt));
-  const s = summaryOf(g, rs, mem.length, await ownerNick(ctx, g.ownerId));
+  const s = await summaryOf(ctx, g, rs, mem.length, await ownerNick(ctx, g.ownerId));
   return {
     id: g.id,
     name: g.name,
@@ -501,6 +535,7 @@ export async function getGroup(ctx: Ctx, id: string, user: AuthUser | null): Pro
       trackName: sums[i]!.track.name,
       podium: rows.slice(0, 3).map((x, k) => ({ userId: x.r.userId, nickname: x.nick, position: k + 1 })),
       awards,
+      race: sums[i]!,
     });
   }
   // Quem ainda não correu aparece zerado na tabela.
@@ -526,7 +561,7 @@ export async function getGroup(ctx: Ctx, id: string, user: AuthUser | null): Pro
         a.nickname.localeCompare(b.nickname),
     )
     .map((s, k) => ({ ...s, position: k + 1 }));
-  const summary = summaryOf(g, rs, mem.length, owner);
+  const summary = await summaryOf(ctx, g, rs, mem.length, owner, sums);
   const honors: CrazyGroupDto['honors'] = [];
   if (summary.status === 'finished' && rs.length > 1)
     for (const key of Object.keys(CRAZY_AWARDS) as CrazyAwardKey[]) {
@@ -555,4 +590,80 @@ export async function getGroup(ctx: Ctx, id: string, user: AuthUser | null): Pro
     standings,
     honors,
   };
+}
+
+async function readyCount(ctx: Pick<Ctx, 'db'>, raceId: string) {
+  const rows = await ctx.db
+    .select({ ready: entries.readyAt })
+    .from(entries)
+    .innerJoin(users, eq(users.id, entries.userId))
+    .where(and(eq(entries.raceId, raceId), eq(entries.status, 'confirmed'), eq(users.isBot, false)));
+  return { humans: rows.length, ready: rows.filter((r) => r.ready).length };
+}
+
+async function crazyPrepRace(ctx: Pick<Ctx, 'db' | 'clock'>, raceId: string) {
+  const race = await getRaceRow(ctx.db, raceId);
+  if (!race.crazyGroupId)
+    throw new AppError('FORBIDDEN', 'Só as corridas da Corrida Maluca pulam o preparo.');
+  if (
+    !(CRAZY_SKIPPABLE_PHASES as readonly string[]).includes(race.status) ||
+    ctx.clock.now() >= race.setupLockAt.getTime() - CRAZY_SKIP_LOCK_MS
+  )
+    throw new AppError('INVALID_TRANSITION', 'O preparo desta corrida já acabou.');
+  return race;
+}
+
+/**
+ * Pula o resto do preparo (treino e janela de traçado): parque fechado já, classificação em 10 s e a largada
+ * depois da sessão de classificação ao vivo (que nunca é pulada). As próximas etapas do grupo não mudam.
+ * O UPDATE é condicional na fase, então dois pedidos simultâneos antecipam uma vez só.
+ */
+async function skipPrep(ctx: Ctx, race: RaceRow, reason: string) {
+  const now = ctx.clock.now();
+  const qualiMs = race.raceAt.getTime() - race.qualifyingAt.getTime();
+  const qualifyingAt = now + CRAZY_SKIP_LOCK_MS;
+  const upd = await ctx.db
+    .update(races)
+    .set({
+      traceWindowAt: new Date(Math.min(race.traceWindowAt.getTime(), now)),
+      setupLockAt: new Date(now),
+      qualifyingAt: new Date(qualifyingAt),
+      raceAt: new Date(qualifyingAt + qualiMs),
+      // Sem os avisos de "janela abriu" e "falta 1 minuto": a janela some.
+      flags: { ...race.flags, prepSkipped: true, traceWarned: true },
+    })
+    .where(and(eq(races.id, race.id), inArray(races.status, [...CRAZY_SKIPPABLE_PHASES])))
+    .returning({ id: races.id });
+  if (upd.length) ctx.log.info({ raceId: race.id, reason }, 'Corrida Maluca: preparo pulado');
+  return upd.length > 0;
+}
+
+/** "Estou pronto": quando todos os amigos inscritos estão prontos, a corrida pula o resto do preparo. */
+export async function setReady(ctx: Ctx, raceId: string, user: AuthUser, ready: boolean) {
+  const race = await crazyPrepRace(ctx, raceId);
+  const upd = await ctx.db
+    .update(entries)
+    .set({ readyAt: ready ? new Date(ctx.clock.now()) : null })
+    .where(and(eq(entries.raceId, raceId), eq(entries.userId, user.id), eq(entries.status, 'confirmed')))
+    .returning({ id: entries.id });
+  if (!upd.length) throw new AppError('NOT_REGISTERED', 'Você não está no grid desta corrida.');
+  const count = await readyCount(ctx, raceId);
+  const skipped = ready && count.ready === count.humans ? await skipPrep(ctx, race, 'todos prontos') : false;
+  await publishEntries(ctx, raceId);
+  return { ...count, skipped };
+}
+
+/** "Largar agora" do organizador: pula o preparo com pelo menos metade da turma pronta. */
+export async function startNow(ctx: Ctx, raceId: string, user: AuthUser) {
+  const race = await crazyPrepRace(ctx, raceId);
+  const [g] = await ctx.db.select().from(crazyGroups).where(eq(crazyGroups.id, race.crazyGroupId!));
+  if (g?.ownerId !== user.id) throw new AppError('FORBIDDEN', 'Só quem criou o grupo manda largar.');
+  const count = await readyCount(ctx, raceId);
+  if (!crazyStartAllowed(count.ready, count.humans))
+    throw new AppError(
+      'CONFLICT',
+      `Espere pelo menos metade da turma ficar pronta (${count.ready}/${count.humans}).`,
+    );
+  const skipped = await skipPrep(ctx, race, 'organizador mandou largar');
+  return { ...count, skipped };
 }

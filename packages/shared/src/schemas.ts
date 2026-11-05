@@ -408,6 +408,9 @@ export interface EntryDto {
   /** Preparação visível ao espectador (só se já salvou, nunca o conteúdo). */
   hasTrace: boolean;
   hasSetup: boolean;
+  /** Corrida Maluca: marcou "Estou pronto". */
+  ready: boolean;
+  bot: boolean;
 }
 
 export interface RaceDetailDto extends RaceSummaryDto {

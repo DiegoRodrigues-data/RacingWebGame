@@ -30,6 +30,7 @@ import {
   traces,
   tracks,
   trackVersions,
+  users,
 } from '../../db/schema';
 import type { AuthUser } from '../../lib/auth';
 import { createProceduralVersion, newSeed } from '../tracks/service';
@@ -235,7 +236,13 @@ export async function raceSummaries(db: Db | Tx, rows: RaceRow[]): Promise<RaceS
       },
       track: { versionId: tv.v.id, name: tv.t.name, length: tv.v.length, terrain: tv.v.terrain },
       crazy: cg
-        ? { groupId: cg.id, groupName: cg.name, round: r.crazyRound ?? 1, rounds: cg.raceCount }
+        ? {
+            groupId: cg.id,
+            groupName: cg.name,
+            round: r.crazyRound ?? 1,
+            rounds: cg.raceCount,
+            ownerId: cg.ownerId,
+          }
         : null,
     };
   });
@@ -252,11 +259,13 @@ export async function listEntries(db: Db | Tx, raceId: string): Promise<EntryDto
     .select({
       e: entries,
       p: profiles,
+      bot: users.isBot,
       hasTrace: sql<boolean>`exists (select 1 from ${traces} where ${traces.raceId} = ${entries.raceId} and ${traces.userId} = ${entries.userId})`,
       hasSetup: sql<boolean>`exists (select 1 from ${setups} where ${setups.raceId} = ${entries.raceId} and ${setups.userId} = ${entries.userId})`,
     })
     .from(entries)
     .innerJoin(profiles, eq(profiles.userId, entries.userId))
+    .innerJoin(users, eq(users.id, entries.userId))
     .where(
       and(
         eq(entries.raceId, raceId),
@@ -265,7 +274,7 @@ export async function listEntries(db: Db | Tx, raceId: string): Promise<EntryDto
     )
     .orderBy(asc(entries.createdAt));
   let wl = 0;
-  const out = rows.map(({ e, p, hasTrace, hasSetup }) => ({
+  const out = rows.map(({ e, p, bot, hasTrace, hasSetup }) => ({
     userId: e.userId,
     nickname: p.nickname,
     country: p.country,
@@ -278,6 +287,8 @@ export async function listEntries(db: Db | Tx, raceId: string): Promise<EntryDto
     createdAt: e.createdAt.toISOString(),
     hasTrace: !!hasTrace,
     hasSetup: !!hasSetup,
+    ready: !!e.readyAt,
+    bot,
   }));
   return out.sort((a, b) => {
     const rank = (x: EntryDto) => (x.status === 'confirmed' ? 0 : x.status === 'waitlisted' ? 1 : 2);

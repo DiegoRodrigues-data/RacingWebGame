@@ -171,7 +171,7 @@ export async function buildApp(
 
   authRoutes(app, ctx);
   raceRoutes(app, ctx);
-  crazyRoutes(app, ctx);
+  crazyRoutes(app, ctx, engine);
   miscRoutes(app, ctx);
   shareRoutes(app, ctx);
   adminRoutes(app, ctx, engine);

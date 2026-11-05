@@ -96,6 +96,9 @@ describe('Corrida Maluca', () => {
     // Meus grupos.
     const mine = (await t.json('GET', '/crazy/groups', undefined, ze)).body;
     expect(mine.map((x: { id: string }) => x.id)).toEqual([g.id]);
+    // Miniatura do card: a etapa atual ou a próxima.
+    expect(mine[0].featured.id).toBe(r1);
+    expect(mine[0].featured.track.versionId).toBeTruthy();
 
     // Corrida 1 inteira. A Bia mexe no setup; o resto fica no padrão (Piloto de Sofá).
     expect(
@@ -124,6 +127,8 @@ describe('Corrida Maluca', () => {
     const detail = (await t.json('GET', `/crazy/groups/${g.id}`, undefined, bia.token)).body;
     expect(detail.status).toBe('running');
     expect(detail.finishedRaces).toBe(1);
+    expect(detail.featured.id).toBe(r2);
+    expect(detail.schedule[0].race.track.versionId).toBeTruthy();
     expect(detail.inviteCode).toBe(g.inviteCode);
     const s1 = detail.schedule[0];
     expect(s1.podium).toHaveLength(3);
@@ -200,5 +205,80 @@ describe('Corrida Maluca', () => {
     expect(det.standings[0].points).toBe(10);
     for (const aw of det.schedule[0].awards) expect(aw.userId).toBe(dono.userId);
     expect(det.status).toBe('finished');
+  });
+
+  it('pular o preparo: todos prontos ou o organizador manda largar (com metade pronta)', async () => {
+    const org = await t.register('Organiza');
+    const startAt = new Date(t.clock.now() + 5 * 60_000).toISOString();
+    const g = (
+      await t.json(
+        'POST',
+        '/crazy/groups',
+        { name: 'Pressa', races: 2, laps: 5, startAt, intervalMinutes: 30 },
+        org.token,
+      )
+    ).body;
+    const [r1, r2] = g.schedule.map((s: { raceId: string }) => s.raceId) as [string, string];
+    const a = await t.register('AmigoA');
+    const b = await t.register('AmigoB');
+    for (const p of [a, b]) await t.json('POST', `/crazy/invite/${g.inviteCode}/join`, {}, p.token);
+    await t.engine.tick();
+
+    // Antes do treino não dá; corrida aberta também não.
+    expect((await t.json('PUT', `/races/${r1}/ready`, { ready: true }, a.token)).body.error.code).toBe(
+      'INVALID_TRANSITION',
+    );
+    let race = await t.race(r1);
+    const raceAtBefore = Date.parse(race.timeline.raceAt);
+    const qualiMs = raceAtBefore - Date.parse(race.timeline.qualifyingAt);
+    await t.advanceTo(Date.parse(race.timeline.practiceAt) + 10_000);
+    expect((await t.race(r1)).status).toBe('practice');
+
+    // Organizador sem ninguém pronto: espera. Quem não é organizador: proibido.
+    expect((await t.json('POST', `/races/${r1}/start-now`, {}, org.token)).body.error.code).toBe('CONFLICT');
+    expect((await t.json('POST', `/races/${r1}/start-now`, {}, a.token)).body.error.code).toBe('FORBIDDEN');
+
+    // Dois de três prontos: ainda não pula sozinho, mas o organizador já pode mandar largar.
+    let r = (await t.json('PUT', `/races/${r1}/ready`, { ready: true }, a.token)).body;
+    expect(r).toMatchObject({ humans: 3, ready: 1, skipped: false });
+    r = (await t.json('PUT', `/races/${r1}/ready`, { ready: true }, b.token)).body;
+    expect(r).toMatchObject({ ready: 2, skipped: false });
+    race = await t.race(r1);
+    expect(race.status).toBe('practice');
+    expect(race.entries.filter((e: { ready: boolean }) => e.ready)).toHaveLength(2);
+    const now = t.clock.now();
+    r = (await t.json('POST', `/races/${r1}/start-now`, {}, org.token)).body;
+    expect(r.skipped).toBe(true);
+    race = await t.race(r1);
+    expect(race.status).toBe('setup_lock');
+    expect(Date.parse(race.timeline.qualifyingAt)).toBe(now + 10_000);
+    // A classificação ao vivo continua com a mesma duração.
+    expect(Date.parse(race.timeline.raceAt) - Date.parse(race.timeline.qualifyingAt)).toBe(qualiMs);
+    expect(Date.parse(race.timeline.raceAt)).toBeLessThan(raceAtBefore);
+    // Depois de pular, não dá mais para mexer.
+    expect((await t.json('PUT', `/races/${r1}/ready`, { ready: false }, a.token)).body.error.code).toBe(
+      'INVALID_TRANSITION',
+    );
+    await t.advanceTo(Date.parse(race.timeline.qualifyingAt));
+    expect((await t.race(r1)).status).toBe('qualifying');
+    await t.advanceTo(Date.parse(race.timeline.raceAt));
+    expect((await t.race(r1)).status).toBe('race');
+
+    // Etapa 2 sem mudança de horário; todos prontos pulam sozinhos (já na janela de traçado).
+    let race2 = await t.race(r2);
+    expect(Date.parse(race2.timeline.practiceAt)).toBe(Date.parse(startAt) + 30 * 60_000);
+    await t.advanceTo(Date.parse(race2.timeline.traceWindowAt) + 1000);
+    expect((await t.race(r2)).status).toBe('trace_window');
+    for (const p of [a, b]) await t.json('PUT', `/races/${r2}/ready`, { ready: true }, p.token);
+    r = (await t.json('PUT', `/races/${r2}/ready`, { ready: true }, org.token)).body;
+    expect(r).toMatchObject({ humans: 3, ready: 3, skipped: true });
+    race2 = await t.race(r2);
+    expect(race2.status).toBe('setup_lock');
+
+    // Corrida aberta não tem "pronto".
+    const publica = await t.createRace({}, 60 * 60_000);
+    expect((await t.json('PUT', `/races/${publica}/ready`, { ready: true }, a.token)).body.error.code).toBe(
+      'FORBIDDEN',
+    );
   });
 });

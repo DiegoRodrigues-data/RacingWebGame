@@ -2,7 +2,7 @@ import { formatLapTime, LEVEL_LABELS, PHASE_LABELS, type QualifyingRowDto } from
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useState } from 'react';
 import { Link, useParams } from 'react-router';
-import { CrazyBadge } from '../components/CrazyBits';
+import { CrazyBadge, ReadyBar } from '../components/CrazyBits';
 import { isRegistered, JoinRaceButton, lateEntryOpen } from '../components/JoinRace';
 import { LiveTrack } from '../components/LiveTrack';
 import { QualifyingLive } from '../components/QualifyingLive';
@@ -136,6 +136,7 @@ export default function RaceDetail() {
           )}
         </div>
       </header>
+      <ReadyBar race={race} />
       <div className="card">
         <PhaseTimeline race={race} />
       </div>
@@ -373,6 +374,7 @@ export default function RaceDetail() {
                     >
                       🔧 {e.hasSetup ? 'setup ✓' : 'padrão'}
                     </span>
+                    {race.crazy && e.ready && <span className="font-bold text-violet">✅ pronto</span>}
                   </div>
                 )}
               </div>

@@ -297,6 +297,8 @@ Fecha o ciclo de vida com resultados persistidos.
 - [x] Corridas fechadas: fora das listas públicas, só membros se inscrevem, convidado só corre nos grupos
 - [x] Troféus de zoeira por corrida, tabela entre os amigos e títulos de honra no fim do campeonato
 - [x] Menu "Corrida Maluca", página do grupo, resenha no resultado e selo do grupo na corrida
+- [x] Miniatura da pista no card do grupo e nas etapas
+- [x] "Estou pronto" e "Largar agora": pular treino e janela de traçado (a classificação ao vivo continua)
 
 ---
 

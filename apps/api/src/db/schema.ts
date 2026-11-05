@@ -257,6 +257,8 @@ export const entries = pgTable(
     gridSlot: integer('grid_slot'),
     createdAt: ts('created_at').notNull().defaultNow(),
     confirmedAt: ts('confirmed_at'),
+    /** Corrida Maluca: o piloto marcou "Estou pronto" (todos prontos pulam o resto do preparo). */
+    readyAt: ts('ready_at'),
     updatedAt: ts('updated_at').notNull().defaultNow(),
   },
   (t) => [

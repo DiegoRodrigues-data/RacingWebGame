@@ -50,6 +50,13 @@
       "when": 1793991955963,
       "tag": "0006_corrida_maluca",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1794078355963,
+      "tag": "0007_corrida_maluca_pronto",
+      "breakpoints": true
     }
   ]
 }

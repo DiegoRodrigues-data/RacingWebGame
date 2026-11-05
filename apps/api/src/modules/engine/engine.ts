@@ -253,7 +253,8 @@ export class PhaseEngine {
           raceId: race.id,
           deadline: fresh.setupLockAt.getTime(),
         });
-        await notify(ctx, await confirmedIds(), 'trace_window_open', p);
+        // Preparo pulado (Corrida Maluca): a janela fecha no mesmo instante, sem aviso.
+        if (!fresh.flags.prepSkipped) await notify(ctx, await confirmedIds(), 'trace_window_open', p);
         break;
       case 'setup_lock':
         await ctx.hub.publish(ROOM.race(race.id), 'trace.window_closed', { raceId: race.id });

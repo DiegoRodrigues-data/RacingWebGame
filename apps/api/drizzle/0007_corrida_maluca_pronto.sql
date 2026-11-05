@@ -1,0 +1,1 @@
+ALTER TABLE "entries" ADD COLUMN "ready_at" timestamp with time zone;

@@ -3,6 +3,7 @@ import { traceToOffsets } from '@tracado/trackgen';
 import { useQuery } from '@tanstack/react-query';
 import { useEffect, useState } from 'react';
 import { Link, useParams, useSearchParams } from 'react-router';
+import { ReadyBar } from '../components/CrazyBits';
 import { isRegistered, JoinRaceButton, lateEntryOpen } from '../components/JoinRace';
 import { Countdown, PhaseBadge, Spinner, Tabs } from '../components/ui';
 import { get } from '../lib/api';
@@ -81,6 +82,14 @@ export default function Box() {
           {race.phaseDeadline && <Countdown to={race.phaseDeadline} className="text-2xl" />}
         </div>
       </header>
+      <ReadyBar
+        race={race}
+        unsavedSetup={
+          !!setup &&
+          !!serverSetup.data?.setup &&
+          JSON.stringify(setup) !== JSON.stringify(serverSetup.data.setup)
+        }
+      />
       {!registered && (
         <div className="card flex flex-wrap items-center gap-3 border-sky">
           <div className="min-w-0 flex-1 text-sm">

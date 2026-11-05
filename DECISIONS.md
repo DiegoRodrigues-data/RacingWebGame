@@ -112,6 +112,15 @@ traçado e corrida contra fantasmas rodam no aparelho e nada é enviado ao servi
   motor), com frase sorteada pela seed, e ficam em cache em memória. Com o campeonato encerrado, quem mais levou cada
   troféu recebe o título de honra.
 
+- **Pular o preparo:** nas corridas do grupo, treino e janela de traçado são só tempo de preparo (traçado e setup já
+  ficam salvos desde a inscrição). Cada piloto marca "Estou pronto" (`entries.ready_at`); com todos os humanos
+  confirmados prontos, a corrida antecipa os horários: parque fechado já, classificação 10 s depois e a largada depois
+  da sessão de classificação ao vivo, que nunca é pulada. O organizador pode mandar largar com pelo menos metade da turma
+  pronta. A antecipação é um UPDATE condicional na fase; as próximas etapas mantêm o horário. Sem os avisos de janela
+  (`flags.prepSkipped`, `flags.traceWarned`).
+- **Miniatura da pista:** o card do grupo e cada etapa do calendário mostram o mini mapa da pista (com os carros quando a
+  etapa está no ar), no mesmo padrão dos cards de corrida.
+
 ## Modelo de simulação
 
 Determinístico (PRNG sfc32 semeado; nenhuma fonte de aleatoriedade externa). Por volta, cada carro tem um perfil de velocidade

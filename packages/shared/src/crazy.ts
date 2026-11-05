@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { CAR_COLORS, MAX_CARS_PER_RACE } from './constants';
+import type { RaceSummaryDto } from './schemas';
 
 /**
  * Corrida Maluca: grupo fechado de amigos (convite por link) com uma corrida avulsa ou um campeonato de até
@@ -14,6 +15,15 @@ export const CRAZY_DEFAULT_LAPS = 8;
 export const CRAZY_MIN_INTERVAL_MIN = 15;
 export const CRAZY_MAX_INTERVAL_MIN = 7 * 24 * 60;
 /** Pontos do campeonato pela posição entre os amigos (bots não contam). Todo mundo que larga ganha ao menos 1. */
+/** Fases de preparo que podem ser puladas (todos prontos ou o organizador mandou largar). */
+export const CRAZY_SKIPPABLE_PHASES = ['practice', 'trace_window'] as const;
+/** Parque fechado depois de pular o preparo: só o tempo de a tela trocar. */
+export const CRAZY_SKIP_LOCK_MS = 10_000;
+/** "Largar agora" do organizador exige pelo menos esta fração da turma pronta. */
+export const CRAZY_START_MIN_READY = 0.5;
+export const crazyStartAllowed = (ready: number, humans: number) =>
+  humans > 0 && ready >= Math.ceil(humans * CRAZY_START_MIN_READY);
+
 export const CRAZY_POINTS = [10, 8, 6, 5, 4, 3, 2] as const;
 export const crazyPointsFor = (pos: number) => CRAZY_POINTS[pos - 1] ?? 1;
 
@@ -97,6 +107,7 @@ export interface CrazyRaceDto {
   /** Pódio entre os amigos e troféus, depois da bandeirada. */
   podium: { userId: string; nickname: string; position: number }[];
   awards: CrazyAwardDto[];
+  race: RaceSummaryDto;
 }
 
 export interface CrazyStandingDto {
@@ -121,6 +132,8 @@ export interface CrazyGroupSummaryDto {
   members: number;
   nextRaceAt: string | null;
   status: 'upcoming' | 'running' | 'finished';
+  /** Corrida em destaque no card (a atual ou a próxima; a última se acabou), para a miniatura da pista. */
+  featured: RaceSummaryDto | null;
 }
 
 export interface CrazyGroupDto extends CrazyGroupSummaryDto {
@@ -157,4 +170,6 @@ export interface RaceCrazyDto {
   groupName: string;
   round: number;
   rounds: number;
+  /** Quem criou o grupo (pode mandar largar antes do fim do preparo). */
+  ownerId: string;
 }

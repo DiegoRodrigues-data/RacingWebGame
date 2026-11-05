@@ -19,7 +19,8 @@ import { Copy, Share2 } from 'lucide-react';
 import { useEffect, useRef, useState, type FormEvent, type ReactNode } from 'react';
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router';
 import { CAR_COLOR_LABEL } from '../components/CarPicker';
-import { AwardList, CarDot } from '../components/CrazyBits';
+import { AwardList, CarDot, RaceReadyBar } from '../components/CrazyBits';
+import { RaceMiniMap } from '../components/RaceMiniMap';
 import { CarIcon, Countdown, Empty, PhaseBadge, Segmented, Skeleton, Spinner, toast } from '../components/ui';
 import { ApiError, errorMessage, get, post } from '../lib/api';
 import { fmtDateTime } from '../lib/format';
@@ -67,6 +68,15 @@ function Hero({ children }: { children?: ReactNode }) {
 function GroupCard({ g }: { g: CrazyGroupSummaryDto }) {
   return (
     <Link to={`/corrida-maluca/${g.id}`} className="card block space-y-2 transition hover:border-violet">
+      {g.featured && (
+        <div className="relative">
+          <RaceMiniMap race={g.featured} className="aspect-[16/8] w-full" />
+          <span className="absolute bottom-2 left-2 rounded-full bg-night/85 px-2 py-0.5 text-[11px] font-bold backdrop-blur">
+            {g.races > 1 && `Etapa ${g.featured.crazy?.round ?? 1} · `}
+            {g.featured.track.name}
+          </span>
+        </div>
+      )}
       <div className="flex items-start justify-between gap-2">
         <div className="min-w-0">
           <div className="truncate font-display text-xl">{g.name}</div>
@@ -79,10 +89,16 @@ function GroupCard({ g }: { g: CrazyGroupSummaryDto }) {
           🏁 {g.finishedRaces}/{g.races} {g.races > 1 ? 'corridas' : 'corrida'}
         </span>
         <span>👥 {g.members} na turma</span>
-        {g.nextRaceAt && (
-          <span>
-            ⏱️ próxima em <Countdown to={g.nextRaceAt} className="text-ink" />
-          </span>
+        {g.featured &&
+        !['scheduled', 'registration_open'].includes(g.featured.status) &&
+        g.status !== 'finished' ? (
+          <span className="font-bold text-race">● {PHASE_LABELS[g.featured.status]} agora</span>
+        ) : (
+          g.nextRaceAt && (
+            <span>
+              ⏱️ próxima em <Countdown to={g.nextRaceAt} className="text-ink" />
+            </span>
+          )
         )}
       </div>
     </Link>
@@ -641,9 +657,16 @@ function RaceRow({ r, member, highlight }: { r: CrazyRaceDto; member: boolean; h
   return (
     <li className={clsx('card space-y-3', highlight && 'border-race')}>
       <div className="flex flex-wrap items-center gap-3">
-        <div className="grid size-10 shrink-0 place-items-center rounded-xl bg-night-3 font-display text-lg">
-          {r.round}
-        </div>
+        <Link
+          to={`/corridas/${r.raceId}`}
+          className="relative block shrink-0"
+          aria-label={`Etapa ${r.round}`}
+        >
+          <RaceMiniMap race={r.race} className="aspect-[16/8] w-28 sm:w-32" />
+          <span className="absolute bottom-1 left-1 grid size-6 place-items-center rounded-lg bg-night/85 font-display text-sm">
+            {r.round}
+          </span>
+        </Link>
         <div className="min-w-0 flex-1">
           <Link to={`/corridas/${r.raceId}`} className="block truncate font-bold hover:text-race">
             {r.trackName}
@@ -668,6 +691,7 @@ function RaceRow({ r, member, highlight }: { r: CrazyRaceDto; member: boolean; h
         )}
         <RaceCta r={r} member={member} />
       </div>
+      {highlight && ['practice', 'trace_window'].includes(r.status) && <RaceReadyBar raceId={r.raceId} />}
       {done && (
         <>
           <div className="flex flex-wrap items-center gap-2 text-sm">
