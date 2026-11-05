@@ -36,6 +36,7 @@ export function settingsFromConfig(cfg: Config): GameSettings {
       keepHours: cfg.AUTO_TEST_RACES_KEEP_HOURS,
     },
     adminRaceBots: cfg.DEMO_BOTS,
+    botPool: { ...d.botPool, enabled: cfg.SIMULATED_DRIVERS },
   };
 }
 

@@ -41,6 +41,7 @@ export default defineConfig({
         PGLITE_DIR: resolve(here, '.data/pglite'),
         SEED_DEMO: 'true',
         DEMO_BOTS: '6',
+        SIMULATED_DRIVERS: 'false',
         ENABLE_DEV_ROUTES: 'true',
         ENGINE_TICK_MS: '200',
         LOG_LEVEL: 'warn',

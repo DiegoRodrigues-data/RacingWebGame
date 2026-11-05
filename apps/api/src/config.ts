@@ -32,6 +32,8 @@ const schema = z.object({
   AUTO_RACES_CATEGORY: z.string().default('copa-novatos'),
   /** Corridas automáticas valem ranking? As competições ranqueadas ficam com o admin. */
   AUTO_RACES_RANKED: bool.default(false),
+  /** Pilotos simulados na grade automática (padrão até o admin salvar em Admin → Pilotos simulados). */
+  SIMULATED_DRIVERS: bool.default(true),
   /** Quantas horas à frente a grade automática fica preenchida. */
   AUTO_RACES_LOOKAHEAD_HOURS: z.coerce.number().int().min(1).max(168).default(24),
   /** Corridas teste com bots, em ciclo: a próxima larga N minutos depois da bandeirada da anterior (0 desliga). */

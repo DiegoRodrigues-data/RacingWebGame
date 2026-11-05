@@ -40,6 +40,7 @@ export async function setupApp(overrides: Partial<Config> = {}) {
       ENABLE_DEV_ROUTES: true,
       ENGINE_ENABLED: false,
       DEMO_BOTS: 0,
+      SIMULATED_DRIVERS: false,
       MAX_SIGNUPS_PER_IP_PER_DAY: 100000,
       FLAG_SIGNUPS_PER_IP_PER_DAY: 100000,
       ...overrides,

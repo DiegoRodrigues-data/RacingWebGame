@@ -171,7 +171,7 @@ export const DEFAULT_GAME_SETTINGS: GameSettings = {
     poolChance: 0,
   },
   botPool: {
-    enabled: false,
+    enabled: true,
     activeMin: 14,
     activeMax: 30,
     perRaceMax: 10,
