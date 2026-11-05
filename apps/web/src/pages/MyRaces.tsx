@@ -2,6 +2,7 @@ import { LIVE_PHASES, type RaceSummaryDto } from '@tracado/shared';
 import { useQuery } from '@tanstack/react-query';
 import { Link } from 'react-router';
 import { RaceCard } from '../components/RaceCard';
+import { RaceHistory } from '../components/RaceHistory';
 import { Empty, Skeleton } from '../components/ui';
 import { get } from '../lib/api';
 
@@ -89,7 +90,14 @@ export default function MyRaces() {
         races={next}
         hint="Prepare o carro e o traçado no box antes do parque fechado."
       />
-      <Section title="Encerradas" races={past} />
+      {past.length > 0 && (
+        <section className="space-y-3">
+          <h2 className="font-display text-xl">
+            Histórico <span className="text-base text-muted">({past.length})</span>
+          </h2>
+          <RaceHistory races={past} preview={5} />
+        </section>
+      )}
     </div>
   );
 }

@@ -276,6 +276,24 @@ export async function resetPassword(ctx: Ctx, token: string, password: string) {
     .where(and(eq(refreshTokens.userId, userId), isNull(refreshTokens.revokedAt)));
 }
 
+/** Troca de senha logado: confere a atual, grava a nova e encerra as outras sessões. */
+export async function changePassword(ctx: Ctx, user: AuthUser, current: string, next: string) {
+  const [u] = await ctx.db.select().from(users).where(eq(users.id, user.id));
+  if (!u) throw new AppError('UNAUTHORIZED');
+  if (u.isGuest)
+    throw new AppError('CONFLICT', 'Convidado não tem senha: crie sua conta com e-mail e senha.');
+  if (!(await verifyPassword(u.passwordHash, current)))
+    throw new AppError('INVALID_CREDENTIALS', 'A senha atual não confere.');
+  await ctx.db
+    .update(users)
+    .set({ passwordHash: await hashPassword(next), failedLogins: 0, lockedUntil: null })
+    .where(eq(users.id, u.id));
+  await ctx.db
+    .update(refreshTokens)
+    .set({ revokedAt: new Date(ctx.clock.now()) })
+    .where(and(eq(refreshTokens.userId, u.id), isNull(refreshTokens.revokedAt)));
+}
+
 export async function verifyEmail(ctx: Ctx, token: string) {
   const userId = await consumeToken(ctx, 'email_verify', token);
   await ctx.db.update(users).set({ emailVerified: true }).where(eq(users.id, userId));

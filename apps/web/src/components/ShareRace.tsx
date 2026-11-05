@@ -13,6 +13,8 @@ export function shareText(race: RaceSummaryDto, position?: number | null): strin
     return position
       ? `🏁 Terminei em ${position}º na ${race.name} no Roda Presa! Dá para fazer melhor?`
       : `🏁 Saiu o resultado da ${race.name} no Roda Presa.`;
+  if (race.crazy)
+    return `🤪 Etapa ${race.crazy.round} da ${race.crazy.groupName} na Corrida Maluca: largada ${fmtDateTime(race.timeline.practiceAt)}. Vem assistir!`;
   const vagas = race.capacity.free > 0 ? `${race.capacity.free} vagas` : 'grid cheio (tem fila)';
   return `🏎️ Bora correr comigo na ${race.name} no Roda Presa? Largada ${fmtDateTime(race.timeline.practiceAt)}, ${race.laps} voltas, ${vagas}.`;
 }
@@ -58,13 +60,48 @@ export function ShareRace({
   compact?: boolean;
   className?: string;
 }) {
+  const label =
+    race.status === 'race'
+      ? 'Chamar para assistir'
+      : race.status === 'finished' || race.crazy
+        ? 'Compartilhar'
+        : 'Convidar';
+  return (
+    <ShareMenu
+      title={race.name}
+      text={shareText(race, position)}
+      url={shareUrl(race.id)}
+      label={label}
+      compact={compact}
+      className={className}
+    />
+  );
+}
+
+/**
+ * Menu de compartilhar genérico: folha nativa no celular; no computador, WhatsApp, Telegram, X, Facebook e
+ * "copiar link". O `url` deve ser um link /s/... para as redes mostrarem a prévia.
+ */
+export function ShareMenu({
+  title,
+  text,
+  url,
+  label,
+  compact,
+  className,
+}: {
+  title: string;
+  text: string;
+  url: string;
+  label: string;
+  compact?: boolean;
+  className?: string;
+}) {
   const [open, setOpen] = useState(false);
   const [pos, setPos] = useState<{ top?: number; bottom?: number; right: number } | null>(null);
   const menuRef = useRef<HTMLDivElement>(null);
   const [copied, setCopied] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
-  const text = shareText(race, position);
-  const url = shareUrl(race.id);
   useEffect(() => {
     if (!open) return;
     const close = (e: PointerEvent | KeyboardEvent) => {
@@ -88,7 +125,7 @@ export function ShareRace({
     const touch = window.matchMedia?.('(pointer: coarse)').matches;
     if (touch && typeof navigator.share === 'function') {
       try {
-        await navigator.share({ title: race.name, text, url });
+        await navigator.share({ title, text, url });
       } catch {
         /* cancelado pelo usuário */
       }
@@ -114,12 +151,6 @@ export function ShareRace({
       toast('Não deu para copiar', url, 'warn');
     }
   }
-  const label =
-    race.status === 'race'
-      ? 'Chamar para assistir'
-      : race.status === 'finished'
-        ? 'Compartilhar'
-        : 'Convidar';
   return (
     <div ref={ref} className={clsx('relative inline-block', className)}>
       <button
@@ -127,7 +158,7 @@ export function ShareRace({
         className={clsx('btn-ghost', compact && 'size-9 !p-0')}
         aria-haspopup="menu"
         aria-expanded={open}
-        aria-label={compact ? `${label}: ${race.name}` : undefined}
+        aria-label={compact ? `${label}: ${title}` : undefined}
         title={label}
         onClick={() => void onClick()}
       >

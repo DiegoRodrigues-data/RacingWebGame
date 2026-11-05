@@ -1,5 +1,6 @@
 import {
   AppError,
+  changePasswordSchema,
   forgotPasswordSchema,
   guestJoinSchema,
   guestResumeSchema,
@@ -132,6 +133,15 @@ export function authRoutes(app: FastifyInstance, ctx: Ctx) {
   app.post('/auth/reset-password', authLimit, async (req) => {
     const b = parse(resetPasswordSchema, req.body);
     await svc.resetPassword(ctx, b.token, b.password);
+    return { ok: true };
+  });
+  // Troca de senha logado: as outras sessões caem e esta recebe um refresh novo.
+  app.post('/auth/change-password', authLimit, async (req, reply) => {
+    const u = requireAuth(req);
+    const b = parse(changePasswordSchema, req.body);
+    await svc.changePassword(ctx, u, b.currentPassword, b.newPassword);
+    const t = await svc.issueTokens(ctx, u, req.ip);
+    setCookie(reply, t.refresh);
     return { ok: true };
   });
   app.post('/auth/verify-email', authLimit, async (req) => {

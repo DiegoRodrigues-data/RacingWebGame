@@ -57,6 +57,75 @@ function GuestUpgrade() {
   );
 }
 
+/** Troca de senha (contas com e-mail e senha). As outras sessões são encerradas. */
+function ChangePassword() {
+  const [busy, setBusy] = useState(false);
+  async function submit(e: FormEvent<HTMLFormElement>) {
+    e.preventDefault();
+    const form = e.currentTarget;
+    const f = new FormData(form);
+    if (f.get('newPassword') !== f.get('confirm')) {
+      toast('As senhas novas não batem', undefined, 'warn');
+      return;
+    }
+    setBusy(true);
+    try {
+      await post('/auth/change-password', {
+        currentPassword: f.get('currentPassword'),
+        newPassword: f.get('newPassword'),
+      });
+      form.reset();
+      toast('Senha alterada', 'As outras sessões foram encerradas.', 'ok');
+    } catch (x) {
+      toast('Não deu para trocar a senha', errorMessage(x), 'error');
+    } finally {
+      setBusy(false);
+    }
+  }
+  return (
+    <form onSubmit={submit} className="card space-y-3">
+      <div className="font-display text-lg">Trocar senha</div>
+      <div className="grid gap-2 sm:grid-cols-3">
+        <label>
+          <span className="label">Senha atual</span>
+          <input
+            name="currentPassword"
+            type="password"
+            className="input"
+            autoComplete="current-password"
+            required
+          />
+        </label>
+        <label>
+          <span className="label">Nova senha (mín. 8)</span>
+          <input
+            name="newPassword"
+            type="password"
+            className="input"
+            minLength={8}
+            autoComplete="new-password"
+            required
+          />
+        </label>
+        <label>
+          <span className="label">Repita a nova</span>
+          <input
+            name="confirm"
+            type="password"
+            className="input"
+            minLength={8}
+            autoComplete="new-password"
+            required
+          />
+        </label>
+      </div>
+      <button className="btn-ghost" disabled={busy}>
+        Trocar senha
+      </button>
+    </form>
+  );
+}
+
 export default function Account() {
   const { me, setMe } = useSession();
   const [color, setColor] = useState(me!.profile.carColor);
@@ -170,6 +239,7 @@ export default function Account() {
           Salvar
         </button>
       </form>
+      {!me.guest && <ChangePassword />}
     </div>
   );
 }

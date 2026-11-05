@@ -60,6 +60,8 @@ const listQuery = z.object({
   limit: z.coerce.number().int().min(1).max(300).optional(),
   /** Corridas teste: "false" (padrão) esconde, "true" mostra só elas, "all" mostra tudo. */
   test: z.enum(['true', 'false', 'all']).optional(),
+  /** "desc" para o histórico (mais recentes primeiro). */
+  order: z.enum(['asc', 'desc']).optional(),
 });
 
 export function raceRoutes(app: FastifyInstance, ctx: Ctx) {
@@ -74,6 +76,7 @@ export function raceRoutes(app: FastifyInstance, ctx: Ctx) {
       ...(q.ranked !== undefined ? { ranked: q.ranked } : {}),
       ...(q.limit ? { limit: q.limit } : {}),
       ...(q.test === 'all' ? {} : { test: q.test === 'true' }),
+      ...(q.order ? { order: q.order } : {}),
     });
   });
 

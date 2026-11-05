@@ -113,6 +113,41 @@ describe('autenticação', () => {
   });
 });
 
+describe('troca de senha', () => {
+  it('confere a atual, troca e encerra as outras sessões', async () => {
+    const u = await t.register('TrocaSenha');
+    const bad = await t.json(
+      'POST',
+      '/auth/change-password',
+      { currentPassword: 'errada-123', newPassword: 'nova-senha-9' },
+      u.token,
+    );
+    expect(bad.body.error.code).toBe('INVALID_CREDENTIALS');
+    const curta = await t.json(
+      'POST',
+      '/auth/change-password',
+      { currentPassword: 'senha-forte-1', newPassword: '123' },
+      u.token,
+    );
+    expect(curta.body.error.code).toBe('VALIDATION_ERROR');
+    const ok = await t.json(
+      'POST',
+      '/auth/change-password',
+      { currentPassword: 'senha-forte-1', newPassword: 'nova-senha-9' },
+      u.token,
+    );
+    expect(ok.status).toBe(200);
+    expect((await t.login('trocasenha@teste.dev', 'senha-forte-1')).status).toBe(401);
+    expect((await t.login('trocasenha@teste.dev', 'nova-senha-9')).status).toBe(200);
+    // A sessão antiga (cookie de refresh do cadastro) caiu.
+    const old = await t.json('POST', '/auth/refresh', undefined, undefined, {
+      cookie: `tracado_rt=${u.cookie}`,
+      'x-tracado-csrf': '1',
+    });
+    expect(old.status).toBe(401);
+  });
+});
+
 describe('autorização', () => {
   it('rotas protegidas exigem login e rotas admin exigem papel', async () => {
     expect((await t.json('GET', '/me')).body.error.code).toBe('UNAUTHORIZED');

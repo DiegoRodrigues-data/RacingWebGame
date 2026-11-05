@@ -1,13 +1,84 @@
 import type { RaceSummaryDto } from '@tracado/shared';
-import { useQuery } from '@tanstack/react-query';
+import { useInfiniteQuery, useQuery } from '@tanstack/react-query';
 import { useMemo, useState } from 'react';
 import { RaceCard } from '../components/RaceCard';
+import { RaceHistory } from '../components/RaceHistory';
 import { Empty, Skeleton, Tabs } from '../components/ui';
 import { get } from '../lib/api';
 import { useCategories } from '../lib/queries';
 import { useServerNow } from '../lib/realtime';
 
-type Range = 'hoje' | 'amanha' | 'semana';
+type Range = 'hoje' | 'amanha' | 'semana' | 'historico';
+
+/** Fases de quem ainda vai correr ou está correndo (as encerradas ficam no histórico). */
+const UPCOMING = 'scheduled,registration_open,practice,trace_window,setup_lock,qualifying,race';
+const ENDED = 'finished,archived,cancelled';
+const PAGE = 30;
+
+const dayLabel = (iso: string) =>
+  new Date(iso).toLocaleDateString('pt-BR', { weekday: 'long', day: '2-digit', month: 'long' });
+
+function groupByDay(list: RaceSummaryDto[]) {
+  const m = new Map<string, RaceSummaryDto[]>();
+  for (const r of list) {
+    const k = dayLabel(r.timeline.practiceAt);
+    m.set(k, [...(m.get(k) ?? []), r]);
+  }
+  return [...m.entries()];
+}
+
+/** Histórico: corridas encerradas e canceladas, das mais recentes para as mais antigas, em páginas. */
+function History({ category }: { category: string }) {
+  const q = useInfiniteQuery({
+    queryKey: ['races-history', category],
+    initialPageParam: Date.now(),
+    queryFn: ({ pageParam }) =>
+      get<RaceSummaryDto[]>(
+        `/races?${new URLSearchParams({
+          from: '0',
+          to: String(pageParam),
+          status: ENDED,
+          order: 'desc',
+          limit: String(PAGE),
+          ...(category ? { category } : {}),
+        })}`,
+      ),
+    getNextPageParam: (last) =>
+      last.length < PAGE ? undefined : Date.parse(last[last.length - 1]!.timeline.practiceAt) - 1,
+  });
+  const all = useMemo(() => {
+    const seen = new Set<string>();
+    return (q.data?.pages.flat() ?? []).filter((r) => !seen.has(r.id) && seen.add(r.id));
+  }, [q.data]);
+  if (q.isLoading)
+    return (
+      <div className="mt-6">
+        <Skeleton className="h-64" />
+      </div>
+    );
+  if (!all.length)
+    return (
+      <div className="mt-6">
+        <Empty title="Nenhuma corrida encerrada ainda" icon="🏁" />
+      </div>
+    );
+  return (
+    <div className="mt-6 space-y-4">
+      <RaceHistory races={all} />
+      {q.hasNextPage && (
+        <div className="text-center">
+          <button
+            className="btn-ghost"
+            disabled={q.isFetchingNextPage}
+            onClick={() => void q.fetchNextPage()}
+          >
+            {q.isFetchingNextPage ? 'Carregando…' : 'Carregar mais antigas'}
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}
 
 export default function Calendar() {
   const [range, setRange] = useState<Range>('semana');
@@ -26,25 +97,16 @@ export default function Calendar() {
     from: String(from),
     to: String(to),
     ...(category ? { category } : {}),
-    ...(onlyOpen ? { status: 'registration_open' } : {}),
+    status: onlyOpen ? 'registration_open' : UPCOMING,
   });
+  const history = range === 'historico';
   const { data, isLoading } = useQuery({
     queryKey: ['races', qs.toString()],
     queryFn: () => get<RaceSummaryDto[]>(`/races?${qs}`),
     refetchInterval: 30_000,
+    enabled: !history,
   });
-  const byDay = useMemo(() => {
-    const m = new Map<string, RaceSummaryDto[]>();
-    for (const r of data ?? []) {
-      const k = new Date(r.timeline.practiceAt).toLocaleDateString('pt-BR', {
-        weekday: 'long',
-        day: '2-digit',
-        month: 'long',
-      });
-      m.set(k, [...(m.get(k) ?? []), r]);
-    }
-    return [...m.entries()];
-  }, [data]);
+  const byDay = useMemo(() => groupByDay(data ?? []), [data]);
   return (
     <div>
       <h1 className="font-display text-3xl">Calendário</h1>
@@ -56,6 +118,7 @@ export default function Calendar() {
             { value: 'hoje', label: 'Hoje' },
             { value: 'amanha', label: 'Amanhã' },
             { value: 'semana', label: '7 dias' },
+            { value: 'historico', label: 'Histórico' },
           ]}
         />
         <label className="flex items-center gap-2 text-sm">
@@ -73,7 +136,9 @@ export default function Calendar() {
             ))}
           </select>
         </label>
-        <label className="flex items-center gap-2 text-sm font-semibold text-muted">
+        <label
+          className={`flex items-center gap-2 text-sm font-semibold text-muted ${history ? 'hidden' : ''}`}
+        >
           <input
             type="checkbox"
             checked={onlyOpen}
@@ -83,30 +148,32 @@ export default function Calendar() {
           Só com inscrições abertas
         </label>
       </div>
-      {isLoading && (
+      {history && <History category={category} />}
+      {!history && isLoading && (
         <div className="mt-6 grid gap-3 md:grid-cols-2 lg:grid-cols-3">
           {[1, 2, 3].map((i) => (
             <Skeleton key={i} className="h-52" />
           ))}
         </div>
       )}
-      {data && !data.length && (
+      {!history && data && !data.length && (
         <div className="mt-6">
           <Empty title="Nenhuma corrida neste período" icon="📅">
             Tente outro período ou categoria.
           </Empty>
         </div>
       )}
-      {byDay.map(([day, list]) => (
-        <section key={day} className="mt-8">
-          <h2 className="mb-3 font-display text-lg capitalize text-muted">{day}</h2>
-          <div className="grid gap-3 md:grid-cols-2 lg:grid-cols-3">
-            {list.map((r) => (
-              <RaceCard key={r.id} race={r} />
-            ))}
-          </div>
-        </section>
-      ))}
+      {!history &&
+        byDay.map(([day, list]) => (
+          <section key={day} className="mt-8">
+            <h2 className="mb-3 font-display text-lg capitalize text-muted">{day}</h2>
+            <div className="grid gap-3 md:grid-cols-2 lg:grid-cols-3">
+              {list.map((r) => (
+                <RaceCard key={r.id} race={r} />
+              ))}
+            </div>
+          </section>
+        ))}
     </div>
   );
 }

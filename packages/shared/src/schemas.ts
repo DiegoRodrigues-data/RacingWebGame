@@ -78,6 +78,10 @@ export type LoginInput = z.infer<typeof loginSchema>;
 export const forgotPasswordSchema = z.object({ email: z.string().trim().toLowerCase().email() });
 export const resetPasswordSchema = z.object({ token: z.string().min(20).max(200), password });
 export const verifyEmailSchema = z.object({ token: z.string().min(20).max(200) });
+export const changePasswordSchema = z.object({
+  currentPassword: z.string().min(1).max(128),
+  newPassword: password,
+});
 
 export const updateProfileSchema = z.object({
   nickname: nickname.optional(),

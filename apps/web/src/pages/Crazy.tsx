@@ -15,12 +15,13 @@ import {
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import confetti from 'canvas-confetti';
 import clsx from 'clsx';
-import { Copy, Share2 } from 'lucide-react';
+import { Copy } from 'lucide-react';
 import { useEffect, useRef, useState, type FormEvent, type ReactNode } from 'react';
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router';
 import { CAR_COLOR_LABEL } from '../components/CarPicker';
 import { AwardList, CarDot, RaceReadyBar } from '../components/CrazyBits';
 import { RaceMiniMap } from '../components/RaceMiniMap';
+import { ShareMenu } from '../components/ShareRace';
 import { CarIcon, Countdown, Empty, PhaseBadge, Segmented, Skeleton, Spinner, toast } from '../components/ui';
 import { ApiError, errorMessage, get, post } from '../lib/api';
 import { fmtDateTime } from '../lib/format';
@@ -102,6 +103,56 @@ function GroupCard({ g }: { g: CrazyGroupSummaryDto }) {
         )}
       </div>
     </Link>
+  );
+}
+
+/** Grupos encerrados: uma linha por grupo, recolhido depois dos 5 primeiros (para não ocupar a tela). */
+function GroupHistory({ groups }: { groups: CrazyGroupSummaryDto[] }) {
+  const [all, setAll] = useState(false);
+  const shown = all ? groups : groups.slice(0, 5);
+  return (
+    <section className="space-y-3">
+      <h2 className="font-display text-xl">
+        Histórico <span className="text-base text-muted">({groups.length})</span>
+      </h2>
+      <div className="card !p-0">
+        <ul className="divide-y divide-line/60">
+          {shown.map((g) => (
+            <li key={g.id}>
+              <Link
+                to={`/corrida-maluca/${g.id}`}
+                className="flex items-center gap-3 px-3 py-2 text-sm hover:bg-night-3/50"
+              >
+                <span className="w-16 shrink-0 font-mono text-xs text-muted">
+                  {g.featured
+                    ? new Date(g.featured.timeline.practiceAt).toLocaleDateString('pt-BR', {
+                        day: '2-digit',
+                        month: '2-digit',
+                      })
+                    : ''}
+                </span>
+                <span className="min-w-0 flex-1">
+                  <span className="block truncate font-semibold">{g.name}</span>
+                  <span className="block truncate text-xs text-muted">
+                    {g.finishedRaces}/{g.races} {g.races > 1 ? 'corridas' : 'corrida'} · {g.members} na turma
+                    · por {g.ownerNickname}
+                  </span>
+                </span>
+                <span className="shrink-0 text-xs font-bold text-violet">Ver tabela</span>
+              </Link>
+            </li>
+          ))}
+        </ul>
+        {groups.length > 5 && (
+          <button
+            className="w-full border-t border-line/60 py-2 text-sm font-bold text-muted hover:text-ink"
+            onClick={() => setAll((v) => !v)}
+          >
+            {all ? 'Mostrar menos' : `Ver todos (${groups.length})`}
+          </button>
+        )}
+      </div>
+    </section>
   );
 }
 
@@ -286,6 +337,8 @@ export function CrazyHome() {
     enabled: !!me,
     refetchInterval: 30_000,
   });
+  const active = (data ?? []).filter((g) => g.status !== 'finished');
+  const ended = (data ?? []).filter((g) => g.status === 'finished');
   return (
     <div className="space-y-6">
       <Hero />
@@ -298,13 +351,17 @@ export function CrazyHome() {
               Você ainda não está em nenhum grupo. Crie um ou abra um convite.
             </p>
           )}
+          {data && data.length > 0 && !active.length && (
+            <p className="text-sm text-muted">Nenhum grupo rolando agora. Que tal criar outro?</p>
+          )}
           <div className="grid gap-3 md:grid-cols-2">
-            {data?.map((g) => (
+            {active.map((g) => (
               <GroupCard key={g.id} g={g} />
             ))}
           </div>
         </section>
       )}
+      {ended.length > 0 && <GroupHistory groups={ended} />}
       {!me && (
         <div className="card space-y-2">
           <p>
@@ -550,8 +607,9 @@ function CopyField({ value, label }: { value: string; label: string }) {
 }
 
 function InviteCard({ g }: { g: CrazyGroupDto }) {
-  const url = `${window.location.origin}/corrida-maluca/convite/${g.inviteCode}`;
-  const text = `Bora correr na Corrida Maluca "${g.name}"? Entra aqui, só precisa do apelido: ${url}`;
+  // Link /s/...: o WhatsApp mostra a prévia do convite (nome do grupo e quem chamou) e redireciona.
+  const url = `${window.location.origin}/s/maluca/${g.inviteCode}`;
+  const text = `🤪 Bora correr na Corrida Maluca "${g.name}"? Entra só com o apelido, sem cadastro:`;
   return (
     <section className="card space-y-2 border-violet/60">
       <h2 className="font-display text-xl">Chame a turma</h2>
@@ -562,22 +620,32 @@ function InviteCard({ g }: { g: CrazyGroupDto }) {
       <div className="flex flex-wrap gap-2">
         <a
           className="btn-go !py-1.5"
-          href={`https://wa.me/?text=${encodeURIComponent(text)}`}
+          href={`https://wa.me/?text=${encodeURIComponent(`${text} ${url}`)}`}
           target="_blank"
           rel="noreferrer"
         >
           Mandar no WhatsApp
         </a>
-        {'share' in navigator && (
-          <button
-            className="btn-ghost !py-1.5"
-            onClick={() => navigator.share({ title: g.name, text, url }).catch(() => undefined)}
-          >
-            <Share2 size={16} className="mr-1 inline" /> Compartilhar
-          </button>
-        )}
+        <ShareMenu title={g.name} text={text} url={url} label="Outras redes" />
       </div>
     </section>
+  );
+}
+
+/** Compartilhar o grupo (tabela e resenha; no fim, o campeão). Não leva o convite. */
+function ShareGroup({ g }: { g: CrazyGroupDto }) {
+  const champ = g.standings[0];
+  const text =
+    g.status === 'finished' && champ?.races
+      ? `🏆 ${champ.nickname} venceu a ${g.name} na Corrida Maluca! Olha a resenha e os troféus da zoeira:`
+      : `🤪 Acompanhe a ${g.name} na Corrida Maluca: tabela e resenha de cada corrida.`;
+  return (
+    <ShareMenu
+      title={g.name}
+      text={text}
+      url={`${window.location.origin}/s/grupo/${g.id}`}
+      label="Compartilhar"
+    />
   );
 }
 
@@ -865,6 +933,7 @@ export function CrazyGroup() {
             </span>
           </div>
         </div>
+        <ShareGroup g={g} />
         {next && (
           <div className="text-right">
             <div className="label !mb-0">

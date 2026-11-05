@@ -37,6 +37,17 @@ describe('Corrida Maluca', () => {
     expect(prev.body.members).toEqual(['Dono']);
     expect((await t.json('GET', `/crazy/groups/${g.id}`)).body.inviteCode).toBeNull();
     expect((await t.json('GET', '/crazy/invite/codigo-que-nao-existe')).status).toBe(404);
+    // Links com prévia (WhatsApp): convite e página do grupo; o do grupo não expõe o código.
+    const sInv = await t.app.inject({ method: 'GET', url: `/s/maluca/${g.inviteCode}` });
+    expect(sInv.body).toContain('og:title" content="🤪 Convite: Turma do Kart · Corrida Maluca"');
+    expect(sInv.body).toContain(`url=/corrida-maluca/convite/${g.inviteCode}"`);
+    const sGrp = await t.app.inject({ method: 'GET', url: `/s/grupo/${g.id}` });
+    expect(sGrp.body).toContain('🤪 Turma do Kart · Corrida Maluca');
+    expect(sGrp.body).toContain(`url=/corrida-maluca/${g.id}"`);
+    expect(sGrp.body).not.toContain(g.inviteCode);
+    expect((await t.app.inject({ method: 'GET', url: '/s/maluca/nao-existe' })).body).toContain(
+      'url=/corrida-maluca"',
+    );
 
     // Convidado entra só com apelido e já está inscrito em todas as corridas do grupo.
     const guest = await t.json('POST', '/auth/guest', {

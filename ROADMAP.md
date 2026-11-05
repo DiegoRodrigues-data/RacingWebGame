@@ -299,6 +299,9 @@ Fecha o ciclo de vida com resultados persistidos.
 - [x] Menu "Corrida Maluca", página do grupo, resenha no resultado e selo do grupo na corrida
 - [x] Miniatura da pista no card do grupo e nas etapas
 - [x] "Estou pronto" e "Largar agora": pular treino e janela de traçado (a classificação ao vivo continua)
+- [x] Histórico compacto: encerradas saem do calendário (aba Histórico), de Minhas corridas e dos grupos ativos
+- [x] Compartilhar com prévia: convite (`/s/maluca/:code`) e página do grupo (`/s/grupo/:id`)
+- [x] Trocar senha em "Minha conta"
 
 ---
 
