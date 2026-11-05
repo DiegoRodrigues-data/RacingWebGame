@@ -316,6 +316,12 @@ Fecha o ciclo de vida com resultados persistidos.
 - [x] Painel com jogadores, corridas por dia, terrenos, próximas corridas e atalhos
 - [ ] Coeficientes da física versionados por corrida
 
+## Fase 19 — Trilha sonora e efeitos ✅
+
+- [x] Trilha original no estilo 16 bits sintetizada no navegador (corrida e classificação)
+- [x] Motor acompanhando a velocidade do carro em foco, semáforo, box e bandeirada
+- [x] Controles de volume (música, efeitos, mudo) no topo, salvos por aparelho
+
 ---
 
 ## Ordem recomendada (próximos passos)

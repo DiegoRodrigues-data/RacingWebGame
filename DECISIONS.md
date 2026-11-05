@@ -146,6 +146,18 @@ traçado e corrida contra fantasmas rodam no aparelho e nada é enviado ao servi
 - **Fora por enquanto:** coeficientes da física (`COEF`). Mudá-los muda resultados e precisa valer igual no servidor e
   no treino do navegador; exigiria versionar a simulação por corrida.
 
+### Trilha sonora e efeitos
+
+- **Tudo sintetizado no navegador** (Web Audio, `game/audio.ts`), sem arquivos de áudio: canais de pulso (melodia
+  com eco e vibrato, arpejo), baixo serrilhado filtrado e bateria de ruído, no estilo dos chips de 16 bits. As
+  músicas ("Reta Final" na corrida, "Volta Lançada" na classificação) são composições originais escritas em notas
+  MIDI no próprio código; nada copiado de jogos existentes.
+- **Efeitos:** motor do carro em foco (tom, volume e brilho pela velocidade medida entre quadros, com "trocas de
+  marcha"), bipes do semáforo, parafusadeira do box e vinheta da bandeirada.
+- **Volume:** botão no topo com som ligado/desligado e volumes de música e efeitos, guardados neste aparelho
+  (`localStorage`). O som só começa depois do primeiro toque ou clique (regra dos navegadores) e pausa com a aba
+  escondida.
+
 ## Modelo de simulação
 
 Determinístico (PRNG sfc32 semeado; nenhuma fonte de aleatoriedade externa). Por volta, cada carro tem um perfil de velocidade

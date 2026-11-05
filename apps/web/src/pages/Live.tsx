@@ -19,6 +19,7 @@ import { QualifyingLive } from '../components/QualifyingLive';
 import { CameraControls, TrackCanvas } from '../components/TrackCanvas';
 import { Countdown, Empty, PhaseBadge, Spinner } from '../components/ui';
 import { CAR_CSS } from '../game/assets';
+import { audio } from '../game/audio';
 import { FrameBuffer, type CarState } from '../game/playback';
 import type { TrackScene } from '../game/scene';
 import { get } from '../lib/api';
@@ -74,10 +75,13 @@ export default function Live({ mode }: { mode: 'live' | 'replay' }) {
   const [simT, setSimT] = useState(0);
   const [follow, setFollow] = useState<string | null>(null);
   const [finished, setFinished] = useState(false);
+  /** Carro cujo motor se ouve (o seguido, o seu ou o líder). */
+  const soundFocus = useRef<string | null>(null);
   // Replay: relógio local controlável.
   const [playing, setPlaying] = useState(true);
   const [rate, setRate] = useState(4);
   const replayT = useRef(0);
+  const lastPos = useRef<{ i: number; x: number; y: number; t: number } | null>(null);
   const [scrub, setScrub] = useState(0);
 
   const needReplay =
@@ -127,6 +131,12 @@ export default function Live({ mode }: { mode: 'live' | 'replay' }) {
       }
       case 'race.incident':
         logPits((env.payload as ServerEvents['race.incident']).incidents);
+        if (
+          (env.payload as ServerEvents['race.incident']).incidents.some(
+            (i) => i.kind === 'pit' && i.userId === soundFocus.current,
+          )
+        )
+          audio.pit();
         setIncidents((list) =>
           [...list, ...(env.payload as ServerEvents['race.incident']).incidents].slice(-30),
         );
@@ -162,6 +172,17 @@ export default function Live({ mode }: { mode: 'live' | 'replay' }) {
       } else t = (realtime.clock.now() - LIVE_DELAY_MS - meta.startedAt) * meta.speed;
       const states = buffer.current.sample(Math.max(0, t), cars.length);
       if (!states) return;
+      // Som do motor do carro em foco: velocidade pela distância percorrida entre quadros (tempo simulado).
+      let fi = cars.findIndex((c) => c.userId === (follow ?? me?.id));
+      if (fi < 0) fi = states.reduce((best, s, i) => (s.progress > states[best]!.progress ? i : best), 0);
+      soundFocus.current = cars[fi]?.userId ?? null;
+      const fs = states[fi]!;
+      const prev = lastPos.current;
+      if (prev && prev.i === fi && t > prev.t) {
+        const v = Math.hypot(fs.x - prev.x, fs.y - prev.y) / ((t - prev.t) / 1000);
+        audio.engineSpeed(v / 60, fs.status === 0 && (mode === 'live' || playing));
+      }
+      lastPos.current = { i: fi, x: fs.x, y: fs.y, t };
       scene.setCars(
         cars.map((c, i) => ({
           id: c.userId,
@@ -238,6 +259,21 @@ export default function Live({ mode }: { mode: 'live' | 'replay' }) {
         };
       })()
     : null;
+
+  // Trilha e motor: tocam enquanto a corrida está na tela (ao vivo depois das luzes, ou o replay rodando).
+  const racing = !!meta && !finished && (mode === 'replay' ? playing : race?.status === 'race');
+  useEffect(() => {
+    if (!racing) return;
+    audio.music('race');
+    audio.engine(true);
+    return () => {
+      audio.music(null);
+      audio.engine(false);
+    };
+  }, [racing]);
+  useEffect(() => {
+    if (finished && mode === 'live') audio.finish();
+  }, [finished, mode]);
 
   if (!race) return <Spinner />;
   if (mode === 'replay' && !['finished', 'archived'].includes(race.status))
@@ -465,6 +501,18 @@ function StartLights({ startedAt }: { startedAt: number }) {
   }, []);
   const left = startedAt - now;
   const on = Math.max(0, Math.min(5, 5 - Math.ceil(left / 1000) + 1));
+  // Bipe a cada luz acesa e um bipe agudo quando apagam. O da largada é agendado antes, porque este componente
+  // some da tela no instante em que as luzes apagam.
+  const goScheduled = useRef(false);
+  useEffect(() => {
+    if (on > 0 && left > 0) audio.lights(false);
+  }, [on]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => {
+    if (left > 0 && left < 1500 && !goScheduled.current) {
+      goScheduled.current = true;
+      window.setTimeout(() => audio.lights(true), left);
+    }
+  }, [left]);
   if (left <= 0) return null;
   return (
     <div

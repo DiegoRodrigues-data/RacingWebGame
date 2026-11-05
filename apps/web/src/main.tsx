@@ -6,7 +6,10 @@ import { App } from './App';
 import { queryClient } from './lib/queries';
 import { realtime } from './lib/realtime';
 import { useSession } from './lib/session';
+import { installAudioUnlock } from './game/audio';
 import './styles.css';
+
+installAudioUnlock();
 
 void useSession
   .getState()

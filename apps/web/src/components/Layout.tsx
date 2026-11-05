@@ -22,6 +22,7 @@ import { Link, NavLink, useLocation, useNavigate } from 'react-router';
 import { useNotifications } from '../lib/queries';
 import { realtime, useConnection, useRoom } from '../lib/realtime';
 import { isAdmin, isEditor, useSession } from '../lib/session';
+import { AudioControls } from './AudioControls';
 import { toast, Toaster } from './ui';
 
 function ConnectionDot() {
@@ -140,6 +141,7 @@ export function Layout({ children }: { children: ReactNode }) {
           </nav>
           <div className="ml-auto flex items-center gap-2">
             <ConnectionDot />
+            <AudioControls />
             {me ? (
               <>
                 <NotificationBell />

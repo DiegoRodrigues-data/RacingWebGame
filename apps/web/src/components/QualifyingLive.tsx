@@ -5,6 +5,7 @@ import clsx from 'clsx';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link } from 'react-router';
 import { CAR_CSS } from '../game/assets';
+import { audio } from '../game/audio';
 import { FrameBuffer } from '../game/playback';
 import type { TrackScene } from '../game/scene';
 import { get } from '../lib/api';
@@ -178,6 +179,13 @@ export function QualifyingLive({
   useEffect(() => {
     if (scene) scene.followId = follow;
   }, [scene, follow]);
+
+  // Trilha da classificação na transmissão em tela cheia (no mapa compacto da página da corrida, silêncio).
+  useEffect(() => {
+    if (variant !== 'full') return;
+    audio.music('quali');
+    return () => audio.music(null);
+  }, [variant]);
 
   const nSectors = meta?.sectors ?? 3;
   const sessionOver = meta ? t >= meta.durationMs - 1500 : false;
