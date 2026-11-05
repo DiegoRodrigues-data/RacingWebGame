@@ -23,6 +23,7 @@ const CrazyInvite = lazy(() => import('./pages/Crazy').then((m) => ({ default: m
 const CrazyResume = lazy(() => import('./pages/Crazy').then((m) => ({ default: m.CrazyResume })));
 const Privacy = lazy(() => import('./pages/Legal').then((m) => ({ default: m.Privacy })));
 const Terms = lazy(() => import('./pages/Legal').then((m) => ({ default: m.Terms })));
+const About = lazy(() => import('./pages/About'));
 const Determinism = lazy(() => import('./pages/Determinism'));
 const AdminHome = lazy(() => import('./pages/admin/AdminHome'));
 const AdminRaces = lazy(() => import('./pages/admin/AdminRaces'));
@@ -121,6 +122,7 @@ export function App() {
           <Route path="/corrida-maluca/:id" element={<CrazyGroup />} />
           <Route path="/privacidade" element={<Privacy />} />
           <Route path="/termos" element={<Terms />} />
+          <Route path="/sobre" element={<About />} />
           <Route path="/pilotos/:id" element={<Profile />} />
           <Route
             path="/conta"

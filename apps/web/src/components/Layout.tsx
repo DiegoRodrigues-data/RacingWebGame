@@ -17,6 +17,7 @@ import {
   Settings,
   FlaskConical,
   Map as MapIcon,
+  Info,
 } from 'lucide-react';
 import { useEffect, useState, type ReactNode } from 'react';
 import { Link, NavLink, useLocation, useNavigate } from 'react-router';
@@ -89,6 +90,8 @@ const ADMIN_NAV = [
   { to: '/admin/usuarios', label: 'Usuários', icon: User },
 ];
 
+const ABOUT_NAV = { to: '/sobre', label: 'Sobre', icon: Info, end: false };
+
 export function Layout({ children }: { children: ReactNode }) {
   const me = useSession((s) => s.me);
   const logout = useSession((s) => s.logout);
@@ -101,12 +104,13 @@ export function Layout({ children }: { children: ReactNode }) {
   }, [me?.profile.reducedMotion]);
   // A conta de administração não tem visão de jogador: só administração e configurações.
   const links = isAdmin(me)
-    ? ADMIN_NAV
+    ? [...ADMIN_NAV, ABOUT_NAV]
     : [
         NAV[0]!,
         ...(me ? [{ to: '/minhas-corridas', label: 'Minhas corridas', icon: CarFront }] : []),
         ...NAV.slice(1),
         ...(isEditor(me) ? [{ to: '/admin', label: 'Admin', icon: Shield }] : []),
+        ABOUT_NAV,
       ];
   return (
     <div className="flex min-h-dvh flex-col">
@@ -232,6 +236,10 @@ export function Layout({ children }: { children: ReactNode }) {
           Racing Pack da Kenney
         </a>{' '}
         (CC0) ·{' '}
+        <Link to="/sobre" className="underline hover:text-ink">
+          Sobre
+        </Link>{' '}
+        ·{' '}
         <Link to="/privacidade" className="underline hover:text-ink">
           Privacidade
         </Link>{' '}
