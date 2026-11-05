@@ -36,6 +36,11 @@ export function RaceCard({ race, cta }: { race: RaceSummaryDto; cta?: React.Reac
         <PhaseBadge phase={race.status} />
       </div>
       <div className="flex flex-wrap gap-1.5 text-xs">
+        {race.event && (
+          <Link to={`/eventos/${race.event.id}`} className="chip border-race/60 text-race hover:bg-race/10">
+            🏆 {race.event.name}
+          </Link>
+        )}
         {race.test && (
           <span className="chip border-sky/60 text-sky" title="Corrida curta com bots, a cada poucos minutos">
             🤖 Corrida teste

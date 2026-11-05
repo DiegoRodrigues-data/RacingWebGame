@@ -15,7 +15,7 @@ import {
 } from '@tracado/shared';
 import { estimateLap } from '@tracado/sim';
 import { offsetsToTrace, suggestedLine, TrackGenerationError } from '@tracado/trackgen';
-import { and, desc, eq, gte, ilike, inArray, or, sql } from 'drizzle-orm';
+import { and, asc, desc, eq, gte, ilike, inArray, or, sql } from 'drizzle-orm';
 import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
 import type { Ctx } from '../../context';
@@ -41,6 +41,7 @@ import { closeSeason, rebuildSeason } from '../rankings/service';
 import { capacityOf, createRace, getRaceRow, getSummary, raceSummaries } from '../races/service';
 import { getSettings } from '../settings/service';
 import * as tracksSvc from '../tracks/service';
+import { eventDtos, publicEvents } from '../events/service';
 
 const idParam = z.object({ id: z.string().uuid() });
 
@@ -218,14 +219,23 @@ export function adminRoutes(app: FastifyInstance, ctx: Ctx, engine: PhaseEngine)
     admin(req);
     return ctx.db.select().from(events).orderBy(desc(events.startsAt)).limit(200);
   });
-  app.get('/events', async () =>
-    ctx.db
+  // Eventos publicados, para o jogador (com contagem de corridas e a próxima largada).
+  app.get('/events', async () => publicEvents(ctx));
+  app.get('/events/:id', async (req) => {
+    const { id } = parse(idParam, req.params);
+    const [e] = await ctx.db
       .select()
       .from(events)
-      .where(eq(events.status, 'published'))
-      .orderBy(desc(events.startsAt))
-      .limit(100),
-  );
+      .where(and(eq(events.id, id), eq(events.status, 'published')));
+    if (!e) throw new AppError('NOT_FOUND', 'Evento não encontrado.');
+    const [dto] = await eventDtos(ctx, [e]);
+    const rows = await ctx.db
+      .select()
+      .from(races)
+      .where(eq(races.eventId, id))
+      .orderBy(asc(races.practiceAt));
+    return { ...dto!, races: await raceSummaries(ctx.db, rows) };
+  });
   app.post('/admin/events', async (req, reply) => {
     const u = admin(req);
     const b = parse(eventCreateSchema, req.body);

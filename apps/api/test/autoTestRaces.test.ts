@@ -12,15 +12,16 @@ const tests = async () =>
       .body as any[]
   ).sort((a, b) => a.timeline.practiceAt.localeCompare(b.timeline.practiceAt));
 
-describe('corridas teste com bots, em ciclo', () => {
-  it('cria uma corrida teste de 10 voltas que larga em 10 minutos, com inscrições abertas', async () => {
+const ACTIVE = (r: any) => !['finished', 'archived', 'cancelled'].includes(r.status);
+
+describe('corridas teste com bots, em ciclo (uma por vez)', () => {
+  it('cria uma corrida teste de 10 voltas com treino em 2 minutos e inscrições abertas', async () => {
     await t.engine.tick();
     await t.engine.tick();
     const rs = await tests();
     expect(rs).toHaveLength(1);
-    expect(Date.parse(rs[0].timeline.raceAt)).toBe(T0 + 10 * MIN);
+    expect(Date.parse(rs[0].timeline.practiceAt)).toBe(T0 + 2 * MIN);
     expect(rs[0]).toMatchObject({ laps: 10, test: true, ranked: false, status: 'registration_open' });
-    expect(rs[0].name).toBe('Corrida Teste 09:10');
   });
 
   it('fica fora das listas normais e aparece em "Acontecendo agora"', async () => {
@@ -33,29 +34,47 @@ describe('corridas teste com bots, em ciclo', () => {
     expect((await t.json('POST', `/races/${first.id}/entries`, {}, u.token)).body.status).toBe('confirmed');
   });
 
-  it('só cria a próxima quando a atual larga, para 10 minutos depois da bandeirada', async () => {
-    await t.advance(3 * MIN);
-    expect(await tests()).toHaveLength(1); // a atual ainda não largou
+  it('não existe fila: a próxima só nasce na bandeirada e começa 2 minutos depois', async () => {
     const [first] = await tests();
-    await t.advanceTo(Date.parse(first.timeline.raceAt) + 6000);
-    await t.engine.tick(); // a próxima abre inscrições no ciclo seguinte do motor
+    // Durante treino, classificação e corrida: continua só uma.
+    for (const at of ['practiceAt', 'setupLockAt', 'qualifyingAt', 'raceAt'] as const) {
+      await t.advanceTo(Date.parse(first.timeline[at]) + 6000);
+      await t.engine.tick();
+      expect((await tests()).filter(ACTIVE)).toHaveLength(1);
+    }
+    const running = (await tests()).find((r) => r.id === first.id);
+    expect(running.status).toBe('race');
+    await t.advanceTo(Date.parse(running.timeline.raceEndsAt));
     const rs = await tests();
-    expect(rs).toHaveLength(2);
-    const cur = rs[0],
-      next = rs[1];
-    expect(['race', 'finished']).toContain(cur.status);
-    expect(Date.parse(next.timeline.raceAt)).toBe(Date.parse(cur.timeline.raceEndsAt) + 10 * MIN);
-    expect(next.status).toBe('registration_open');
+    expect(rs.find((r) => r.id === first.id).status).toBe('finished');
+    const next = rs.filter(ACTIVE);
+    expect(next).toHaveLength(1);
+    expect(Date.parse(next[0].timeline.practiceAt)).toBe(Date.parse(running.timeline.raceEndsAt) + 2 * MIN);
+    expect(next[0].status).toBe('registration_open');
   });
 
-  it('segue em ciclo, nunca com mais de duas ao mesmo tempo, e apaga as antigas', async () => {
+  it('segue em ciclo, nunca com mais de uma ao mesmo tempo, e apaga as antigas', async () => {
     const firstId = (await tests())[0].id;
-    for (let k = 0; k < 16; k++) {
-      await t.advance(15 * MIN);
-      const active = (await tests()).filter((r) => !['finished', 'archived', 'cancelled'].includes(r.status));
-      expect(active.length).toBeLessThanOrEqual(2);
-      expect(active.length).toBeGreaterThanOrEqual(1);
+    for (let k = 0; k < 40; k++) {
+      await t.advance(6 * MIN);
+      expect((await tests()).filter(ACTIVE).length).toBeLessThanOrEqual(1);
     }
     expect((await t.json('GET', `/races/${firstId}`)).status).toBe(404);
+  });
+
+  it('passa por todos os terrenos em sequência', async () => {
+    const seq: string[] = [];
+    for (let k = 0; k < 5; k++) {
+      const cur = (await tests()).find(ACTIVE);
+      seq.push(cur.track.terrain);
+      // Corre a atual até a bandeirada: a próxima nasce na hora.
+      await t.advanceTo(Date.parse(cur.timeline.raceAt) + 6000);
+      const running = (await t.race(cur.id)).timeline;
+      await t.advanceTo(Date.parse(running.raceEndsAt));
+    }
+    const order = ['asphalt', 'dirt', 'sand', 'mixed'];
+    for (let i = 1; i < seq.length; i++)
+      expect(order.indexOf(seq[i]!)).toBe((order.indexOf(seq[i - 1]!) + 1) % 4);
+    expect(new Set(seq.slice(0, 4)).size).toBe(4);
   });
 });

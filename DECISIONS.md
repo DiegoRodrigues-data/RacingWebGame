@@ -146,6 +146,18 @@ traçado e corrida contra fantasmas rodam no aparelho e nada é enviado ao servi
 - **Fora por enquanto:** coeficientes da física (`COEF`). Mudá-los muda resultados e precisa valer igual no servidor e
   no treino do navegador; exigiria versionar a simulação por corrida.
 
+### Corridas teste: uma por vez e eventos visíveis
+
+- **Corrida teste sem fila:** só existe uma corrida teste ativa por vez. A próxima nasce na bandeirada da atual e o
+  treino dela começa `testRaces.gapMin` minutos depois (padrão 2), já com inscrições abertas. Antes, a próxima era
+  criada quando a atual largava e as duas apareciam juntas.
+- **Terrenos em rodízio nas corridas teste:** cada corrida teste usa o próximo terreno da lista
+  `testRaces.terrains` (padrão asfalto, terra, areia, misto), a partir do terreno da anterior; ignora os pesos de
+  terreno e o rodízio de pistas salvas. As configurações e o status ficam na página **Admin → Corridas teste**.
+- **Eventos:** os eventos publicados aparecem no início (em andamento ou por vir) e têm página própria
+  (`/eventos/:id`) com as corridas ligadas a eles; o formulário de corrida do admin escolhe o evento (e a categoria
+  dele). Antes não havia nenhuma tela de eventos para o jogador nem como ligar corridas a um evento pelo admin.
+
 ### Cenários em volta da pista
 
 - **Três cenários com a arte do Racing Pack** (sem arte nova): Autódromo (grama, árvores), Deserto (areia, pedras) e

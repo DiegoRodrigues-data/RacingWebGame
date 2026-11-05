@@ -9,7 +9,7 @@ import type {
   ResultRowDto,
   ServerEvents,
 } from '@tracado/shared';
-import { ROOM, type PublicSettingsDto } from '@tracado/shared';
+import { ROOM, type PublicSettingsDto, type EventDto } from '@tracado/shared';
 import type { TrackGeometry } from '@tracado/trackgen';
 import { QueryClient, useQuery, useQueryClient } from '@tanstack/react-query';
 import { get } from './api';
@@ -29,6 +29,8 @@ export const queryClient = new QueryClient({
 export interface LobbyDto {
   live: RaceSummaryDto[];
   upcoming: RaceSummaryDto[];
+  /** Eventos publicados em andamento ou por vir. */
+  events?: EventDto[];
   recent: { race: RaceSummaryDto; podium: ResultRowDto[] }[];
   top: RankingRowDto[];
   mine: RaceSummaryDto[];

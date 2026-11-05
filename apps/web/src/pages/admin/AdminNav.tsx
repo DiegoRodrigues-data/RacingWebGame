@@ -9,6 +9,7 @@ export function AdminNav() {
         ['/admin', 'Painel'],
         ['/admin/configuracoes', 'Configurações'],
         ['/admin/corridas', 'Corridas'],
+        ['/admin/corridas-teste', 'Corridas teste'],
         ['/admin/categorias', 'Categorias'],
         ['/admin/eventos', 'Eventos'],
         ['/admin/pistas', 'Pistas'],

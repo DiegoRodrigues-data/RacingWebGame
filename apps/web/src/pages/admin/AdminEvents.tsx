@@ -1,4 +1,5 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { Link } from 'react-router';
 import type { FormEvent } from 'react';
 import { toast } from '../../components/ui';
 import { errorMessage, get, patch, post } from '../../lib/api';
@@ -35,7 +36,9 @@ export default function AdminEvents() {
       });
       toast(
         'Evento criado',
-        'Associe corridas a ele pelo ID do evento na API, ou crie corridas da mesma categoria.',
+        f.status === 'published'
+          ? 'Agora crie as corridas dele em "+ Criar corridas". Ele aparece no início para os jogadores.'
+          : 'Está como rascunho: publique para os jogadores verem e crie as corridas dele.',
         'ok',
       );
       void qc.invalidateQueries({ queryKey: ['admin-events'] });
@@ -85,10 +88,19 @@ export default function AdminEvents() {
               <div className="font-bold">{ev.name}</div>
               <div className="text-xs text-muted">
                 {new Date(ev.startsAt).toLocaleDateString('pt-BR')} –{' '}
-                {new Date(ev.endsAt).toLocaleDateString('pt-BR')} · {ev.status} · id {ev.id.slice(0, 8)}
+                {new Date(ev.endsAt).toLocaleDateString('pt-BR')} ·{' '}
+                {{ draft: 'rascunho', published: 'publicado', cancelled: 'cancelado' }[ev.status]}
               </div>
             </div>
-            <div className="flex gap-1">
+            <div className="flex flex-wrap gap-1">
+              <Link to={`/admin/corridas?evento=${ev.id}`} className="btn-primary !py-1 text-xs">
+                + Criar corridas
+              </Link>
+              {ev.status === 'published' && (
+                <Link to={`/eventos/${ev.id}`} className="btn-ghost !py-1 text-xs">
+                  Ver página
+                </Link>
+              )}
               {ev.status !== 'published' && (
                 <button
                   className="btn-ghost !py-1 text-xs"

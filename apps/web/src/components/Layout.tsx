@@ -15,6 +15,7 @@ import {
   CarFront,
   PartyPopper,
   Settings,
+  FlaskConical,
   Map as MapIcon,
 } from 'lucide-react';
 import { useEffect, useState, type ReactNode } from 'react';
@@ -83,6 +84,7 @@ const ADMIN_NAV = [
   { to: '/admin', label: 'Painel', icon: Gauge, end: true },
   { to: '/admin/configuracoes', label: 'Configurações', icon: Settings },
   { to: '/admin/corridas', label: 'Corridas', icon: CalendarDays },
+  { to: '/admin/corridas-teste', label: 'Corridas teste', icon: FlaskConical },
   { to: '/admin/pistas', label: 'Pistas', icon: MapIcon },
   { to: '/admin/usuarios', label: 'Usuários', icon: User },
 ];

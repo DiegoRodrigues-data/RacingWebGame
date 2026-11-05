@@ -308,6 +308,9 @@ Fecha o ciclo de vida com resultados persistidos.
 - [x] Configurações do jogo no banco, com efeito na hora e auditoria (padrão vindo das variáveis antigas)
 - [x] Tempo das etapas configurável (treino, parque fechado, classificação); janela de traçado removida
 - [x] Conta de administração só com visão de administrador (não corre, não entra em grupos)
+- [x] Corridas teste uma por vez (a próxima começa 2 min depois da bandeirada, sem fila)
+- [x] Corridas teste passando por todos os terrenos (rodízio configurável) e página própria no admin
+- [x] Eventos visíveis para o jogador (início, página do evento, selo nos cards) e ligados às corridas pelo admin
 - [x] Grade automática: ligar, por dia, antecedência, voltas, ranqueada, rodízio de categorias, bots
 - [x] Terrenos liberados com peso no sorteio (corrige "só aparece asfalto"), comprimento, complexidade e largura
 - [x] Gerador de pistas por seed com prévia, tempo estimado, sugestões e rodízio de pistas salvas
@@ -327,7 +330,12 @@ Fecha o ciclo de vida com resultados persistidos.
 - [x] Autódromo, Deserto e Cânion com a arte do Racing Pack, contorno da pista e decoração por cenário
 - [x] Sorteio por peso nas configurações, sem combinar pista e fundo da mesma cor; escolha manual nas corridas do admin
 - [x] Prévia de cada cenário no gerador de pistas; miniaturas com o fundo do cenário
-- [ ] Entardecer e noite (filtros de cor e luzes da pista)
+- [ ] Entardecer e noite (pedido em 05/11/2026, ainda não iniciado)
+  - [ ] Horário do dia por corrida (dia, entardecer, noite), sorteado por peso nas configurações e escolhido nas corridas do admin
+  - [ ] Entardecer: filtro de cor quente sobre fundo, pista e carros
+  - [ ] Noite: cena escurecida, luzes do Racing Pack (`light_white`, `light_yellow`) ao longo da pista e faróis nos carros
+  - [ ] Prévia no gerador de pistas e nas miniaturas
+  - [ ] Conferir legibilidade (contorno da pista, números dos carros) e desempenho no celular
 
 ---
 

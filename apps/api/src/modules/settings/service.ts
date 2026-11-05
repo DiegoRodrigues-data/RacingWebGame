@@ -31,7 +31,6 @@ export function settingsFromConfig(cfg: Config): GameSettings {
     testRaces: {
       ...d.testRaces,
       enabled: cfg.AUTO_TEST_RACES_GAP_MIN > 0,
-      gapMin: cfg.AUTO_TEST_RACES_GAP_MIN || d.testRaces.gapMin,
       laps: cfg.AUTO_TEST_RACES_LAPS,
       bots: cfg.DEMO_BOTS,
       keepHours: cfg.AUTO_TEST_RACES_KEEP_HOURS,

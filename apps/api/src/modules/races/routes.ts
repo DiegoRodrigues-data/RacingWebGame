@@ -25,6 +25,7 @@ import {
   revealedRuns,
 } from '../engine/qualiLive';
 import { elapsedSim, loadReplay, resultRows } from '../engine/runner';
+import { publicEvents } from '../events/service';
 import { currentSeason, getRanking, scopeKeys } from '../rankings/service';
 import { getGeometry } from '../tracks/service';
 import { cancel, chooseCar, register } from './entries';
@@ -348,6 +349,7 @@ export function raceRoutes(app: FastifyInstance, ctx: Ctx) {
     return {
       live,
       upcoming,
+      events: (await publicEvents(ctx, true)).slice(0, 4),
       recent,
       top,
       mine,

@@ -35,7 +35,7 @@ interface SettingsResponse {
 
 const TERRAIN_KEYS: (keyof TerrainWeights)[] = ['asphalt', 'dirt', 'sand', 'mixed'];
 
-function Section({ title, hint, children }: { title: string; hint?: ReactNode; children: ReactNode }) {
+export function Section({ title, hint, children }: { title: string; hint?: ReactNode; children: ReactNode }) {
   return (
     <section className="card space-y-3">
       <div>
@@ -47,7 +47,7 @@ function Section({ title, hint, children }: { title: string; hint?: ReactNode; c
   );
 }
 
-function Num({
+export function Num({
   label,
   value,
   onChange,
@@ -93,7 +93,7 @@ function Num({
   );
 }
 
-function Toggle({
+export function Toggle({
   label,
   checked,
   onChange,
@@ -477,45 +477,10 @@ export default function AdminSettings() {
         </Section>
 
         <div className="space-y-4">
-          <Section title="Corridas teste" hint="Uma de cada vez, curtas, com bots, para quem quer jogar já.">
-            <Toggle
-              label="Ligadas"
-              checked={s.testRaces.enabled}
-              onChange={(v) => set('testRaces', { enabled: v })}
-            />
-            <div className="grid grid-cols-2 gap-3">
-              <Num
-                label="Intervalo depois da bandeirada"
-                value={s.testRaces.gapMin}
-                min={1}
-                max={240}
-                suffix="min"
-                onChange={(v) => set('testRaces', { gapMin: v ?? 10 })}
-              />
-              <Num
-                label="Voltas"
-                value={s.testRaces.laps}
-                min={3}
-                max={60}
-                onChange={(v) => set('testRaces', { laps: v ?? 10 })}
-              />
-              <Num
-                label="Bots"
-                value={s.testRaces.bots}
-                min={0}
-                max={21}
-                onChange={(v) => set('testRaces', { bots: v ?? 0 })}
-              />
-              <Num
-                label="Apagar encerradas depois de"
-                value={s.testRaces.keepHours}
-                min={0.5}
-                max={168}
-                step={0.5}
-                suffix="h"
-                onChange={(v) => set('testRaces', { keepHours: v ?? 3 })}
-              />
-            </div>
+          <Section title="Corridas teste" hint="Uma por vez, com bots, passando pelos terrenos.">
+            <Link to="/admin/corridas-teste" className="btn-ghost">
+              Abrir a página das corridas teste
+            </Link>
           </Section>
           <Section title="Corridas criadas no admin">
             <Num

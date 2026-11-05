@@ -46,7 +46,7 @@ export const gameSettingsSchema = z
         .min(0)
         .max(MAX_CARS_PER_RACE - 1),
     }),
-    /** Corridas teste em ciclo (curtas, com bots). */
+    /** Corridas teste em ciclo (curtas, com bots): uma por vez; `gapMin` = da bandeirada ao treino da próxima. */
     testRaces: z.object({
       enabled: z.boolean(),
       gapMin: z.number().int().min(1).max(240),
@@ -57,6 +57,8 @@ export const gameSettingsSchema = z
         .min(0)
         .max(MAX_CARS_PER_RACE - 1),
       keepHours: z.number().min(0.5).max(168),
+      /** Rodízio de terrenos, na ordem: cada corrida teste usa o próximo da lista. */
+      terrains: z.array(z.enum(['asphalt', 'dirt', 'sand', 'mixed'])).min(1).max(4),
     }),
     /** Bots nas corridas criadas pelo admin (0 = só gente). */
     adminRaceBots: z
@@ -122,7 +124,14 @@ export const DEFAULT_GAME_SETTINGS: GameSettings = {
     categories: ['copa-novatos'],
     bots: 0,
   },
-  testRaces: { enabled: false, gapMin: 10, laps: 10, bots: 0, keepHours: 3 },
+  testRaces: {
+    enabled: false,
+    gapMin: 2,
+    laps: 10,
+    bots: 0,
+    keepHours: 3,
+    terrains: ['asphalt', 'dirt', 'sand', 'mixed'],
+  },
   adminRaceBots: 0,
   tracks: {
     terrains: { asphalt: 100, dirt: 0, sand: 0, mixed: 0 },

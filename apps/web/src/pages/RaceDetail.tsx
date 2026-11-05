@@ -118,6 +118,14 @@ export default function RaceDetail() {
             </span>
             <span className="chip">{race.ranked ? '🏆 Ranqueada' : '🤝 Amistosa'}</span>
             <CrazyBadge race={race} />
+            {race.event && (
+              <Link
+                to={`/eventos/${race.event.id}`}
+                className="chip border-race/60 text-race hover:bg-race/10"
+              >
+                🏆 {race.event.name}
+              </Link>
+            )}
             {race.annulled && <span className="chip border-hot text-hot">Resultado anulado</span>}
           </div>
           <h1 className="mt-2 font-display text-3xl">{race.name}</h1>

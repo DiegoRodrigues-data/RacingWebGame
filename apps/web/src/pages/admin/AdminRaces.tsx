@@ -7,8 +7,8 @@ import {
   type RaceSummaryDto,
 } from '@tracado/shared';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { useState, type FormEvent } from 'react';
-import { Link } from 'react-router';
+import { useEffect, useState, type FormEvent } from 'react';
+import { Link, useSearchParams } from 'react-router';
 import { PhaseBadge, Tabs, toast } from '../../components/ui';
 import { errorMessage, get, post } from '../../lib/api';
 import { fmtDateTime } from '../../lib/format';
@@ -31,6 +31,18 @@ function CreateRace({ batch }: { batch: boolean }) {
     queryFn: () => get<TrackRow[]>('/admin/tracks?kind=special'),
   });
   const [busy, setBusy] = useState(false);
+  // Evento vindo do link "Criar corridas" da página de eventos (?evento=id): já escolhe a categoria dele.
+  const [params] = useSearchParams();
+  const evs = useQuery({
+    queryKey: ['admin-events'],
+    queryFn: () => get<{ id: string; name: string; categoryId: string; status: string }[]>('/admin/events'),
+  });
+  const [eventId, setEventId] = useState(params.get('evento') ?? '');
+  const [categoryId, setCategoryId] = useState('');
+  useEffect(() => {
+    const ev = evs.data?.find((x) => x.id === eventId);
+    if (ev && !categoryId) setCategoryId(ev.categoryId);
+  }, [evs.data, eventId, categoryId]);
   const ph = usePublicSettings().data?.phases ?? DEFAULT_GAME_SETTINGS.phases;
   async function submit(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -40,6 +52,7 @@ function CreateRace({ batch }: { batch: boolean }) {
       : { type: 'procedural', ...(f.seed ? { seed: f.seed } : {}) };
     const common = {
       categoryId: f.categoryId,
+      ...(f.eventId ? { eventId: f.eventId } : {}),
       ranked: f.ranked === 'on',
       capacity: Number(f.capacity),
       waitlistMax: Number(f.waitlistMax),
@@ -94,8 +107,37 @@ function CreateRace({ batch }: { batch: boolean }) {
         />
       </label>
       <label>
+        <span className="label">Evento (opcional)</span>
+        <select
+          name="eventId"
+          className="input"
+          value={eventId}
+          onChange={(e) => {
+            setEventId(e.target.value);
+            const ev = evs.data?.find((x) => x.id === e.target.value);
+            if (ev) setCategoryId(ev.categoryId);
+          }}
+        >
+          <option value="">Nenhum</option>
+          {evs.data
+            ?.filter((e) => e.status !== 'cancelled')
+            .map((e) => (
+              <option key={e.id} value={e.id}>
+                {e.name}
+                {e.status === 'draft' ? ' (rascunho)' : ''}
+              </option>
+            ))}
+        </select>
+      </label>
+      <label>
         <span className="label">Categoria</span>
-        <select name="categoryId" className="input" required>
+        <select
+          name="categoryId"
+          className="input"
+          required
+          value={categoryId || cats.data?.[0]?.id || ''}
+          onChange={(e) => setCategoryId(e.target.value)}
+        >
           {cats.data?.map((c) => (
             <option key={c.id} value={c.id}>
               {c.name}

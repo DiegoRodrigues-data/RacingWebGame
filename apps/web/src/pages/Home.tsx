@@ -1,4 +1,5 @@
 import { motion } from 'motion/react';
+import { EventCard } from '../components/EventCard';
 import { Link } from 'react-router';
 import { RaceCard } from '../components/RaceCard';
 import { CarIcon, Empty, Flag, Skeleton } from '../components/ui';
@@ -221,6 +222,19 @@ export function Home() {
                   ) : undefined
                 }
               />
+            ))}
+          </div>
+        </section>
+      )}
+
+      {data?.events && data.events.length > 0 && (
+        <section className="mt-10" aria-labelledby="eventos">
+          <h2 id="eventos" className="font-display text-2xl">
+            Eventos
+          </h2>
+          <div className="mt-4 grid gap-3 md:grid-cols-2">
+            {data.events.map((e) => (
+              <EventCard key={e.id} e={e} />
             ))}
           </div>
         </section>

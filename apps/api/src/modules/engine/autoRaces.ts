@@ -1,4 +1,12 @@
-import { pickBiome, pickTerrain, type Biome, type GameSettings, type RaceCreate } from '@tracado/shared';
+import {
+  pickBiome,
+  pickTerrain,
+  TRACK_TERRAINS,
+  type Biome,
+  type GameSettings,
+  type RaceCreate,
+  type TrackTerrain,
+} from '@tracado/shared';
 import { createRng } from '@tracado/trackgen';
 import { and, desc, eq, gte, inArray, lte, sql } from 'drizzle-orm';
 import type { Ctx } from '../../context';
@@ -30,11 +38,13 @@ export async function autoTrack(
   ctx: Pick<Ctx, 'db'>,
   s: GameSettings,
   cat: Pick<CategoryRow, 'config'>,
+  /** Terreno obrigatório (corridas teste em rodízio): ignora os pesos e o rodízio de pistas salvas. */
+  terrain?: TrackTerrain,
 ): Promise<RaceCreate['track']> {
   const t = s.tracks;
   const seed = t.seedPrefix ? `${t.seedPrefix}-${newSeed()}` : newSeed();
   const r = createRng(`${seed}|auto`);
-  if (t.pool.length && r.next() < t.poolChance) {
+  if (!terrain && t.pool.length && r.next() < t.poolChance) {
     const id = t.pool[Math.floor(r.next() * t.pool.length)]!;
     const [v] = await ctx.db
       .select({ id: trackVersions.id })
@@ -52,7 +62,7 @@ export async function autoTrack(
       length: Math.round((min + r.next() * (max - min)) / 50) * 50,
       complexity: t.complexity ?? cfg.trackComplexity,
       width: t.width,
-      terrain: pickTerrain(t.terrains, r.next()),
+      terrain: terrain ?? pickTerrain(t.terrains, r.next()),
     },
   };
 }
@@ -158,10 +168,10 @@ export async function ensureAutoRaces(ctx: Ctx): Promise<number> {
 }
 
 /**
- * Corridas teste em ciclo (configurações do jogo → corridas teste): uma de cada vez, curta, amistosa e com bots
- * completando o grid. A próxima larga `gapMin` minutos depois da bandeirada da anterior e é criada assim que a
- * anterior começa a correr (o fim já é conhecido), com inscrições abertas desde então. Ficam fora das listas
- * normais. Depois de `keepHours` encerradas, são apagadas com replay, resultados e pista.
+ * Corridas teste em ciclo (configurações do jogo → corridas teste): uma só por vez, curta, amistosa e com bots
+ * completando o grid, passando pelos terrenos do rodízio em sequência (padrão: asfalto, terra, areia, misto). Não existe fila: a próxima só é criada depois da bandeirada da atual e começa (treino, com
+ * inscrições já abertas) `gapMin` minutos depois dela. Ficam fora das listas normais. Depois de `keepHours`
+ * encerradas, são apagadas com replay, resultados e pista.
  */
 export async function ensureAutoTestRaces(ctx: Ctx): Promise<boolean> {
   const st = await getSettings(ctx);
@@ -170,23 +180,44 @@ export async function ensureAutoTestRaces(ctx: Ctx): Promise<boolean> {
   await pruneTestRaces(ctx);
   const now = ctx.clock.now();
   const gap = tr.gapMin * 60_000;
+  // Ainda há uma corrida teste em andamento (ou por começar)? Então não cria outra.
+  const [active] = await ctx.db
+    .select({ id: races.id })
+    .from(races)
+    .where(
+      and(
+        sql`${races.flags} ? 'autoTest'`,
+        sql`${races.status} not in ('finished', 'archived', 'cancelled')`,
+      ),
+    )
+    .limit(1);
+  if (active) return false;
   const [last] = await ctx.db
     .select()
     .from(races)
     .where(sql`${races.flags} ? 'autoTest'`)
     .orderBy(desc(races.practiceAt))
     .limit(1);
-  let raceAt: number;
-  if (!last || ['finished', 'archived', 'cancelled'].includes(last.status))
-    raceAt = (last?.raceEndsAt?.getTime() ?? now) + gap;
-  else if (last.status === 'race' && last.raceEndsAt) raceAt = last.raceEndsAt.getTime() + gap;
-  else return false; // a atual ainda não largou: a próxima é criada quando ela começar a correr
-  // Nunca começa o treino no passado nem sem tempo para alguém se inscrever.
-  const practiceAt = Math.max(raceAt - preludeMs(st), now + 60_000);
+  // Bandeirada da última (ou o cancelamento); sem nenhuma, agora.
+  const endedAt = last ? (last.raceEndsAt?.getTime() ?? last.statusChangedAt.getTime()) : now;
+  // Nunca começa o treino no passado nem sem um respiro para a tela trocar.
+  const practiceAt = Math.max(endedAt + gap, now + 30_000);
   let cat: CategoryRow | null = null;
   for (const slug of st.autoRaces.categories) if (!cat) cat = await categoryBySlug(ctx, slug);
   if (!cat) return false;
-  const track = await autoTrack(ctx, st, cat);
+  // Rodízio de terrenos (configurações → corridas teste), a partir do terreno da última.
+  let lastTerrain: string | null = null;
+  if (last) {
+    const [v] = await ctx.db
+      .select({ t: trackVersions.terrain })
+      .from(trackVersions)
+      .where(eq(trackVersions.id, last.trackVersionId));
+    lastTerrain = v?.t ?? null;
+  }
+  const order = tr.terrains.length ? tr.terrains : [...TRACK_TERRAINS];
+  const idx = lastTerrain ? order.indexOf(lastTerrain as TrackTerrain) : -1;
+  const terrain = order[(idx + 1) % order.length]!;
+  const track = await autoTrack(ctx, st, cat, terrain);
   const row = await createRace(
     ctx,
     {

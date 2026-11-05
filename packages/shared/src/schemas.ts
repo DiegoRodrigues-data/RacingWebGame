@@ -385,6 +385,24 @@ export const eventCreateSchema = z.object({
 });
 export type EventCreate = z.infer<typeof eventCreateSchema>;
 
+/** Evento para o jogador: datas, categoria e as corridas ligadas a ele. */
+export interface EventDto {
+  id: string;
+  name: string;
+  description: string;
+  startsAt: string;
+  endsAt: string;
+  ranked: boolean;
+  category: { id: string; name: string };
+  /** Corridas do evento ainda por acontecer (ou em andamento) e já encerradas. */
+  upcomingRaces: number;
+  finishedRaces: number;
+  nextRaceAt: string | null;
+}
+export interface EventDetailDto extends EventDto {
+  races: RaceSummaryDto[];
+}
+
 export const ENTRY_STATUSES = ['confirmed', 'waitlisted', 'cancelled', 'withdrawn', 'dnf'] as const;
 export type EntryStatus = (typeof ENTRY_STATUSES)[number];
 

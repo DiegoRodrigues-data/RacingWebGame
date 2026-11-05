@@ -88,8 +88,9 @@ export class PhaseEngine {
       // Grade automática: uma checagem por minuto basta (cada função vê nas configurações se está ligada).
       if (this.ctx.clock.now() - this.lastAutoRaces >= 60_000) {
         this.lastAutoRaces = this.ctx.clock.now();
-        await ensureAutoRaces(this.ctx);
-        await ensureAutoTestRaces(this.ctx);
+        const created = (await ensureAutoRaces(this.ctx)) + ((await ensureAutoTestRaces(this.ctx)) ? 1 : 0);
+        // Corrida recém-criada já abre as inscrições neste mesmo ciclo.
+        if (created) for (const r of await this.dueRaces()) await this.advance(r);
       }
       await this.broadcastPlayback();
     } catch (e) {
@@ -313,6 +314,8 @@ export class PhaseEngine {
       }
       case 'finished': {
         this.playback.delete(race.id);
+        // Corrida teste acabou: a próxima é criada já (começa `gapMin` depois da bandeirada).
+        if (race.flags.autoTest) this.nudgeAutoRaces();
         await bumpRankingCache(ctx);
         await ctx.hub.publish(ROOM.race(race.id), 'race.finished', {
           raceId: race.id,

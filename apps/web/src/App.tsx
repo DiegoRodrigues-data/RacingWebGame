@@ -16,6 +16,7 @@ const Profile = lazy(() => import('./pages/Profile'));
 const Account = lazy(() => import('./pages/Account'));
 const Notifications = lazy(() => import('./pages/Notifications'));
 const MyRaces = lazy(() => import('./pages/MyRaces'));
+const EventPage = lazy(() => import('./pages/EventPage'));
 const CrazyHome = lazy(() => import('./pages/Crazy').then((m) => ({ default: m.CrazyHome })));
 const CrazyGroup = lazy(() => import('./pages/Crazy').then((m) => ({ default: m.CrazyGroup })));
 const CrazyInvite = lazy(() => import('./pages/Crazy').then((m) => ({ default: m.CrazyInvite })));
@@ -34,6 +35,7 @@ const AdminUsers = lazy(() => import('./pages/admin/AdminUsers'));
 const AdminAudit = lazy(() => import('./pages/admin/AdminAudit'));
 const AdminSettings = lazy(() => import('./pages/admin/AdminSettings'));
 const AdminTrackGen = lazy(() => import('./pages/admin/AdminTrackGen'));
+const AdminTestRaces = lazy(() => import('./pages/admin/AdminTestRaces'));
 
 function RequireAuth({ children, role }: { children: ReactNode; role?: 'admin' | 'editor' }) {
   const { me, ready } = useSession();
@@ -98,6 +100,7 @@ export function App() {
           <Route path="/corridas/:id/replay" element={<Live mode="replay" />} />
           <Route path="/corridas/:id/resultado" element={<Results />} />
           <Route path="/rankings" element={<Rankings />} />
+          <Route path="/eventos/:id" element={<EventPage />} />
           <Route
             path="/corrida-maluca"
             element={
@@ -223,6 +226,14 @@ export function App() {
             element={
               <RequireAuth role="admin">
                 <AdminSettings />
+              </RequireAuth>
+            }
+          />
+          <Route
+            path="/admin/corridas-teste"
+            element={
+              <RequireAuth role="admin">
+                <AdminTestRaces />
               </RequireAuth>
             }
           />
