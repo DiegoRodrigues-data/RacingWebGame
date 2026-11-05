@@ -285,9 +285,9 @@ Fecha o ciclo de vida com resultados persistidos.
 - [x] WebSocket pelo Nginx (upgrade) atrás do Traefik
 - [x] Migrações na subida da API com lock consultivo
 - [x] Backup diário com retenção e script de restauração
-- [ ] Construir as imagens e subir o compose (Docker indisponível nesta máquina)
-- [ ] Validar com Postgres e Redis reais
-- [ ] Push, autodeploy no Dokploy, hash do bundle no domínio igual ao local, `curl -I` nos cabeçalhos de cache e `GET /api/health`
+- [x] Construir as imagens e subir o compose (no Dokploy, em race.diegorodrigues.com.br)
+- [x] Validar com Postgres e Redis reais
+- [x] Push, autodeploy no Dokploy, hash do bundle no domínio igual ao local, `curl -I` nos cabeçalhos de cache e `GET /api/health`
 - [ ] Sentry e métricas apontando para produção
 
 ## Fase 17 — Corrida Maluca (grupos de amigos) ✅
@@ -330,12 +330,19 @@ Fecha o ciclo de vida com resultados persistidos.
 - [x] Autódromo, Deserto e Cânion com a arte do Racing Pack, contorno da pista e decoração por cenário
 - [x] Sorteio por peso nas configurações, sem combinar pista e fundo da mesma cor; escolha manual nas corridas do admin
 - [x] Prévia de cada cenário no gerador de pistas; miniaturas com o fundo do cenário
+- [x] Zebras só nas curvas fechadas (raio < 90 m), contínuas e nas duas bordas; faixa branca lisa nas retas e curvas abertas (mais conforto visual em alta velocidade). Só desenho: geometria e hash da pista não mudam
 - [ ] Entardecer e noite (pedido em 05/11/2026, ainda não iniciado)
   - [ ] Horário do dia por corrida (dia, entardecer, noite), sorteado por peso nas configurações e escolhido nas corridas do admin
   - [ ] Entardecer: filtro de cor quente sobre fundo, pista e carros
   - [ ] Noite: cena escurecida, luzes do Racing Pack (`light_white`, `light_yellow`) ao longo da pista e faróis nos carros
   - [ ] Prévia no gerador de pistas e nas miniaturas
   - [ ] Conferir legibilidade (contorno da pista, números dos carros) e desempenho no celular
+
+## Fase 21 — Página Sobre ✅
+
+- [x] Página `/sobre` no menu principal (jogador e admin) e no rodapé
+- [x] Autoria com foto e link para o LinkedIn
+- [x] Agradecimento ao Kenney pelo Racing Pack (CC0), com link para kenney.nl, e créditos de fontes e ícones
 
 ---
 
