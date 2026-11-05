@@ -15,6 +15,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useParams } from 'react-router';
 import { CarWearPanel, TyreWearMini } from '../components/CarWear';
 import { Minimap, RainOverlay } from '../components/Minimap';
+import { QualifyingLive } from '../components/QualifyingLive';
 import { CameraControls, TrackCanvas } from '../components/TrackCanvas';
 import { Countdown, Empty, PhaseBadge, Spinner } from '../components/ui';
 import { CAR_CSS } from '../game/assets';
@@ -241,6 +242,31 @@ export default function Live({ mode }: { mode: 'live' | 'replay' }) {
   if (!race) return <Spinner />;
   if (mode === 'replay' && !['finished', 'archived'].includes(race.status))
     return <Empty title="O replay fica disponível após a corrida" icon="📼" />;
+  if (mode === 'live' && race.status === 'qualifying')
+    return (
+      <div className="space-y-3">
+        <header className="flex flex-wrap items-center justify-between gap-2">
+          <div>
+            <Link to={`/corridas/${id}`} className="text-sm text-muted hover:text-ink">
+              ← {race.name}
+            </Link>
+            <h1 className="flex items-center gap-2 font-display text-2xl">
+              <span className="size-3 animate-pulse-soft rounded-full bg-violet" /> Classificação ao vivo
+            </h1>
+          </div>
+          <div className="flex items-center gap-3">
+            <ShareRace race={race} compact />
+            <PhaseBadge phase={race.status} />
+            {race.phaseDeadline && (
+              <span className="text-right text-xs text-muted">
+                Largada em <Countdown to={race.timeline.raceAt} className="text-xl text-ink" />
+              </span>
+            )}
+          </div>
+        </header>
+        <QualifyingLive race={race} geometry={geo.data} variant="full" />
+      </div>
+    );
   const beforeStart = mode === 'live' && meta && realtime.clock.now() < meta.startedAt;
   const waiting = mode === 'live' && !meta && race.status !== 'race';
   return (

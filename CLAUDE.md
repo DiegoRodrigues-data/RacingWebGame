@@ -52,7 +52,7 @@ Os pacotes são consumidos direto como TypeScript: o `exports` aponta para `src/
   - Schemas Zod e DTOs (`schemas.ts`).
   - Máquina de fases (`phases.ts`: `ALLOWED_TRANSITIONS`, `buildTimeline`, `duePhase`).
   - Envelope e eventos do WebSocket (`ws.ts`).
-  - Constantes do jogo, como `MAX_CARS = 22` e a janela de traçado de 5 min.
+  - Constantes do jogo, como `MAX_CARS = 22` e a janela de traçado de 2 min.
   - `ClockSync`, a sincronização de relógio com o servidor.
   - `AppError` e `ERROR_CODES`.
   - Mudou um DTO? Ajuste aqui primeiro.
@@ -103,6 +103,7 @@ Os pacotes são consumidos direto como TypeScript: o `exports` aponta para `src/
 - Os assets estão em `src/assets/racing_pack` (licença CC0, créditos em `CREDITS.md`).
 - `pages/Box.tsx` concentra a preparação: setup, desenho do traçado e treino com carro fantasma. O envio automático do traçado tem uma trava em nível de módulo contra envio duplicado quando o componente remonta após renovar o token.
 - As páginas de admin ficam em `pages/admin/` e incluem o editor de pistas.
+- `pages/Crazy.tsx` é a Corrida Maluca (grupos de amigos com convite por link, convidados só com apelido e troféus de zoeira). No servidor fica em `modules/crazy`; as corridas do grupo têm `crazy_group_id` e ficam fora das listas públicas.
 
 ## Deploy (VPS com Dokploy)
 

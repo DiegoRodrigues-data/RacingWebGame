@@ -1,4 +1,4 @@
-import { TRACE_WINDOW_MS } from '@tracado/shared';
+import { DEFAULT_PRACTICE_MINUTES, TRACE_WINDOW_MS } from '@tracado/shared';
 import { and, desc, eq, gte, inArray, lte, sql } from 'drizzle-orm';
 import type { Ctx } from '../../context';
 import { categories, notifications, races, tracks } from '../../db/schema';
@@ -56,7 +56,7 @@ export async function ensureAutoRaces(ctx: Ctx): Promise<number> {
         startAt: new Date(at).toISOString(),
         // Inscrições abertas desde já: o prazo cobre toda a janela de antecedência.
         registrationLeadMinutes: Math.ceil((at - now) / 60_000) + 1,
-        practiceMinutes: 10,
+        practiceMinutes: DEFAULT_PRACTICE_MINUTES,
         setupLockSeconds: 30,
         qualifyingSeconds: 60,
         capacity: 22,
@@ -75,10 +75,10 @@ export async function ensureAutoRaces(ctx: Ctx): Promise<number> {
   return created;
 }
 
-/** Fases curtas das corridas teste (o traçado tem a janela fixa de 5 min). */
-const TEST_PRACTICE_MS = 2 * 60_000;
+/** Fases das corridas teste: treino de 2 min, janela fixa de traçado, parque fechado curto e a sessão de classificação. */
+const TEST_PRACTICE_MS = DEFAULT_PRACTICE_MINUTES * 60_000;
 const TEST_SETUP_LOCK_MS = 10_000;
-const TEST_QUALIFYING_MS = 20_000;
+const TEST_QUALIFYING_MS = 60_000;
 const TEST_PRELUDE_MS = TEST_PRACTICE_MS + TRACE_WINDOW_MS + TEST_SETUP_LOCK_MS + TEST_QUALIFYING_MS;
 
 /**

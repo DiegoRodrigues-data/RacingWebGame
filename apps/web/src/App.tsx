@@ -16,6 +16,10 @@ const Profile = lazy(() => import('./pages/Profile'));
 const Account = lazy(() => import('./pages/Account'));
 const Notifications = lazy(() => import('./pages/Notifications'));
 const MyRaces = lazy(() => import('./pages/MyRaces'));
+const CrazyHome = lazy(() => import('./pages/Crazy').then((m) => ({ default: m.CrazyHome })));
+const CrazyGroup = lazy(() => import('./pages/Crazy').then((m) => ({ default: m.CrazyGroup })));
+const CrazyInvite = lazy(() => import('./pages/Crazy').then((m) => ({ default: m.CrazyInvite })));
+const CrazyResume = lazy(() => import('./pages/Crazy').then((m) => ({ default: m.CrazyResume })));
 const Privacy = lazy(() => import('./pages/Legal').then((m) => ({ default: m.Privacy })));
 const Terms = lazy(() => import('./pages/Legal').then((m) => ({ default: m.Terms })));
 const Determinism = lazy(() => import('./pages/Determinism'));
@@ -76,6 +80,10 @@ export function App() {
           <Route path="/corridas/:id/replay" element={<Live mode="replay" />} />
           <Route path="/corridas/:id/resultado" element={<Results />} />
           <Route path="/rankings" element={<Rankings />} />
+          <Route path="/corrida-maluca" element={<CrazyHome />} />
+          <Route path="/corrida-maluca/convite/:code" element={<CrazyInvite />} />
+          <Route path="/corrida-maluca/voltar/:key" element={<CrazyResume />} />
+          <Route path="/corrida-maluca/:id" element={<CrazyGroup />} />
           <Route path="/privacidade" element={<Privacy />} />
           <Route path="/termos" element={<Terms />} />
           <Route path="/pilotos/:id" element={<Profile />} />

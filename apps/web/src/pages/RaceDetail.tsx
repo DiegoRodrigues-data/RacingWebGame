@@ -2,8 +2,10 @@ import { formatLapTime, LEVEL_LABELS, PHASE_LABELS, type QualifyingRowDto } from
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useState } from 'react';
 import { Link, useParams } from 'react-router';
+import { CrazyBadge } from '../components/CrazyBits';
 import { isRegistered, JoinRaceButton, lateEntryOpen } from '../components/JoinRace';
 import { LiveTrack } from '../components/LiveTrack';
+import { QualifyingLive } from '../components/QualifyingLive';
 import { CameraControls, TrackCanvas } from '../components/TrackCanvas';
 import {
   CapacityMeter,
@@ -38,6 +40,8 @@ export default function RaceDetail() {
     queryKey: ['quali', id],
     queryFn: () => get<QualifyingRowDto[]>(`/races/${id}/qualifying`),
     enabled: !!qualiVisible,
+    // Durante a sessão a tabela é provisória: só as voltas já fechadas.
+    refetchInterval: race?.status === 'qualifying' ? 3000 : false,
   });
   if (isLoading) return <Spinner />;
   if (error || !race) return <Empty title="Corrida não encontrada" icon="🚧" />;
@@ -69,6 +73,36 @@ export default function RaceDetail() {
   }
 
   const confirmed = race.entries.filter((e) => e.status === 'confirmed' || e.status === 'dnf');
+  // Antes da classificação, quem assiste vê como está a preparação de cada piloto (nunca o conteúdo).
+  const showPrep = ['registration_open', 'practice', 'trace_window', 'setup_lock'].includes(race.status);
+  const traces = confirmed.filter((e) => e.hasTrace).length;
+  const setupsSaved = confirmed.filter((e) => e.hasSetup).length;
+  const phaseBanner =
+    race.status === 'practice'
+      ? {
+          icon: '⏱️',
+          title: 'Treino',
+          text: 'Pilotos testando setups e linhas',
+          until: race.timeline.traceWindowAt,
+          untilLabel: 'traçado abre em',
+        }
+      : race.status === 'trace_window'
+        ? {
+            icon: '✍️',
+            title: 'Janela de traçado',
+            text: `${traces}/${confirmed.length} traçados enviados`,
+            until: race.timeline.setupLockAt,
+            untilLabel: 'fecha em',
+          }
+        : race.status === 'setup_lock'
+          ? {
+              icon: '🔒',
+              title: 'Parque fechado',
+              text: 'Carros, setups e traçados travados',
+              until: race.timeline.qualifyingAt,
+              untilLabel: 'classificação em',
+            }
+          : null;
   const waitlist = race.entries.filter((e) => e.status === 'waitlisted');
   return (
     <div className="space-y-6">
@@ -80,6 +114,7 @@ export default function RaceDetail() {
               {race.category.name} · {LEVEL_LABELS[race.category.level]}
             </span>
             <span className="chip">{race.ranked ? '🏆 Ranqueada' : '🤝 Amistosa'}</span>
+            <CrazyBadge race={race} />
             {race.annulled && <span className="chip border-hot text-hot">Resultado anulado</span>}
           </div>
           <h1 className="mt-2 font-display text-3xl">{race.name}</h1>
@@ -108,6 +143,13 @@ export default function RaceDetail() {
         <div className="space-y-4">
           {race.status === 'race' ? (
             <LiveTrack race={race} geometry={geo.data} className="h-[340px] sm:h-[420px]" />
+          ) : race.status === 'qualifying' ? (
+            <QualifyingLive
+              race={race}
+              geometry={geo.data}
+              variant="compact"
+              className="h-[340px] sm:h-[420px]"
+            />
           ) : (
             <div className="relative self-start">
               <TrackCanvas
@@ -117,6 +159,20 @@ export default function RaceDetail() {
                 label={`Mapa da pista ${race.track.name}`}
               />
               <CameraControls scene={scene} />
+              {phaseBanner && (
+                <div
+                  role="status"
+                  className="pointer-events-none absolute inset-x-3 top-3 mx-auto w-fit max-w-full rounded-2xl bg-night/85 px-4 py-2 text-center backdrop-blur"
+                >
+                  <div className="text-[10px] font-bold uppercase tracking-wider text-muted">
+                    {phaseBanner.icon} {phaseBanner.title}
+                  </div>
+                  <div className="font-display text-lg">{phaseBanner.text}</div>
+                  <div className="text-xs text-muted">
+                    {phaseBanner.untilLabel} <Countdown to={phaseBanner.until} className="text-ink" />
+                  </div>
+                </div>
+              )}
               {prepPhase && (
                 <Link
                   to={`/corridas/${race.id}/box?aba=treino`}
@@ -238,7 +294,7 @@ export default function RaceDetail() {
             )}
             {['qualifying', 'race'].includes(race.status) && (
               <Link to={`/corridas/${race.id}/ao-vivo`} className="btn-danger w-full">
-                {race.status === 'race' ? '🔴 Assistir ao vivo' : 'Grid e largada'}
+                {race.status === 'race' ? '🔴 Assistir ao vivo' : '⏱️ Classificação ao vivo'}
               </Link>
             )}
             {['finished', 'archived'].includes(race.status) && (
@@ -254,7 +310,9 @@ export default function RaceDetail() {
           </div>
           {quali.data && quali.data.length > 0 && (
             <div className="card">
-              <h2 className="mb-2 font-display">Classificação</h2>
+              <h2 className="mb-2 font-display">
+                Classificação{race.status === 'qualifying' ? ' (provisória)' : ''}
+              </h2>
               <ol className="space-y-1 text-sm">
                 {quali.data.map((q) => (
                   <li key={q.userId} className="flex items-center gap-2">
@@ -272,9 +330,17 @@ export default function RaceDetail() {
         </aside>
       </div>
       <section aria-labelledby="grid">
-        <h2 id="grid" className="font-display text-xl">
-          Pilotos ({confirmed.length}/{race.capacity.capacity})
-        </h2>
+        <div className="flex flex-wrap items-baseline justify-between gap-2">
+          <h2 id="grid" className="font-display text-xl">
+            Pilotos ({confirmed.length}/{race.capacity.capacity})
+          </h2>
+          {showPrep && confirmed.length > 0 && (
+            <p className="text-sm text-muted">
+              ✍️ {traces}/{confirmed.length} traçados enviados · 🔧 {setupsSaved}/{confirmed.length} setups
+              salvos
+            </p>
+          )}
+        </div>
         {!confirmed.length && (
           <p className="mt-2 text-sm text-muted">Ninguém inscrito ainda. Seja o primeiro!</p>
         )}
@@ -293,6 +359,22 @@ export default function RaceDetail() {
                   <Flag country={e.country} /> #{e.carNumber} {e.gridSlot ? `· P${e.gridSlot}` : ''}{' '}
                   {e.status === 'dnf' ? '· abandono' : ''}
                 </div>
+                {showPrep && (
+                  <div className="mt-0.5 flex gap-2 text-[11px]">
+                    <span
+                      className={e.hasTrace ? 'text-go' : 'text-muted'}
+                      title={e.hasTrace ? 'Traçado enviado' : 'Ainda sem traçado: corre na linha central'}
+                    >
+                      ✍️ {e.hasTrace ? 'traçado ✓' : 'sem traçado'}
+                    </span>
+                    <span
+                      className={e.hasSetup ? 'text-go' : 'text-muted'}
+                      title={e.hasSetup ? 'Setup salvo' : 'Ainda no setup padrão'}
+                    >
+                      🔧 {e.hasSetup ? 'setup ✓' : 'padrão'}
+                    </span>
+                  </div>
+                )}
               </div>
             </li>
           ))}

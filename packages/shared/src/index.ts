@@ -6,3 +6,4 @@ export * from './ws';
 export * from './time';
 export * from './levels';
 export * from './setup';
+export * from './crazy';

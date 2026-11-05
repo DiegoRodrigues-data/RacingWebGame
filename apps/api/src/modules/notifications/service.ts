@@ -17,7 +17,7 @@ const TEMPLATES: Record<NotificationType, (p: P) => { title: string; body: strin
   }),
   trace_window_open: (p) => ({
     title: 'Hora de traçar!',
-    body: `A janela de 5 minutos de ${p.raceName} abriu. Desenhe seu traçado.`,
+    body: `A janela de traçado de ${p.raceName} abriu. Desenhe seu traçado.`,
   }),
   trace_window_closing: (p) => ({
     title: 'Falta 1 minuto',

@@ -2,6 +2,7 @@ import { LATE_ENTRY_PHASES, type RaceDetailDto } from '@tracado/shared';
 import { useQueryClient } from '@tanstack/react-query';
 import confetti from 'canvas-confetti';
 import { useState } from 'react';
+import { Link } from 'react-router';
 import { errorMessage, post } from '../lib/api';
 import { useSession } from '../lib/session';
 import { toast } from './ui';
@@ -37,6 +38,24 @@ export function JoinRaceButton({
   const [busy, setBusy] = useState(false);
   const late = lateEntryOpen(race, now);
   if (!me || isRegistered(race) || (race.status !== 'registration_open' && !late)) return null;
+  // Corrida Maluca: grupo fechado (entra quem recebeu o convite); convidado só corre nos grupos.
+  if (race.crazy)
+    return (
+      <p className="text-sm text-muted">
+        🤪 Corrida do grupo <b className="text-ink">{race.crazy.groupName}</b>: só entra quem recebeu o link
+        de convite.
+      </p>
+    );
+  if (me.guest)
+    return (
+      <p className="text-sm text-muted">
+        Convidados correm só na Corrida Maluca.{' '}
+        <Link to="/conta" className="font-bold text-race underline">
+          Crie sua conta
+        </Link>{' '}
+        para disputar as corridas abertas.
+      </p>
+    );
 
   async function join() {
     setBusy(true);

@@ -62,10 +62,25 @@ de 0,5 a 1 MB em gzip (cerca de 20 MB por dia no Postgres). Falta uma rotina que
 As corridas teste rodam em ciclo (`ensureAutoTestRaces`): uma de cada vez, 10 voltas (abaixo do mínimo de 30 das
 corridas normais, de propósito), amistosas, com bots completando o grid. Quando uma começa a correr, o fim dela já é
 conhecido e a próxima é criada para largar 10 minutos depois da bandeirada (`AUTO_TEST_RACES_GAP_MIN`), com inscrições
-abertas desde então; antes da largada há 2 min de treino, a janela fixa de 5 min de traçado e uma classificação curta.
+abertas desde então; antes da largada há 2 min de treino, a janela fixa de 2 min de traçado, 10 s de parque fechado e 60 s de classificação ao vivo.
 Ficam marcadas com `flags.autoTest`, aparecem só em "Acontecendo agora" (a em andamento e a próxima aberta) e ficam
 fora do calendário, das próximas largadas e dos resultados recentes (`GET /races?test=true|all` para vê-las). São
 apagadas com replay, resultados e pista 3 h depois de encerradas (`AUTO_TEST_RACES_KEEP_HOURS`).
+
+### Fases mais curtas e classificação ao vivo
+
+- **Durações:** treino padrão de 2 min (`DEFAULT_PRACTICE_MINUTES`) e janela de traçado fixa de 2 min (`TRACE_WINDOW_MS`;
+  era 5). Quem assiste esperava minutos sem ver nada. A migração `0005_treino_e_tracado_2min` reajusta as corridas
+  automáticas que ainda não começaram, mantendo o horário do treino.
+- **Classificação ao vivo:** o resultado continua calculado na transição (`simulateQualifying`), mas é transmitido como
+  uma sessão (`qualifyingSession`): cada carro sai do box a cada 4 s simulados, em ordem sorteada pela seed (não revela o
+  resultado), e faz uma volta lançada na própria linha, escalada para fechar exatamente no tempo oficial. A velocidade
+  da transmissão é escolhida para a sessão caber na fase. `GET /races/:id/qualifying/live?from=N` entrega só os frames,
+  parciais e voltas que já aconteceram; durante a fase, `GET /races/:id/qualifying` traz só as voltas fechadas e o
+  `gridSlot` dos inscritos fica oculto. O evento `race.qualifying` e o aviso `qualifying_ready` saem na largada.
+- **Espectador antes da classificação:** a lista de pilotos mostra quem já enviou traçado e salvou setup (`hasTrace`,
+  `hasSetup`, nunca o conteúdo), atualizada pelo WebSocket no primeiro envio de cada um, e o mapa mostra a fase atual
+  com contagem regressiva.
 
 ### Inscrição tardia
 
@@ -73,6 +88,29 @@ Quem chega com a corrida já no treino ou na janela de traçado pode entrar se h
 (`LATE_ENTRY_PHASES`); nessa hora não há fila de espera (grid cheio responde `RACE_FULL`). Antes, a página da corrida em
 "Acontecendo agora" mostrava só a pista para quem não estava inscrito. Sem inscrição, o box vira treino livre: setup,
 traçado e corrida contra fantasmas rodam no aparelho e nada é enviado ao servidor.
+
+### Corrida Maluca (grupos fechados de amigos)
+
+- **Grupo:** um usuário com conta cria uma corrida avulsa ou um campeonato de até 10 corridas (`crazy_groups`). Todas
+  as corridas são criadas na hora, uma a cada `intervalMinutes` (mínimo 15), com as fases normais (treino e traçado de
+  2 min), na categoria de `AUTO_RACES_CATEGORY`, não ranqueadas e com `crazy_group_id` e `crazy_round`. Ficam fora das
+  listas públicas (`listRaces` só as traz com `crazy: true`) e do lobby; quem não é membro não se inscreve.
+- **Convite e convidado:** o link `/corrida-maluca/convite/:code` aceita quem tem conta ou quem digita só apelido e cor.
+  O convidado é um usuário com `is_guest`, e-mail fictício `@convidado.invalid` (só para a coluna única) e senha
+  aleatória inutilizável; a sessão é o cookie de refresh normal (30 dias). Para outro aparelho, gera um link pessoal de
+  volta (token `guest_login`, só o hash no banco, 1 ano, um por vez) ou vira conta normal com e-mail e senha. Convidado
+  não cria grupo nem corre nas corridas abertas. Apelido continua único no jogo todo (sugestão automática se repetir).
+- **Membro entra em tudo:** ao entrar no grupo, o membro é inscrito direto em todas as corridas que ainda não chegaram ao
+  parque fechado; quem chega no meio do campeonato entra só nas próximas.
+- **Bots:** nunca por padrão (o `DEMO_BOTS` não vale para grupos). Só se quem criou ligar `botFill`: na abertura da
+  janela de traçado o grid é completado com bots até esse número. Bots não pontuam nem levam troféu.
+- **Modo caos** (`flags.chaos`, ligado por padrão): óleo, safety car e quebras ligados na simulação, qualquer que seja a
+  categoria (vai para o `simInput`, então o reprocessamento confere).
+- **Pontos e troféus:** a tabela usa a posição entre os humanos (10, 8, 6, 5, 4, 3, 2 e 1 para todos), sem ranking, XP
+  só de amistosa. Os troféus (Foguete, Lanterninha, Volta do Busão, Motor de Fusca, Borrachudo, Estrategista, Piloto de
+  Sofá, Rei do Box) são calculados sob demanda do resultado, da classificação e dos frames do replay (desgaste de pneu e
+  motor), com frase sorteada pela seed, e ficam em cache em memória. Com o campeonato encerrado, quem mais levou cada
+  troféu recebe o título de honra.
 
 ## Modelo de simulação
 

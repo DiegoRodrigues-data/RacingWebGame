@@ -13,6 +13,7 @@ import {
   CalendarDays,
   Gauge,
   CarFront,
+  PartyPopper,
 } from 'lucide-react';
 import { useEffect, useState, type ReactNode } from 'react';
 import { Link, NavLink, useLocation, useNavigate } from 'react-router';
@@ -72,6 +73,7 @@ const NAV = [
   { to: '/', label: 'Início', icon: Gauge, end: true },
   { to: '/calendario', label: 'Calendário', icon: CalendarDays },
   { to: '/rankings', label: 'Rankings', icon: Trophy },
+  { to: '/corrida-maluca', label: 'Corrida Maluca', icon: PartyPopper },
 ];
 
 export function Layout({ children }: { children: ReactNode }) {
@@ -134,6 +136,7 @@ export function Layout({ children }: { children: ReactNode }) {
                 >
                   <User size={18} />
                   <span className="max-w-32 truncate text-sm font-bold">{me.profile.nickname}</span>
+                  {me.guest && <span className="text-[10px] font-bold uppercase text-muted">convidado</span>}
                 </Link>
                 <button
                   className="hidden rounded-xl p-2 hover:bg-night-3 sm:block"

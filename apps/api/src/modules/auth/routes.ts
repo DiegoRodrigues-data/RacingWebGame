@@ -1,6 +1,9 @@
 import {
   AppError,
   forgotPasswordSchema,
+  guestJoinSchema,
+  guestResumeSchema,
+  guestUpgradeSchema,
   loginSchema,
   REFRESH_TOKEN_TTL_S,
   registerSchema,
@@ -15,6 +18,7 @@ import { profiles, users } from '../../db/schema';
 import { requireAuth } from '../../lib/auth';
 import { parse } from '../../lib/validate';
 import { googleCallback, googleEnabled, googleStart, safeNext } from './google';
+import * as crazy from '../crazy/service';
 import * as svc from './service';
 
 const COOKIE = 'tracado_rt';
@@ -79,6 +83,23 @@ export function authRoutes(app: FastifyInstance, ctx: Ctx) {
       req.log.warn({ err: e }, 'Login com Google falhou');
       return reply.redirect(`${web}/entrar?erro=google`);
     }
+  });
+  // Corrida Maluca: convidado entra pelo link só com apelido; volta pelo link pessoal; ou vira conta normal.
+  app.post('/auth/guest', authLimit, async (req, reply) => {
+    const r = await crazy.createGuest(ctx, parse(guestJoinSchema, req.body), req.ip);
+    setCookie(reply, r.refresh);
+    const { refresh: _r, ...body } = r;
+    return reply.code(201).send(body);
+  });
+  app.post('/auth/guest/resume', authLimit, async (req, reply) => {
+    const r = await crazy.resumeGuest(ctx, parse(guestResumeSchema, req.body).key, req.ip);
+    setCookie(reply, r.refresh);
+    const { refresh: _r, ...body } = r;
+    return body;
+  });
+  app.post('/auth/guest/upgrade', authLimit, async (req) => {
+    const b = parse(guestUpgradeSchema, req.body);
+    return crazy.upgradeGuest(ctx, requireAuth(req), b.email, b.password);
   });
   app.post(
     '/auth/refresh',

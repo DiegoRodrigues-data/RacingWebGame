@@ -36,7 +36,7 @@ test('fluxo crítico do jogador: inscrição → setup → traçado na janela �
   // O traçado já fica salvo no servidor antes da janela.
   await expect(page.getByText(/Traçado oficial v\d+ salvo/)).toBeVisible({ timeout: 15_000 });
 
-  // Abre a janela de 5 minutos: o traçado salvo continua valendo.
+  // Abre a janela de traçado: o traçado salvo continua valendo.
   const r = await race(request, id);
   await advanceTo(request, r.timeline.traceWindowAt, 300);
   await expect(page.getByText(/Traçado oficial v\d+ salvo/)).toBeVisible({ timeout: 30_000 });

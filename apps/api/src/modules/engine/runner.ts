@@ -143,13 +143,17 @@ export async function runSimulation(
   const quali = simulateQualifying(g, cars, race.seed, race.weather, race.laps);
   const byId = new Map(cars.map((c) => [c.id, c]));
   const gridCars = quali.map((q) => byId.get(q.id)!);
+  // Modo caos da Corrida Maluca: óleo, safety car e quebras ligados, qualquer que seja a categoria.
+  const randomEvents = race.flags?.chaos
+    ? { safetyCar: true, oil: true, mechanical: true }
+    : cat.config.randomEvents;
   const input: RaceSimInput = {
     geometry: g,
     cars: gridCars,
     laps: race.laps,
     seed: race.seed,
     weather: race.weather,
-    randomEvents: cat.config.randomEvents,
+    randomEvents,
   };
   const out = simulateRace(input);
   ctx.metrics.simDuration.observe((performance.now() - t0) / 1000);
@@ -215,7 +219,7 @@ export async function runSimulation(
         laps: race.laps,
         seed: race.seed,
         weather: race.weather,
-        randomEvents: cat.config.randomEvents,
+        randomEvents,
         trackVersionId: race.trackVersionId,
       },
     });

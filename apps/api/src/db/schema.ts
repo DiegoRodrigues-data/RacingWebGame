@@ -54,6 +54,8 @@ export const users = pgTable(
     lastLoginAt: ts('last_login_at'),
     /** Conta Google vinculada (claim `sub`), para o login pelo Google. */
     googleSub: text('google_sub'),
+    /** Convidado da Corrida Maluca: entrou pelo link só com apelido (e-mail fictício, sem senha utilizável). */
+    isGuest: boolean('is_guest').notNull().default(false),
   },
   (t) => [
     uniqueIndex('users_email_uq').on(t.email),
@@ -111,7 +113,7 @@ export const oneTimeTokens = pgTable(
     userId: uuid('user_id')
       .notNull()
       .references(() => users.id, { onDelete: 'cascade' }),
-    kind: text('kind').$type<'password_reset' | 'email_verify'>().notNull(),
+    kind: text('kind').$type<'password_reset' | 'email_verify' | 'guest_login'>().notNull(),
     tokenHash: text('token_hash').notNull(),
     expiresAt: ts('expires_at').notNull(),
     usedAt: ts('used_at'),
@@ -224,11 +226,15 @@ export const races = pgTable(
     flags: jsonb('flags').$type<Record<string, boolean>>().notNull().default({}),
     cancelReason: text('cancel_reason'),
     seasonId: uuid('season_id').references(() => seasons.id),
+    /** Corrida de um grupo da Corrida Maluca (etapa `crazyRound`). */
+    crazyGroupId: uuid('crazy_group_id').references(() => crazyGroups.id, { onDelete: 'cascade' }),
+    crazyRound: integer('crazy_round'),
     createdBy: uuid('created_by').references(() => users.id),
     createdAt: ts('created_at').notNull().defaultNow(),
   },
   (t) => [
     index('races_status_idx').on(t.status),
+    index('races_crazy_idx').on(t.crazyGroupId),
     index('races_practice_idx').on(t.practiceAt),
     index('races_category_idx').on(t.categoryId, t.practiceAt),
   ],
@@ -430,6 +436,44 @@ export const adminAuditLog = pgTable(
     createdAt: ts('created_at').notNull().defaultNow(),
   },
   (t) => [index('audit_created_idx').on(t.createdAt)],
+);
+
+// ---------------------------------------------------------------- Corrida Maluca
+export const crazyGroups = pgTable(
+  'crazy_groups',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    name: text('name').notNull(),
+    ownerId: uuid('owner_id')
+      .notNull()
+      .references(() => users.id),
+    inviteCode: text('invite_code').notNull(),
+    raceCount: integer('race_count').notNull(),
+    laps: integer('laps').notNull(),
+    intervalMinutes: integer('interval_minutes').notNull(),
+    chaos: boolean('chaos').notNull().default(true),
+    /** 0 = sem bots; N = completa o grid com bots até N carros. */
+    botFill: integer('bot_fill').notNull().default(0),
+    createdAt: ts('created_at').notNull().defaultNow(),
+  },
+  (t) => [
+    uniqueIndex('crazy_groups_invite_uq').on(t.inviteCode),
+    index('crazy_groups_owner_idx').on(t.ownerId),
+  ],
+);
+
+export const crazyMembers = pgTable(
+  'crazy_members',
+  {
+    groupId: uuid('group_id')
+      .notNull()
+      .references(() => crazyGroups.id, { onDelete: 'cascade' }),
+    userId: uuid('user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    joinedAt: ts('joined_at').notNull().defaultNow(),
+  },
+  (t) => [primaryKey({ columns: [t.groupId, t.userId] }), index('crazy_members_user_idx').on(t.userId)],
 );
 
 export type EditorTrackJson = EditorTrack;

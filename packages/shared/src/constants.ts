@@ -1,8 +1,10 @@
 /** Regras globais do jogo. O servidor é a autoridade; o cliente usa os mesmos valores apenas para UX. */
 export const MAX_CARS_PER_RACE = 22;
 export const DEFAULT_WAITLIST_MAX = 10;
-/** Janela de traçado: fixa em 5 minutos pelo requisito do produto. */
-export const TRACE_WINDOW_MS = 5 * 60 * 1000;
+/** Janela de traçado: fixa em 2 minutos (era 5; encurtada para o espectador não esperar à toa). */
+export const TRACE_WINDOW_MS = 2 * 60 * 1000;
+/** Duração padrão do treino. */
+export const DEFAULT_PRACTICE_MINUTES = 2;
 export const DEFAULT_SETUP_LOCK_MS = 30 * 1000;
 export const DEFAULT_QUALIFYING_MS = 60 * 1000;
 export const DEFAULT_PRACTICE_MS = 10 * 60 * 1000;

@@ -185,6 +185,9 @@ Fecha o ciclo de vida com resultados persistidos.
 - [x] Treino com o carro na pista: volta lançada animada (1×/2×/5×, parciais por setor) e corrida de teste em replay com os 6 carros, posições ao vivo e controles
 - [x] Inscrição tardia (treino e janela de traçado, com vaga, até o parque fechado) e treino livre no box para quem não está inscrito
 - [x] Ao vivo: painel do carro em foco com desgaste do pneu e do motor, voltas no jogo de pneus e próxima parada; desgaste de pneu na classificação
+- [x] Treino e janela de traçado de 2 minutos (migração reajusta as corridas automáticas ainda não iniciadas)
+- [x] Classificação ao vivo: sessão de volta lançada com torre de tempos, setores e pole provisória, sem revelar o futuro
+- [x] Espectador antes da classificação: fase atual no mapa e quem já enviou traçado e setup
 - [x] **Classificação:** volta lançada simulada no servidor; empate pela ordem de confirmação
 - [x] **Corrida:** simulação completa com replay a 4 Hz gravado comprimido em `race_replays`
 - [x] Transmissão: `race.started`, `race.tick`, `race.incident`, `race.finished`; replay sem revelar o futuro
@@ -286,6 +289,14 @@ Fecha o ciclo de vida com resultados persistidos.
 - [ ] Validar com Postgres e Redis reais
 - [ ] Push, autodeploy no Dokploy, hash do bundle no domínio igual ao local, `curl -I` nos cabeçalhos de cache e `GET /api/health`
 - [ ] Sentry e métricas apontando para produção
+
+## Fase 17 — Corrida Maluca (grupos de amigos) ✅
+
+- [x] Grupo com 1 a 10 corridas, intervalo entre elas, voltas, modo caos e bots opcionais
+- [x] Convite por link: entrar com a conta ou só com apelido (convidado), link pessoal de volta e virar conta
+- [x] Corridas fechadas: fora das listas públicas, só membros se inscrevem, convidado só corre nos grupos
+- [x] Troféus de zoeira por corrida, tabela entre os amigos e títulos de honra no fim do campeonato
+- [x] Menu "Corrida Maluca", página do grupo, resenha no resultado e selo do grupo na corrida
 
 ---
 

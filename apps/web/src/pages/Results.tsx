@@ -10,6 +10,7 @@ import { get } from '../lib/api';
 import { fmtGap } from '../lib/format';
 import { useRace } from '../lib/queries';
 import { useSession } from '../lib/session';
+import { CrazyBadge, CrazyRaceRecap } from '../components/CrazyBits';
 import { ShareRace } from '../components/ShareRace';
 
 export default function Results() {
@@ -52,6 +53,7 @@ export default function Results() {
             ← {race.name}
           </Link>
           <h1 className="font-display text-3xl">Resultado</h1>
+          <CrazyBadge race={race} className="mt-1" />
           {res.data.annulled && (
             <p className="mt-1 rounded-xl bg-hot/15 px-3 py-1 text-sm text-hot">
               Resultado anulado pela direção de prova: não vale pontos.
@@ -142,6 +144,7 @@ export default function Results() {
           );
         })}
       </div>
+      <CrazyRaceRecap race={race} />
       <div className="card overflow-x-auto !p-0">
         <table className="w-full min-w-[640px] text-sm">
           <caption className="sr-only">Classificação final</caption>

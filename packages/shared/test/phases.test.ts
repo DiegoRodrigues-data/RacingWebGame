@@ -11,9 +11,9 @@ const tl = buildTimeline({
 });
 
 describe('linha do tempo da corrida', () => {
-  it('a janela de traçado dura exatamente 5 minutos', () => {
+  it('a janela de traçado dura exatamente 2 minutos', () => {
     expect(tl.setupLockAt - tl.traceWindowAt).toBe(TRACE_WINDOW_MS);
-    expect(TRACE_WINDOW_MS).toBe(300_000);
+    expect(TRACE_WINDOW_MS).toBe(120_000);
   });
   it('as fases são estritamente ordenadas', () => {
     const seq = [

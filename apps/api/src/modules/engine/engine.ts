@@ -9,12 +9,13 @@ import {
 } from '@tracado/shared';
 import { and, eq, inArray, lte, or, sql } from 'drizzle-orm';
 import type { Ctx } from '../../context';
-import { entries, races } from '../../db/schema';
+import { entries, qualifyingResults, races } from '../../db/schema';
 import { notify } from '../notifications/service';
 import { bumpRankingCache } from '../rankings/service';
 import { getRaceRow, listEntries, raceSummaries, timelineOf, type RaceRow } from '../races/service';
 import { ensureAutoRaces, ensureAutoTestRaces } from './autoRaces';
-import { fillBots, prepareBots } from './bots';
+import { fillBots, fillCrazyBots, prepareBots } from './bots';
+import { forgetQualiLive, qualifyingRows } from './qualiLive';
 import {
   elapsedSim,
   forgetReplay,
@@ -241,9 +242,12 @@ export class PhaseEngine {
     const p = { raceId: race.id, raceName: race.name };
     switch (to) {
       case 'registration_open':
-        if (ctx.config.DEMO_BOTS > 0) await fillBots(ctx, race.id, ctx.config.DEMO_BOTS);
+        // Grupos da Corrida Maluca: bots só se quem criou liberou (completados na janela de traçado).
+        if (ctx.config.DEMO_BOTS > 0 && !race.crazyGroupId)
+          await fillBots(ctx, race.id, ctx.config.DEMO_BOTS);
         break;
       case 'trace_window':
+        if (race.crazyGroupId) await fillCrazyBots(ctx, race);
         await prepareBots(ctx, race.id);
         await ctx.hub.publish(ROOM.race(race.id), 'trace.window_opened', {
           raceId: race.id,
@@ -255,10 +259,17 @@ export class PhaseEngine {
         await ctx.hub.publish(ROOM.race(race.id), 'trace.window_closed', { raceId: race.id });
         break;
       case 'qualifying':
-        if (extra.quali) {
+        // A sessão é transmitida aos poucos (GET /races/:id/qualifying/live); o grid só sai no fim dela.
+        break;
+      case 'race': {
+        const grid = await ctx.db
+          .select({ userId: qualifyingResults.userId, position: qualifyingResults.position })
+          .from(qualifyingResults)
+          .where(eq(qualifyingResults.raceId, race.id));
+        if (grid.length) {
           await ctx.hub.publish(ROOM.race(race.id), 'race.qualifying', {
             raceId: race.id,
-            rows: extra.quali.rows,
+            rows: await qualifyingRows(ctx, race.id),
           });
           await ctx.hub.publish(ROOM.race(race.id), 'race.entries', {
             raceId: race.id,
@@ -266,13 +277,11 @@ export class PhaseEngine {
           });
           await notify(
             ctx,
-            extra.quali.rows.map((r) => ({ userId: r.userId, payload: { position: r.position } })),
+            grid.map((r) => ({ userId: r.userId, payload: { position: r.position } })),
             'qualifying_ready',
             p,
           );
         }
-        break;
-      case 'race': {
         const rep = await loadReplay(ctx, race.id);
         if (rep) {
           await ctx.hub.publish(ROOM.race(race.id), 'race.started', {
@@ -310,6 +319,7 @@ export class PhaseEngine {
       }
       case 'archived':
         forgetReplay(race.id);
+        forgetQualiLive(race.id);
         break;
       case 'cancelled': {
         const ids = (

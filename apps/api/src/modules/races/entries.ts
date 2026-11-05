@@ -13,7 +13,7 @@ import {
 import { and, asc, eq, gt, inArray, lt, ne, notInArray, sql } from 'drizzle-orm';
 import type { Ctx } from '../../context';
 import type { Tx } from '../../db/client';
-import { entries, profiles, races, users } from '../../db/schema';
+import { crazyMembers, entries, profiles, races, users } from '../../db/schema';
 import type { AuthUser } from '../../lib/auth';
 import { parse } from '../../lib/validate';
 import { notify } from '../notifications/service';
@@ -21,7 +21,7 @@ import { broadcastRace, capacityOf, getCategory, getRaceRow, type RaceRow } from
 
 const RACE_WINDOW_AFTER_MS = 30 * 60_000;
 
-async function assignCar(tx: Tx, raceId: string, preferred: string) {
+export async function assignCar(tx: Tx, raceId: string, preferred: string) {
   const used = await tx
     .select({ c: entries.carColor, m: entries.carModel, n: entries.carNumber })
     .from(entries)
@@ -46,8 +46,14 @@ async function assignCar(tx: Tx, raceId: string, preferred: string) {
 async function checkEligibility(ctx: Ctx, tx: Tx, race: RaceRow, user: AuthUser) {
   const cat = await getCategory(tx, race.categoryId);
   const [p] = await tx.select().from(profiles).where(eq(profiles.userId, user.id));
-  const [u] = await tx.select({ verified: users.emailVerified }).from(users).where(eq(users.id, user.id));
+  const [u] = await tx
+    .select({ verified: users.emailVerified, guest: users.isGuest })
+    .from(users)
+    .where(eq(users.id, user.id));
   if (!p || !u) throw new AppError('UNAUTHORIZED');
+  await checkCrazyAccess(tx, race, user.id, u.guest);
+  // Grupo da Corrida Maluca: a categoria só empresta pista e clima, não exige nível.
+  if (race.crazyGroupId) return p;
   const req = cat.config.entryRequirement;
   if (!meetsLevel(p.level, req.minLevel) || p.careerRaces < req.minRaces)
     throw new AppError(
@@ -78,6 +84,21 @@ async function checkScheduleConflict(tx: Tx, race: RaceRow, userId: string) {
     );
   if (rows.length >= MAX_OVERLAPPING_ENTRIES)
     throw new AppError('SCHEDULE_CONFLICT', 'Você já está inscrito em uma corrida no mesmo horário.');
+}
+
+/** Corrida de grupo fechado: só membros se inscrevem; convidados só correm nos grupos. */
+async function checkCrazyAccess(tx: Tx, race: RaceRow, userId: string, guest: boolean) {
+  if (race.crazyGroupId) {
+    const [m] = await tx
+      .select({ u: crazyMembers.userId })
+      .from(crazyMembers)
+      .where(and(eq(crazyMembers.groupId, race.crazyGroupId), eq(crazyMembers.userId, userId)));
+    if (!m) throw new AppError('FORBIDDEN', 'Esta corrida é de um grupo fechado. Peça o link de convite.');
+  } else if (guest)
+    throw new AppError(
+      'FORBIDDEN',
+      'Convidados correm só na Corrida Maluca. Crie sua conta para disputar as corridas abertas.',
+    );
 }
 
 export interface RegisterResult {

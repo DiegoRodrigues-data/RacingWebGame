@@ -5,6 +5,58 @@ import { CarIcon, Segmented, toast } from '../components/ui';
 import { errorMessage, patch, post } from '../lib/api';
 import { useSession } from '../lib/session';
 
+/** Convidado da Corrida Maluca vira conta normal (e-mail e senha), mantendo apelido, grupos e histórico. */
+function GuestUpgrade() {
+  const setMe = useSession((s) => s.setMe);
+  const [busy, setBusy] = useState(false);
+  async function submit(e: FormEvent<HTMLFormElement>) {
+    e.preventDefault();
+    const f = new FormData(e.currentTarget);
+    setBusy(true);
+    try {
+      const r = await post<MeDto>('/auth/guest/upgrade', {
+        email: f.get('email'),
+        password: f.get('password'),
+      });
+      setMe(r);
+      toast('Conta criada! 🎉', 'Confira seu e-mail para confirmar o endereço.', 'ok');
+    } catch (x) {
+      toast('Não deu para criar a conta', errorMessage(x), 'error');
+    } finally {
+      setBusy(false);
+    }
+  }
+  return (
+    <form onSubmit={submit} className="card space-y-3 border-violet">
+      <div className="font-display text-lg">Você está como convidado 🤪</div>
+      <p className="text-sm text-muted">
+        Crie seu acesso com e-mail e senha para entrar de qualquer aparelho, criar seus próprios grupos e
+        disputar as corridas abertas. Apelido, grupos e histórico continuam os mesmos.
+      </p>
+      <div className="grid gap-2 sm:grid-cols-2">
+        <label>
+          <span className="label">E-mail</span>
+          <input name="email" type="email" className="input" autoComplete="email" required />
+        </label>
+        <label>
+          <span className="label">Senha (mín. 8)</span>
+          <input
+            name="password"
+            type="password"
+            className="input"
+            minLength={8}
+            autoComplete="new-password"
+            required
+          />
+        </label>
+      </div>
+      <button className="btn-primary" disabled={busy}>
+        Criar minha conta
+      </button>
+    </form>
+  );
+}
+
 export default function Account() {
   const { me, setMe } = useSession();
   const [color, setColor] = useState(me!.profile.carColor);
@@ -46,7 +98,8 @@ export default function Account() {
           </p>
         </div>
       )}
-      {!me.emailVerified && (
+      {me.guest && <GuestUpgrade />}
+      {!me.emailVerified && !me.guest && (
         <div className="card flex flex-wrap items-center justify-between gap-2 border-race">
           <span className="text-sm">Seu e-mail ainda não foi confirmado.</span>
           <button

@@ -4,6 +4,7 @@ import { generateProceduralTrack, offsetsToTrace } from '@tracado/trackgen';
 import {
   decodeFrame,
   estimateLap,
+  qualifyingSession,
   runBalance,
   simulateQualifying,
   simulateRace,
@@ -139,4 +140,23 @@ describe('balanceamento', () => {
     expect(r.maxLift.lift).toBeLessThanOrEqual(3);
     expect(r.topStrategyWinShare).toBeLessThanOrEqual(0.35);
   }, 60_000);
+});
+
+describe('sessão de classificação', () => {
+  it('cada carro termina a volta lançada no tempo oficial e a ordem de saída não é a do resultado', () => {
+    const cars = mk(6, (i) => ({ tyre: (['soft', 'medium', 'hard'] as const)[i % 3] }));
+    const w = { base: 'dry' as const, rainChance: 0, temperature: 25 };
+    const rows = simulateQualifying(g, cars, 'q', w, 5);
+    const s = qualifyingSession(g, cars, rows, 'q', w);
+    expect(s).toEqual(qualifyingSession(g, cars, rows, 'q', w));
+    for (const run of s.runs) {
+      expect(run.lapTimeMs).toBe(rows.find((r) => r.id === run.id)!.lapTimeMs);
+      expect(run.sectorMs.reduce((a, b) => a + b, 0)).toBe(run.lapTimeMs);
+    }
+    expect(s.runs.map((r) => r.startMs)).toEqual([0, 4000, 8000, 12000, 16000, 20000]);
+    const last = decodeFrame(s.frames[s.frames.length - 1]!);
+    expect(last.every((c) => c.status === 3)).toBe(true);
+    expect(decodeFrame(s.frames[0]!)[0]!.status).toBe(0);
+    expect(decodeFrame(s.frames[0]!)[1]!.status).toBe(1);
+  });
 });

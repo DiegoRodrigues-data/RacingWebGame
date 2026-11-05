@@ -1,4 +1,11 @@
-import { formatLapTime, ROOM, type CarSetup, type RaceDetailDto, type TracePoint } from '@tracado/shared';
+import {
+  formatLapTime,
+  ROOM,
+  TRACE_WINDOW_MS,
+  type CarSetup,
+  type RaceDetailDto,
+  type TracePoint,
+} from '@tracado/shared';
 import { estimateLap } from '@tracado/sim';
 import {
   CAR_HALF_WIDTH,
@@ -512,7 +519,7 @@ export function TraceTab({
           ) : canSend ? (
             <p className="text-sm text-muted">
               Cada ajuste é salvo no servidor e já vale para a corrida, mesmo se você fechar a página. A
-              janela final de 5 minutos abre às{' '}
+              janela final de {TRACE_WINDOW_MS / 60_000} minutos abre às{' '}
               <b className="text-ink">{new Date(race.timeline.traceWindowAt).toLocaleTimeString('pt-BR')}</b>{' '}
               e o traçado trava às{' '}
               <b className="text-ink">{new Date(race.timeline.setupLockAt).toLocaleTimeString('pt-BR')}</b>.

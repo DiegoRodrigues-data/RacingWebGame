@@ -1,14 +1,13 @@
 import { AppError, DEFAULT_SETUP, LIVE_PHASES, RACE_PHASES, ROOM, type RacePhase } from '@tracado/shared';
 import { estimateLap } from '@tracado/sim';
 import { offsetsToTrace, suggestedLine } from '@tracado/trackgen';
-import { and, asc, desc, eq, gte, inArray, notInArray, sql } from 'drizzle-orm';
+import { and, asc, desc, eq, gte, inArray, isNull, notInArray, sql } from 'drizzle-orm';
 import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
 import type { Ctx } from '../../context';
 import {
   entries,
   profiles,
-  qualifyingResults,
   raceResults,
   races,
   rankingEntries,
@@ -18,6 +17,13 @@ import {
 } from '../../db/schema';
 import { requireAuth } from '../../lib/auth';
 import { parse } from '../../lib/validate';
+import {
+  loadQualiLive,
+  provisionalRows,
+  qualiElapsed,
+  qualifyingRows,
+  revealedRuns,
+} from '../engine/qualiLive';
 import { elapsedSim, loadReplay, resultRows } from '../engine/runner';
 import { currentSeason, getRanking, scopeKeys } from '../rankings/service';
 import { getGeometry } from '../tracks/service';
@@ -137,22 +143,42 @@ export function raceRoutes(app: FastifyInstance, ctx: Ctx) {
     const race = await getRaceRow(ctx.db, id);
     if (['scheduled', 'registration_open', 'practice', 'trace_window', 'setup_lock'].includes(race.status))
       throw new AppError('CONFLICT', 'Classificação ainda não disputada.');
-    const rows = await ctx.db
-      .select({ q: qualifyingResults, p: profiles })
-      .from(qualifyingResults)
-      .innerJoin(profiles, eq(profiles.userId, qualifyingResults.userId))
-      .where(eq(qualifyingResults.raceId, id))
-      .orderBy(asc(qualifyingResults.position));
-    const pole = rows[0]?.q.lapTimeMs ?? 0;
-    return rows.map(({ q, p }) => ({
-      position: q.position,
-      userId: q.userId,
-      nickname: p.nickname,
-      lapTimeMs: q.lapTimeMs,
-      gapMs: q.lapTimeMs - pole,
-      usedDefaultSetup: q.usedDefaultSetup,
-      usedDefaultTrace: q.usedDefaultTrace,
-    }));
+    // Durante a sessão: só as voltas já fechadas (a transmissão não pode ser estragada pela tabela).
+    if (race.status === 'qualifying') {
+      const live = await loadQualiLive(ctx, race);
+      return live ? provisionalRows(live, qualiElapsed(race, live, ctx.clock.now())) : [];
+    }
+    return qualifyingRows(ctx, id);
+  });
+
+  /** Sessão de classificação ao vivo: frames e parciais até agora (`from` = primeiro frame que falta ao cliente). */
+  app.get('/races/:id/qualifying/live', async (req, reply) => {
+    const id = parse(idParam, req.params).id;
+    const { from } = parse(z.object({ from: z.coerce.number().int().min(0).optional() }), req.query);
+    const race = await getRaceRow(ctx.db, id);
+    if (!['qualifying', 'race', 'finished', 'archived'].includes(race.status))
+      throw new AppError('CONFLICT', 'A classificação ainda não começou.');
+    const live = await loadQualiLive(ctx, race);
+    if (!live) throw new AppError('NOT_FOUND', 'Classificação indisponível.');
+    const elapsed = qualiElapsed(race, live, ctx.clock.now());
+    const done = elapsed === Infinity;
+    if (done && !from) reply.header('cache-control', 'public, max-age=3600');
+    const start = Math.min(from ?? 0, live.session.frames.length);
+    let end = start;
+    while (end < live.session.frames.length && live.session.frames[end]!.t <= elapsed) end++;
+    return {
+      raceId: id,
+      complete: done,
+      startedAt: live.startedAt,
+      playbackSpeed: live.playbackSpeed,
+      durationMs: live.session.durationMs,
+      frameHz: live.session.frameHz,
+      sectors: live.session.runs[0]?.sectorMs.length ?? 3,
+      cars: live.cars,
+      runs: revealedRuns(live, elapsed),
+      fromFrame: start,
+      frames: live.session.frames.slice(start, end),
+    };
   });
 
   app.get('/races/:id/results', async (req) => {
@@ -273,7 +299,13 @@ export function raceRoutes(app: FastifyInstance, ctx: Ctx) {
     const recentRows = await ctx.db
       .select()
       .from(races)
-      .where(and(inArray(races.status, ['finished']), sql`not (${races.flags} ? 'autoTest')`))
+      .where(
+        and(
+          inArray(races.status, ['finished']),
+          sql`not (${races.flags} ? 'autoTest')`,
+          isNull(races.crazyGroupId),
+        ),
+      )
       .orderBy(desc(races.raceEndsAt))
       .limit(6);
     const recent = await Promise.all(

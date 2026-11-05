@@ -1,4 +1,10 @@
-import { RACE_LAPS_MAX, RACE_LAPS_MIN, type RaceSummaryDto } from '@tracado/shared';
+import {
+  DEFAULT_PRACTICE_MINUTES,
+  RACE_LAPS_MAX,
+  RACE_LAPS_MIN,
+  TRACE_WINDOW_MS,
+  type RaceSummaryDto,
+} from '@tracado/shared';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useState, type FormEvent } from 'react';
 import { Link } from 'react-router';
@@ -142,7 +148,7 @@ function CreateRace({ batch }: { batch: boolean }) {
       </label>
       <label>
         <span className="label">Fila máx.</span>
-        <input name="waitlistMax" type="number" min={0} max={50} defaultValue={10} className="input" />
+        <input name="waitlistMax" type="number" min={0} max={50} defaultValue={DEFAULT_PRACTICE_MINUTES} className="input" />
       </label>
       <label>
         <span className="label">Inscrições abrem (min antes)</span>
@@ -164,7 +170,7 @@ function CreateRace({ batch }: { batch: boolean }) {
         <input type="checkbox" name="ranked" defaultChecked className="size-4 accent-[#ffcc00]" /> Ranqueada
       </label>
       <p className="text-xs text-muted sm:col-span-2 lg:col-span-3">
-        A janela de traçado dura sempre 5 minutos e começa ao fim do treino.
+        A janela de traçado dura sempre {TRACE_WINDOW_MS / 60_000} minutos e começa ao fim do treino.
       </p>
       <button className="btn-primary" disabled={busy}>
         {batch ? 'Gerar lote' : 'Criar corrida'}

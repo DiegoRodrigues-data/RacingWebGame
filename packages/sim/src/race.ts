@@ -640,6 +640,150 @@ export function simulateQualifying(
   return rows.map((r, i) => ({ id: r.id, position: i + 1, lapTimeMs: r.lapTimeMs }));
 }
 
+/** Intervalo (s simulados) entre as saídas dos carros na sessão de classificação. */
+export const QUALI_GAP_S = 4;
+
+export interface QualifyingRun {
+  id: string;
+  /** Saída para a volta lançada (ms simulados desde o início da sessão). */
+  startMs: number;
+  lapTimeMs: number;
+  /** Tempo de cada setor (ms), somando o tempo da volta. */
+  sectorMs: number[];
+}
+
+export interface QualifyingSession {
+  durationMs: number;
+  frameHz: number;
+  /** Ordem de saída para a pista (sorteada pela seed, não revela o resultado). */
+  runs: QualifyingRun[];
+  /** Frames no mesmo formato da corrida, com os carros na ordem de `runs`. */
+  frames: ReplayFrame[];
+}
+
+/**
+ * Sessão de classificação para transmissão: cada carro sai do box, um a cada QUALI_GAP_S, e faz uma volta lançada
+ * na própria linha com o próprio setup. A volta é escalada para terminar exatamente no tempo oficial de
+ * `simulateQualifying` (`rows`), então o que o espectador vê é o que define o grid. Determinística.
+ */
+export function qualifyingSession(
+  g: TrackGeometry,
+  cars: SimCar[],
+  rows: { id: string; lapTimeMs: number }[],
+  seed: string,
+  weather: RaceWeather,
+): QualifyingSession {
+  const w = weatherByLap(seed, weather, 1)[0]!;
+  const cond = { wetness: WETNESS[w], temperature: weather.temperature };
+  const order = [...cars].sort(
+    (a, b) =>
+      stableHash(`${seed}|saida|${a.id}`).localeCompare(stableHash(`${seed}|saida|${b.id}`)) ||
+      a.id.localeCompare(b.id),
+  );
+  const n = g.count;
+  const lane = g.pit.lane;
+  const lanePts = Math.max(1, lane.length / 2);
+  const parked = (k: number) => {
+    // Carros parados espalhados pela via dos boxes.
+    const i = Math.min(lanePts - 1, Math.floor(((k + 0.5) / order.length) * lanePts));
+    const j = Math.min(lanePts - 1, i + 1);
+    return {
+      x: lane[i * 2] ?? g.points[0]!,
+      y: lane[i * 2 + 1] ?? g.points[1]!,
+      heading: Math.atan2(
+        (lane[j * 2 + 1] ?? 0) - (lane[i * 2 + 1] ?? 0),
+        (lane[j * 2] ?? 1) - (lane[i * 2] ?? 0),
+      ),
+    };
+  };
+  const plans = order.map((car, k) => {
+    const offsets = traceToOffsets(g, car.trace);
+    const path = racingLine(g, offsets);
+    const m = carModifiers(g, car.setup, car.setup.tyre, 0, cond);
+    const p = lapProfile(path, pathCurvature(path), m, car.trace ? 0 : NO_TRACE_PACE_PENALTY);
+    const lapTimeMs = rows.find((r) => r.id === car.id)?.lapTimeMs ?? Math.round(p.lapTime * 1000);
+    const scale = lapTimeMs / (p.lapTime * 1000);
+    const t = new Float64Array(n + 1);
+    for (let i = 0; i <= n; i++) t[i] = p.t[i]! * 1000 * scale;
+    let prev = 0;
+    const sectorMs = g.sectors.map((_, s) => {
+      const end = s === g.sectors.length - 1 ? lapTimeMs : Math.round(t[g.sectors[s + 1]!]!);
+      const ms = end - prev;
+      prev = end;
+      return ms;
+    });
+    return {
+      car,
+      path,
+      t,
+      startMs: k * QUALI_GAP_S * 1000,
+      lapTimeMs,
+      sectorMs,
+      tyre: tyreCode(car.setup.tyre),
+      park: parked(k),
+    };
+  });
+  const durationMs = Math.max(0, ...plans.map((p) => p.startMs + p.lapTimeMs)) + 2000;
+  const frames: ReplayFrame[] = [];
+  const step = 1000 / FRAME_HZ;
+  for (let T = 0; T <= durationMs + step / 2; T += step) {
+    const c: number[] = [];
+    for (const pl of plans) {
+      const dt = T - pl.startMs;
+      if (dt < 0 || dt >= pl.lapTimeMs) {
+        const done = dt >= pl.lapTimeMs;
+        c.push(
+          Math.round(pl.park.x * 10) / 10,
+          Math.round(pl.park.y * 10) / 10,
+          Math.round(pl.park.heading * 100) / 100,
+          done ? 1 : 0,
+          pl.tyre,
+          done ? CAR_STATUS.finished : CAR_STATUS.pit,
+          0,
+          0,
+        );
+        continue;
+      }
+      let lo = 0,
+        hi = n;
+      while (hi - lo > 1) {
+        const mid = (lo + hi) >> 1;
+        if (pl.t[mid]! <= dt) lo = mid;
+        else hi = mid;
+      }
+      const i = lo % n,
+        j = (lo + 1) % n;
+      const k = Math.max(0, Math.min(1, (dt - pl.t[lo]!) / Math.max(1e-6, pl.t[lo + 1]! - pl.t[lo]!)));
+      const ax = pl.path[i * 2]!,
+        ay = pl.path[i * 2 + 1]!,
+        bx = pl.path[j * 2]!,
+        by = pl.path[j * 2 + 1]!;
+      c.push(
+        Math.round((ax + (bx - ax) * k) * 10) / 10,
+        Math.round((ay + (by - ay) * k) * 10) / 10,
+        Math.round(Math.atan2(by - ay, bx - ax) * 100) / 100,
+        Math.round(((lo + k) / n) * 1000) / 1000,
+        pl.tyre,
+        CAR_STATUS.running,
+        0,
+        0,
+      );
+    }
+    frames.push({ t: Math.round(T), c });
+  }
+  return {
+    durationMs,
+    frameHz: FRAME_HZ,
+    runs: plans.map((p) => ({
+      id: p.car.id,
+      startMs: p.startMs,
+      lapTimeMs: p.lapTimeMs,
+      sectorMs: p.sectorMs,
+    })),
+    frames,
+  };
+}
+
 /** Decodifica um frame em objetos (útil no cliente e em testes). */
 export function decodeFrame(
   frame: ReplayFrame,

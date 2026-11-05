@@ -8,9 +8,9 @@ import {
   type Tyre,
 } from '@tracado/shared';
 import { createRng, offsetsToTrace, suggestedLine, enforceLateralRate } from '@tracado/trackgen';
-import { and, eq, notInArray } from 'drizzle-orm';
+import { and, eq, notInArray, sql } from 'drizzle-orm';
 import type { Ctx } from '../../context';
-import { entries, profiles, setups, traces, users } from '../../db/schema';
+import { crazyGroups, entries, profiles, setups, traces, users } from '../../db/schema';
 import { broadcastRace, getCategory, getRaceRow } from '../races/service';
 import { getGeometry } from '../tracks/service';
 
@@ -83,6 +83,24 @@ function botSetup(seed: string, cfg: CategoryConfig, laps: number, wet: boolean)
     terrainPrep: r.chance(0.7) ? 'asphalt' : r.pick(TERRAINS),
     weatherBet: wet ? 'wet' : r.pick(['dry', 'mixed'] as const),
   };
+}
+
+/**
+ * Grupo da Corrida Maluca com bots liberados: completa o grid até `botFill` carros quando faltar gente.
+ * Roda na abertura da janela de traçado, depois de os amigos terem tido o treino inteiro para entrar.
+ */
+export async function fillCrazyBots(ctx: Ctx, race: { id: string; crazyGroupId: string | null }) {
+  if (!race.crazyGroupId) return 0;
+  const [g] = await ctx.db
+    .select({ n: crazyGroups.botFill })
+    .from(crazyGroups)
+    .where(eq(crazyGroups.id, race.crazyGroupId));
+  if (!g?.n) return 0;
+  const [c] = await ctx.db
+    .select({ n: sql<number>`count(*)::int` })
+    .from(entries)
+    .where(and(eq(entries.raceId, race.id), eq(entries.status, 'confirmed')));
+  return fillBots(ctx, race.id, g.n - (c?.n ?? 0));
 }
 
 /** Na abertura da janela de traçado, cada bot grava um traçado (linha sugerida com variação) e um setup. */

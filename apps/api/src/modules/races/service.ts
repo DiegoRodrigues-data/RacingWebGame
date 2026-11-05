@@ -16,11 +16,12 @@ import {
 } from '@tracado/shared';
 import { weatherByLap } from '@tracado/sim';
 import { createRng } from '@tracado/trackgen';
-import { and, asc, desc, eq, gte, inArray, lte, sql, type SQL } from 'drizzle-orm';
+import { and, asc, desc, eq, gte, inArray, isNull, lte, sql, type SQL } from 'drizzle-orm';
 import type { Ctx } from '../../context';
 import type { Db, Tx } from '../../db/client';
 import {
   categories,
+  crazyGroups,
   entries,
   events,
   profiles,
@@ -155,7 +156,7 @@ export async function capacityOf(
 export async function raceSummaries(db: Db | Tx, rows: RaceRow[]): Promise<RaceSummaryDto[]> {
   if (!rows.length) return [];
   const ids = rows.map((r) => r.id);
-  const [cats, evs, tvs, caps] = await Promise.all([
+  const [cats, evs, tvs, caps, crazy] = await Promise.all([
     db
       .select()
       .from(categories)
@@ -181,8 +182,20 @@ export async function raceSummaries(db: Db | Tx, rows: RaceRow[]): Promise<RaceS
       .from(entries)
       .where(and(inArray(entries.raceId, ids), inArray(entries.status, ['confirmed', 'waitlisted'])))
       .groupBy(entries.raceId, entries.status),
+    rows.some((r) => r.crazyGroupId)
+      ? db
+          .select()
+          .from(crazyGroups)
+          .where(
+            inArray(
+              crazyGroups.id,
+              rows.map((r) => r.crazyGroupId).filter((x): x is string => !!x),
+            ),
+          )
+      : Promise.resolve([]),
   ]);
   return rows.map((r) => {
+    const cg = crazy.find((g) => g.id === r.crazyGroupId);
     const c = cats.find((x) => x.id === r.categoryId)!;
     const e = evs.find((x) => x.id === r.eventId);
     const tv = tvs.find((x) => x.v.id === r.trackVersionId)!;
@@ -221,6 +234,9 @@ export async function raceSummaries(db: Db | Tx, rows: RaceRow[]): Promise<RaceS
         free: Math.max(0, r.capacity - confirmed),
       },
       track: { versionId: tv.v.id, name: tv.t.name, length: tv.v.length, terrain: tv.v.terrain },
+      crazy: cg
+        ? { groupId: cg.id, groupName: cg.name, round: r.crazyRound ?? 1, rounds: cg.raceCount }
+        : null,
     };
   });
 }
@@ -230,8 +246,15 @@ export async function getSummary(db: Db | Tx, id: string): Promise<RaceSummaryDt
 }
 
 export async function listEntries(db: Db | Tx, raceId: string): Promise<EntryDto[]> {
+  const [race] = await db.select({ status: races.status }).from(races).where(eq(races.id, raceId));
+  const hideGrid = race?.status === 'qualifying';
   const rows = await db
-    .select({ e: entries, p: profiles })
+    .select({
+      e: entries,
+      p: profiles,
+      hasTrace: sql<boolean>`exists (select 1 from ${traces} where ${traces.raceId} = ${entries.raceId} and ${traces.userId} = ${entries.userId})`,
+      hasSetup: sql<boolean>`exists (select 1 from ${setups} where ${setups.raceId} = ${entries.raceId} and ${setups.userId} = ${entries.userId})`,
+    })
     .from(entries)
     .innerJoin(profiles, eq(profiles.userId, entries.userId))
     .where(
@@ -242,7 +265,7 @@ export async function listEntries(db: Db | Tx, raceId: string): Promise<EntryDto
     )
     .orderBy(asc(entries.createdAt));
   let wl = 0;
-  const out = rows.map(({ e, p }) => ({
+  const out = rows.map(({ e, p, hasTrace, hasSetup }) => ({
     userId: e.userId,
     nickname: p.nickname,
     country: p.country,
@@ -250,9 +273,11 @@ export async function listEntries(db: Db | Tx, raceId: string): Promise<EntryDto
     carColor: e.carColor,
     carModel: e.carModel,
     carNumber: e.carNumber,
-    gridSlot: e.gridSlot,
+    gridSlot: hideGrid ? null : e.gridSlot,
     waitlistPosition: e.status === 'waitlisted' ? ++wl : null,
     createdAt: e.createdAt.toISOString(),
+    hasTrace: !!hasTrace,
+    hasSetup: !!hasSetup,
   }));
   return out.sort((a, b) => {
     const rank = (x: EntryDto) => (x.status === 'confirmed' ? 0 : x.status === 'waitlisted' ? 1 : 2);
@@ -305,6 +330,8 @@ export interface ListQuery {
   ranked?: boolean;
   /** true: só corridas teste; false: sem elas; ausente: todas. */
   test?: boolean;
+  /** Corridas dos grupos da Corrida Maluca ficam fora das listas públicas, a menos que pedidas. */
+  crazy?: boolean;
   limit?: number;
   order?: 'asc' | 'desc';
 }
@@ -318,6 +345,7 @@ export async function listRaces(ctx: Ctx, q: ListQuery): Promise<RaceSummaryDto[
   if (q.ranked !== undefined) conds.push(eq(races.ranked, q.ranked));
   if (q.test === true) conds.push(sql`${races.flags} ? 'autoTest'`);
   if (q.test === false) conds.push(sql`not (${races.flags} ? 'autoTest')`);
+  if (!q.crazy) conds.push(isNull(races.crazyGroupId));
   const rows = await ctx.db
     .select()
     .from(races)
@@ -328,6 +356,14 @@ export async function listRaces(ctx: Ctx, q: ListQuery): Promise<RaceSummaryDto[
 }
 
 /** Envia capacidade, lista de inscritos e resumo atualizados para quem acompanha a corrida e o lobby. */
+/** Lista de inscritos para quem está na sala da corrida (ex.: piloto salvou o primeiro traçado). */
+export async function publishEntries(ctx: Ctx, raceId: string) {
+  await ctx.hub.publish(ROOM.race(raceId), 'race.entries', {
+    raceId,
+    entries: await listEntries(ctx.db, raceId),
+  });
+}
+
 export async function broadcastRace(ctx: Ctx, raceId: string) {
   const row = await getRaceRow(ctx.db, raceId);
   const [summary] = await raceSummaries(ctx.db, [row]);

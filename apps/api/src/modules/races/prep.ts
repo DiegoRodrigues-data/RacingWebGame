@@ -15,7 +15,7 @@ import { entries, setups, traces } from '../../db/schema';
 import type { AuthUser } from '../../lib/auth';
 import { parse } from '../../lib/validate';
 import { getGeometry } from '../tracks/service';
-import { getCategory, getRaceRow } from './service';
+import { getCategory, getRaceRow, publishEntries } from './service';
 
 async function requireEntry(
   ctx: Ctx,
@@ -31,7 +31,7 @@ async function requireEntry(
   return e;
 }
 
-/** Envio do traçado: apenas durante a janela de 5 minutos, validado geometricamente no servidor. */
+/** Envio do traçado: da inscrição até o fim da janela de traçado, validado geometricamente no servidor. */
 export async function submitTrace(ctx: Ctx, raceId: string, user: AuthUser, body: unknown) {
   const reject = async (err: AppError) => {
     await ctx.hub.publish(ROOM.user(user.id), 'trace.rejected', {
@@ -45,7 +45,7 @@ export async function submitTrace(ctx: Ctx, raceId: string, user: AuthUser, body
   const race = await getRaceRow(ctx.db, raceId);
   const now = ctx.clock.now();
   // O traçado pode ser salvo desde a inscrição até o parque fechado (como o setup): o que o jogador desenha
-  // antes da janela vale mesmo que ele feche a página. A janela de 5 minutos é a última chance de ajustar.
+  // antes da janela vale mesmo que ele feche a página. A janela de traçado é a última chance de ajustar.
   if (!SETUP_EDITABLE_PHASES.includes(race.status) || now >= race.setupLockAt.getTime())
     return reject(new AppError('TRACE_WINDOW_CLOSED', 'O traçado está travado (parque fechado).'));
   await requireEntry(ctx, raceId, user.id, ['confirmed']);
@@ -72,6 +72,8 @@ export async function submitTrace(ctx: Ctx, raceId: string, user: AuthUser, body
     submittedAt: now,
     points: input.points.length,
   });
+  // Primeiro traçado do piloto: atualiza o painel de quem assiste ("traçado enviado").
+  if (version === 1) await publishEntries(ctx, raceId);
   return { version, submittedAt: new Date(now).toISOString() };
 }
 
@@ -93,10 +95,15 @@ export async function saveSetup(ctx: Ctx, raceId: string, user: AuthUser, body: 
   const cat = await getCategory(ctx.db, race.categoryId);
   const problems = checkSetupLimits(setup, cat.config, race.laps);
   if (problems.length) throw new AppError('SETUP_INVALID', problems[0]!, problems);
+  const [had] = await ctx.db
+    .select({ at: setups.updatedAt })
+    .from(setups)
+    .where(and(eq(setups.raceId, raceId), eq(setups.userId, user.id)));
   await ctx.db
     .insert(setups)
     .values({ raceId, userId: user.id, setup, updatedAt: new Date(now) })
     .onConflictDoUpdate({ target: [setups.raceId, setups.userId], set: { setup, updatedAt: new Date(now) } });
+  if (!had) await publishEntries(ctx, raceId);
   return setup;
 }
 

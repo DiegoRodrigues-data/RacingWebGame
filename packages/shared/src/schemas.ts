@@ -2,6 +2,7 @@ import { z } from 'zod';
 import {
   CAR_COLORS,
   CAR_MODELS,
+  DEFAULT_PRACTICE_MINUTES,
   MAX_CARS_PER_RACE,
   MIN_PIT_STOPS,
   RACE_LAPS_MAX,
@@ -9,6 +10,7 @@ import {
   TRACE_MAX_POINTS,
   TRACE_MIN_POINTS,
 } from './constants';
+import type { RaceCrazyDto } from './crazy';
 import { RACE_PHASES } from './phases';
 
 // ---------- Básicos ----------
@@ -101,6 +103,8 @@ export interface MeDto {
   emailVerified: boolean;
   roles: Role[];
   profile: ProfileDto;
+  /** Convidado da Corrida Maluca (entrou só com apelido, sem e-mail nem senha). */
+  guest: boolean;
 }
 export interface ProfileDto {
   userId: string;
@@ -302,7 +306,7 @@ export const raceCreateSchema = z.object({
     .min(1)
     .max(60 * 24 * 14)
     .default(60),
-  practiceMinutes: z.number().min(0.5).max(120).default(10),
+  practiceMinutes: z.number().min(0.5).max(120).default(DEFAULT_PRACTICE_MINUTES),
   setupLockSeconds: z.number().int().min(5).max(600).default(30),
   qualifyingSeconds: z.number().int().min(10).max(1800).default(60),
   capacity: z.number().int().min(2).max(MAX_CARS_PER_RACE).default(MAX_CARS_PER_RACE),
@@ -385,6 +389,8 @@ export interface RaceSummaryDto {
   weather: RaceWeather;
   capacity: CapacityDto;
   track: { versionId: string; name: string; length: number; terrain: TrackTerrain };
+  /** Corrida de um grupo da Corrida Maluca (fechada, fora das listas públicas). */
+  crazy: RaceCrazyDto | null;
 }
 
 export interface EntryDto {
@@ -395,9 +401,13 @@ export interface EntryDto {
   carColor: string;
   carModel: number;
   carNumber: number;
+  /** Posição no grid; oculta durante a sessão de classificação para não estragar a transmissão. */
   gridSlot: number | null;
   waitlistPosition: number | null;
   createdAt: string;
+  /** Preparação visível ao espectador (só se já salvou, nunca o conteúdo). */
+  hasTrace: boolean;
+  hasSetup: boolean;
 }
 
 export interface RaceDetailDto extends RaceSummaryDto {

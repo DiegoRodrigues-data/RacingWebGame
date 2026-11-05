@@ -9,7 +9,7 @@ beforeAll(async () => (t = await setupApp()));
 afterAll(() => t.close());
 
 describe('ciclo de vida completo de uma corrida (fluxo crítico)', () => {
-  it('criação → inscrição → treino → traçado (5 min) → parque fechado → classificação → corrida → resultado → ranking', async () => {
+  it('criação → inscrição → treino → traçado (2 min) → parque fechado → classificação → corrida → resultado → ranking', async () => {
     const raceId = await t.createRace({ ranked: true }, 20 * 60_000);
     let race = await t.race(raceId);
     expect(race.status).toBe('registration_open');
@@ -80,7 +80,7 @@ describe('ciclo de vida completo de uma corrida (fluxo crítico)', () => {
     const practice = await t.json('GET', `/races/${raceId}/practice`);
     expect(practice.body.reference.suggestedLapMs).toBeLessThan(practice.body.reference.centerlineLapMs);
 
-    // Janela de traçado: 5 minutos, sincronizada com o servidor.
+    // Janela de traçado: 2 minutos, sincronizada com o servidor.
     await t.advanceTo(Date.parse(race.timeline.traceWindowAt));
     race = await t.race(raceId);
     expect(race.status).toBe('trace_window');
@@ -134,6 +134,23 @@ describe('ciclo de vida completo de uma corrida (fluxo crítico)', () => {
     await t.advanceTo(Date.parse(race.timeline.qualifyingAt));
     race = await t.race(raceId);
     expect(race.status).toBe('qualifying');
+    // Sessão ao vivo: ninguém fechou a volta ainda, então a tabela provisória está vazia e o grid fica oculto.
+    expect((await t.json('GET', `/races/${raceId}/qualifying`)).body).toEqual([]);
+    expect(race.entries.every((e: any) => e.gridSlot === null)).toBe(true);
+    const qStart = (await t.json('GET', `/races/${raceId}/qualifying/live`)).body;
+    expect(qStart).toMatchObject({ complete: false, fromFrame: 0 });
+    expect(qStart.cars).toHaveLength(3);
+    expect(qStart.runs.every((r: any) => r.lapTimeMs === null)).toBe(true);
+    await t.advance(12_000);
+    const qMid = (await t.json('GET', `/races/${raceId}/qualifying/live?from=${qStart.frames.length}`)).body;
+    expect(qMid.fromFrame).toBe(qStart.frames.length);
+    const elapsedMid = (t.clock.now() - qMid.startedAt) * qMid.playbackSpeed;
+    expect(qMid.frames.length).toBeGreaterThan(0);
+    expect(qMid.frames.every((f: any) => f.t <= elapsedMid)).toBe(true);
+    for (const r of qMid.runs)
+      if (r.lapTimeMs != null) expect(r.startMs + r.lapTimeMs).toBeLessThanOrEqual(elapsedMid);
+    // A sessão cabe na fase: pouco antes da largada todas as voltas já foram fechadas.
+    t.clock.set(Date.parse(race.timeline.raceAt) - 1);
     const quali = (await t.json('GET', `/races/${raceId}/qualifying`)).body;
     expect(quali).toHaveLength(3);
     expect(quali.find((q: any) => q.userId === caio.userId)).toMatchObject({
@@ -206,6 +223,7 @@ describe('motor de fases', () => {
     t.clock.set(Date.parse(race.timeline.qualifyingAt));
     await Promise.all([t.engine.tick(), t.engine.tick(), t.engine.tick()]);
     expect((await t.race(raceId)).status).toBe('qualifying');
+    t.clock.set(Date.parse(race.timeline.raceAt) - 1);
     expect((await t.json('GET', `/races/${raceId}/qualifying`)).body).toHaveLength(1);
   });
 
@@ -247,6 +265,7 @@ describe('motor de fases', () => {
     });
     const race = await t.race(raceId);
     await t.advanceTo(Date.parse(race.timeline.qualifyingAt));
+    t.clock.set(Date.parse(race.timeline.raceAt) - 1);
     const q = (await t.json('GET', `/races/${raceId}/qualifying`)).body;
     expect(q.map((r: any) => r.userId)).toEqual([b.userId]);
   });

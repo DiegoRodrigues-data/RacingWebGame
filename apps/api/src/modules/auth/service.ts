@@ -26,7 +26,8 @@ export async function getMe(ctx: Ctx, userId: string): Promise<MeDto> {
   const p = row.profiles;
   return {
     id: row.users.id,
-    email: row.users.email,
+    // Convidado tem e-mail fictício (só para a coluna única): não aparece para ninguém.
+    email: row.users.isGuest ? '' : row.users.email,
     emailVerified: row.users.emailVerified,
     roles: row.users.roles,
     profile: {
@@ -42,10 +43,16 @@ export async function getMe(ctx: Ctx, userId: string): Promise<MeDto> {
       emailReminders: p.emailReminders,
       careerRaces: p.careerRaces,
     },
+    guest: row.users.isGuest,
   };
 }
 
-export async function issueTokens(ctx: Ctx, user: AuthUser, ip: string | null, familyId: string = randomUUID()) {
+export async function issueTokens(
+  ctx: Ctx,
+  user: AuthUser,
+  ip: string | null,
+  familyId: string = randomUUID(),
+) {
   const now = ctx.clock.now();
   const refresh = randomToken(48);
   const [row] = await ctx.db
