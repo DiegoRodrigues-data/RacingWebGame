@@ -42,6 +42,28 @@
     opacity: 0.55;
   }
 }
+/* Link do menu que pisca para chamar a atenção (Corrida Maluca): cor e brilho, ~1 ciclo por 1,4 s. */
+@keyframes nav-attention {
+  0%,
+  100% {
+    color: var(--color-muted);
+    text-shadow: none;
+    background-color: transparent;
+  }
+  50% {
+    color: var(--color-race);
+    text-shadow: 0 0 10px rgb(255 204 0 / 0.75);
+    background-color: rgb(155 123 255 / 0.22);
+  }
+}
+.nav-attention {
+  animation: nav-attention 1.4s ease-in-out infinite;
+}
+.nav-attention:hover {
+  animation-play-state: paused;
+  color: var(--color-ink);
+}
+
 @keyframes stripes {
   from {
     background-position: 0 0;

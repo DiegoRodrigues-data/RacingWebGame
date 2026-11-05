@@ -78,7 +78,8 @@ const NAV = [
   { to: '/', label: 'Início', icon: Gauge, end: true },
   { to: '/calendario', label: 'Calendário', icon: CalendarDays },
   { to: '/rankings', label: 'Rankings', icon: Trophy },
-  { to: '/corrida-maluca', label: 'Corrida Maluca', icon: PartyPopper },
+  // `attention`: o link pisca (cor e brilho) para chamar a atenção enquanto a página não está aberta.
+  { to: '/corrida-maluca', label: 'Corrida Maluca', icon: PartyPopper, attention: true },
 ];
 
 const ADMIN_NAV = [
@@ -138,6 +139,7 @@ export function Layout({ children }: { children: ReactNode }) {
                   clsx(
                     'rounded-xl px-3 py-1.5 text-sm font-bold',
                     isActive ? 'bg-night-3 text-race' : 'text-muted hover:text-ink',
+                    !isActive && 'attention' in l && l.attention === true && 'nav-attention',
                   )
                 }
               >
@@ -199,7 +201,12 @@ export function Layout({ children }: { children: ReactNode }) {
                 key={l.to}
                 to={l.to}
                 end={l.end}
-                className="flex items-center gap-3 rounded-xl px-3 py-3 font-bold hover:bg-night-3"
+                className={({ isActive }) =>
+                  clsx(
+                    'flex items-center gap-3 rounded-xl px-3 py-3 font-bold hover:bg-night-3',
+                    !isActive && 'attention' in l && l.attention === true && 'nav-attention',
+                  )
+                }
               >
                 <l.icon size={18} /> {l.label}
               </NavLink>
