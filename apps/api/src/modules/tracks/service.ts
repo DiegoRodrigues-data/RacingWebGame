@@ -110,6 +110,47 @@ export async function createProceduralVersion(
   return v!;
 }
 
+/**
+ * Salva uma pista gerada por seed como pista oficial (publicada), para o rodízio das corridas automáticas.
+ * Fica como "especial": não é apagada junto com as corridas teste.
+ */
+export async function saveProceduralTrack(
+  ctx: Pick<Ctx, 'db'>,
+  name: string | null,
+  seed: string,
+  params: TrackParams,
+  actorId: string,
+): Promise<VersionRow> {
+  const g = generateProceduralTrack(seed, params);
+  const issues = validateGeometry(g, { targetLength: params.length });
+  if (issues.length) throw new AppError('TRACK_INVALID', 'Esta seed gera uma pista com problemas.', issues);
+  return ctx.db.transaction(async (tx) => {
+    const [t] = await tx
+      .insert(tracks)
+      .values({ name: name?.trim() || proceduralName(seed), kind: 'special', createdBy: actorId })
+      .returning();
+    const now = new Date();
+    const [v] = await tx
+      .insert(trackVersions)
+      .values({
+        trackId: t!.id,
+        version: 1,
+        status: 'published',
+        source: g.source,
+        geometryHash: g.hash,
+        length: g.length,
+        terrain: g.baseTerrain,
+        corners: g.corners,
+        createdBy: actorId,
+        publishedAt: now,
+        publishedBy: actorId,
+      })
+      .returning();
+    cache.set(v!.id, g);
+    return v!;
+  });
+}
+
 export function previewEditor(editor: EditorTrack) {
   const g = buildEditorTrack(editor);
   return { geometry: g, issues: validateGeometry(g) };

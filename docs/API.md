@@ -64,6 +64,7 @@ Tipos TypeScript e schemas Zod em `packages/shared/src/schemas.ts` e `packages/s
 | `GET /crazy/invite/:code` · `POST /crazy/invite/:code/join`                                                | público / jogador              | prévia do convite / entrar no grupo (inscreve nas corridas que ainda não fecharam o parque)                                                                                                                                    |
 | `PUT /races/:id/ready` · `POST /races/:id/start-now`                                                       | piloto do grupo / organizador  | Corrida Maluca, no treino ou na janela de traçado: `{ready}` marca "Estou pronto" (todos prontos pulam o preparo) / largar já com metade da turma pronta; respondem `{humans, ready, skipped}`                                 |
 | `POST /crazy/guest-link`                                                                                   | convidado                      | gera o link pessoal de volta (substitui o anterior)                                                                                                                                                                            |
+| `GET /settings`                                                                                            | público                        | durações das fases e limites da Corrida Maluca em vigor                                                                                                                                                                        |
 | `GET /notifications` · `POST /notifications/:id/read` (`id` ou `all`)                                      | jogador                        | notificações                                                                                                                                                                                                                   |
 | `GET /health` · `GET /metrics`                                                                             | público / token                | saúde (DB e Store) e Prometheus                                                                                                                                                                                                |
 
@@ -77,6 +78,14 @@ Tipos TypeScript e schemas Zod em `packages/shared/src/schemas.ts` e `packages/s
 `POST /admin/tracks/versions/:id/submit` _(editor)_ · `.../publish` · `.../reject` · `.../deprecate` ·
 `POST /admin/seasons` · `POST /admin/seasons/:id/close` · `POST /admin/rankings/rebuild` · `GET|PATCH /admin/users`.
 Toda ação administrativa grava em `admin_audit_log`.
+
+Configurações e painel (admin):
+
+| Método e rota                                 | Descrição                                                                                                                                              |
+| --------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `GET /admin/settings` · `PUT /admin/settings` | configurações do jogo (`GameSettings`), categorias disponíveis e pistas do rodízio; o PUT valida categorias e pistas publicadas e vai para a auditoria |
+| `POST /admin/tracks/from-seed`                | `{name?, seed, params, addToPool}`: salva a pista da seed como oficial (e no rodízio)                                                                  |
+| `GET /admin/stats`                            | jogadores, corridas por dia (14 dias), terrenos, grupos ativos e próximas corridas                                                                     |
 
 ### Exemplos
 

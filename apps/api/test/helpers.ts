@@ -138,6 +138,8 @@ export async function setupApp(overrides: Partial<Config> = {}) {
         startAt: new Date(clock.now() + startInMs).toISOString(),
         registrationLeadMinutes: Math.ceil(startInMs / 60_000) + 5,
         practiceMinutes: 2,
+        // Os testes antigos exercitam a janela de traçado (ainda suportada nas corridas que a têm).
+        traceWindowSeconds: 120,
         setupLockSeconds: 10,
         qualifyingSeconds: 20,
         track: { type: 'procedural', seed: 'teste' },

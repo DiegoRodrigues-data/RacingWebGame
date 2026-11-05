@@ -13,6 +13,7 @@ import { entries, qualifyingResults, races } from '../../db/schema';
 import { notify } from '../notifications/service';
 import { bumpRankingCache } from '../rankings/service';
 import { getRaceRow, listEntries, raceSummaries, timelineOf, type RaceRow } from '../races/service';
+import { getSettings } from '../settings/service';
 import { ensureAutoRaces, ensureAutoTestRaces } from './autoRaces';
 import { fillBots, fillCrazyBots, prepareBots } from './bots';
 import { forgetQualiLive, qualifyingRows } from './qualiLive';
@@ -66,6 +67,11 @@ export class PhaseEngine {
     return false;
   }
 
+  /** Configurações mudaram: confere a grade automática já no próximo tick. */
+  nudgeAutoRaces() {
+    this.lastAutoRaces = -Infinity;
+  }
+
   /** Um ciclo do motor. Público para testes e para a rota de desenvolvimento. */
   async tick(): Promise<void> {
     if (this.running) return;
@@ -79,12 +85,8 @@ export class PhaseEngine {
         for (const r of due) await this.advance(r);
       }
       await this.traceWarnings();
-      // Grade automática: uma checagem por minuto basta (os horários são de hora em hora).
-      const cfg = this.ctx.config;
-      if (
-        (cfg.AUTO_RACES_PER_DAY || cfg.AUTO_TEST_RACES_GAP_MIN) &&
-        this.ctx.clock.now() - this.lastAutoRaces >= 60_000
-      ) {
+      // Grade automática: uma checagem por minuto basta (cada função vê nas configurações se está ligada).
+      if (this.ctx.clock.now() - this.lastAutoRaces >= 60_000) {
         this.lastAutoRaces = this.ctx.clock.now();
         await ensureAutoRaces(this.ctx);
         await ensureAutoTestRaces(this.ctx);
@@ -243,8 +245,16 @@ export class PhaseEngine {
     switch (to) {
       case 'registration_open':
         // Grupos da Corrida Maluca: bots só se quem criou liberou (completados na janela de traçado).
-        if (ctx.config.DEMO_BOTS > 0 && !race.crazyGroupId)
-          await fillBots(ctx, race.id, ctx.config.DEMO_BOTS);
+        if (!race.crazyGroupId) {
+          // Bots por tipo de corrida (configurações do jogo).
+          const st = await getSettings(ctx);
+          const n = race.flags.autoTest
+            ? st.testRaces.bots
+            : race.flags.auto
+              ? st.autoRaces.bots
+              : st.adminRaceBots;
+          if (n > 0) await fillBots(ctx, race.id, n);
+        }
         break;
       case 'trace_window':
         if (race.crazyGroupId) await fillCrazyBots(ctx, race);
@@ -254,7 +264,9 @@ export class PhaseEngine {
           deadline: fresh.setupLockAt.getTime(),
         });
         // Preparo pulado (Corrida Maluca): a janela fecha no mesmo instante, sem aviso.
-        if (!fresh.flags.prepSkipped) await notify(ctx, await confirmedIds(), 'trace_window_open', p);
+        // Sem janela (padrão: o treino vai direto ao parque fechado) ou preparo pulado: sem aviso.
+        if (!fresh.flags.prepSkipped && fresh.setupLockAt.getTime() > fresh.traceWindowAt.getTime())
+          await notify(ctx, await confirmedIds(), 'trace_window_open', p);
         break;
       case 'setup_lock':
         await ctx.hub.publish(ROOM.race(race.id), 'trace.window_closed', { raceId: race.id });

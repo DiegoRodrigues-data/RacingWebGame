@@ -2,7 +2,13 @@ import type { TrackGeometry } from '@tracado/trackgen';
 import { useMemo } from 'react';
 import { CAR_CSS } from '../game/assets';
 
-/** Minimapa em SVG: contorno da pista, setores e posição dos carros (atualizado pela classificação, ~4 Hz). */
+/** Cores do piso no minimapa (as mesmas da pista desenhada). */
+const SURFACE: Record<string, string> = { asphalt: '#a6c9cb', dirt: '#bb8044', sand: '#ecdcb8' };
+
+/**
+ * Minimapa em SVG: contorno da pista colorido pelo piso (asfalto, terra, areia), setores e posição dos carros
+ * (atualizado pela classificação, ~4 Hz).
+ */
 export function Minimap({
   g,
   cars,
@@ -12,13 +18,33 @@ export function Minimap({
   cars: { id: string; x: number; y: number; color: string; status: number }[];
   highlight?: string | null;
 }) {
-  const { path, view, sectors } = useMemo(() => {
+  const { path, view, sectors, runs } = useMemo(() => {
     const pad = 30;
     const b = g.bounds;
     const d = [];
     for (let i = 0; i < g.count; i += 2)
       d.push(`${i === 0 ? 'M' : 'L'}${g.points[i * 2]!.toFixed(0)},${g.points[i * 2 + 1]!.toFixed(0)}`);
+    // Trechos de terra e areia por cima do asfalto.
+    const runs: { d: string; color: string }[] = [];
+    const pt = (i: number) => {
+      const k = i % g.count;
+      return `${g.points[k * 2]!.toFixed(0)},${g.points[k * 2 + 1]!.toFixed(0)}`;
+    };
+    let i = 0;
+    while (i < g.count) {
+      const t = g.terrain[i] ?? 'asphalt';
+      let j = i;
+      while (j + 1 < g.count && (g.terrain[j + 1] ?? 'asphalt') === t) j++;
+      if (t !== 'asphalt') {
+        const seg = [];
+        for (let k = i; k <= j + 1; k += 2) seg.push(`${k === i ? 'M' : 'L'}${pt(k)}`);
+        seg.push(`L${pt(j + 1)}`);
+        runs.push({ d: seg.join(' '), color: SURFACE[t] ?? SURFACE.asphalt! });
+      }
+      i = j + 1;
+    }
     return {
+      runs,
       path: d.join(' ') + 'Z',
       view: `${b.minX - pad} ${b.minY - pad} ${b.maxX - b.minX + pad * 2} ${b.maxY - b.minY + pad * 2}`,
       sectors: g.sectors.map((s) => ({ x: g.points[s * 2]!, y: g.points[s * 2 + 1]! })),
@@ -30,11 +56,22 @@ export function Minimap({
       <path
         d={path}
         fill="none"
-        stroke="#a6c9cb"
+        stroke={SURFACE.asphalt}
         strokeWidth={r * 0.9}
         strokeLinejoin="round"
         opacity={0.9}
       />
+      {runs.map((run, k) => (
+        <path
+          key={k}
+          d={run.d}
+          fill="none"
+          stroke={run.color}
+          strokeWidth={r * 0.9}
+          strokeLinejoin="round"
+          strokeLinecap="round"
+        />
+      ))}
       {sectors.map((s, i) => (
         <circle
           key={i}

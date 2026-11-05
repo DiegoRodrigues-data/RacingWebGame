@@ -6,10 +6,11 @@ import type { RaceSummaryDto } from './schemas';
  * Corrida Maluca: grupo fechado de amigos (convite por link) com uma corrida avulsa ou um campeonato de até
  * 10 corridas. Não vale ranking oficial; o clima é de resenha, com troféus de zoeira a cada corrida.
  */
-export const CRAZY_MAX_RACES = 10;
-export const CRAZY_MAX_MEMBERS = 20;
-export const CRAZY_LAPS_MIN = 5;
-export const CRAZY_LAPS_MAX = 20;
+/** Teto técnico; o limite em vigor vem das configurações do jogo (`crazy.maxRaces`). */
+export const CRAZY_MAX_RACES = 20;
+export const CRAZY_MAX_MEMBERS = 22;
+export const CRAZY_LAPS_MIN = 3;
+export const CRAZY_LAPS_MAX = 30;
 export const CRAZY_DEFAULT_LAPS = 8;
 /** Intervalo mínimo entre o início de duas corridas do grupo (treino + traçado + classificação + corrida). */
 export const CRAZY_MIN_INTERVAL_MIN = 15;

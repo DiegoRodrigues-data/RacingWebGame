@@ -105,7 +105,12 @@ const PHASE_STEPS: RacePhase[] = [
   'finished',
 ];
 export function PhaseTimeline({ race }: { race: RaceSummaryDto }) {
-  const idx = PHASE_STEPS.indexOf(race.status === 'archived' ? 'finished' : race.status);
+  // Sem janela de traçado (padrão): o passo some da linha do tempo.
+  const steps = PHASE_STEPS.filter(
+    (p) =>
+      p !== 'trace_window' || race.timeline.setupLockAt > race.timeline.traceWindowAt || race.status === p,
+  );
+  const idx = steps.indexOf(race.status === 'archived' ? 'finished' : race.status);
   const times: Partial<Record<RacePhase, string | null>> = {
     registration_open: race.timeline.registrationOpensAt,
     practice: race.timeline.practiceAt,
@@ -116,8 +121,12 @@ export function PhaseTimeline({ race }: { race: RaceSummaryDto }) {
     finished: race.timeline.raceEndsAt,
   };
   return (
-    <ol className="grid grid-cols-7 gap-1" aria-label="Fases da corrida">
-      {PHASE_STEPS.map((p, i) => (
+    <ol
+      className="grid gap-1"
+      style={{ gridTemplateColumns: `repeat(${steps.length}, minmax(0, 1fr))` }}
+      aria-label="Fases da corrida"
+    >
+      {steps.map((p, i) => (
         <li key={p} className="min-w-0">
           <div
             className={clsx(

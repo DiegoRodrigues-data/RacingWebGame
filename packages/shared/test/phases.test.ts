@@ -8,12 +8,23 @@ const tl = buildTimeline({
   practiceMs: 600_000,
   setupLockMs: 30_000,
   qualifyingMs: 60_000,
+  // Corrida com janela de traçado (formato antigo, ainda suportado).
+  traceWindowMs: 120_000,
 });
 
 describe('linha do tempo da corrida', () => {
-  it('a janela de traçado dura exatamente 2 minutos', () => {
-    expect(tl.setupLockAt - tl.traceWindowAt).toBe(TRACE_WINDOW_MS);
-    expect(TRACE_WINDOW_MS).toBe(120_000);
+  it('sem janela de traçado por padrão: o treino vai direto ao parque fechado', () => {
+    expect(TRACE_WINDOW_MS).toBe(0);
+    const semJanela = buildTimeline({
+      startAt: t0,
+      registrationLeadMs: 60_000,
+      practiceMs: 120_000,
+      setupLockMs: 30_000,
+      qualifyingMs: 60_000,
+    });
+    expect(semJanela.setupLockAt).toBe(semJanela.traceWindowAt);
+    expect(semJanela.setupLockAt - semJanela.practiceAt).toBe(120_000);
+    expect(tl.setupLockAt - tl.traceWindowAt).toBe(120_000);
   });
   it('as fases são estritamente ordenadas', () => {
     const seq = [

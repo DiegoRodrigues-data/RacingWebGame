@@ -9,7 +9,7 @@ import type {
   ResultRowDto,
   ServerEvents,
 } from '@tracado/shared';
-import { ROOM } from '@tracado/shared';
+import { ROOM, type PublicSettingsDto } from '@tracado/shared';
 import type { TrackGeometry } from '@tracado/trackgen';
 import { QueryClient, useQuery, useQueryClient } from '@tanstack/react-query';
 import { get } from './api';
@@ -100,6 +100,15 @@ export function useGeometry(versionId: string | undefined) {
     enabled: !!versionId,
     staleTime: Infinity,
     gcTime: 30 * 60_000,
+  });
+}
+
+/** Configurações públicas do jogo (durações das fases e limites da Corrida Maluca). */
+export function usePublicSettings() {
+  return useQuery({
+    queryKey: ['public-settings'],
+    queryFn: () => get<PublicSettingsDto>('/settings'),
+    staleTime: 60_000,
   });
 }
 

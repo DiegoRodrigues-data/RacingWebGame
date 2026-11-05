@@ -57,6 +57,20 @@
       "when": 1794078355963,
       "tag": "0007_corrida_maluca_pronto",
       "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1794164755963,
+      "tag": "0008_configuracoes_do_jogo",
+      "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1794251155963,
+      "tag": "0009_sem_janela_de_tracado",
+      "breakpoints": true
     }
   ]
 }

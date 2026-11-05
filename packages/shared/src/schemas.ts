@@ -312,6 +312,8 @@ export const raceCreateSchema = z.object({
     .default(60),
   practiceMinutes: z.number().min(0.5).max(120).default(DEFAULT_PRACTICE_MINUTES),
   setupLockSeconds: z.number().int().min(5).max(600).default(30),
+  /** Janela de traçado depois do treino (s); ausente = padrão das configurações do jogo (0 = sem janela). */
+  traceWindowSeconds: z.number().int().min(0).max(900).optional(),
   qualifyingSeconds: z.number().int().min(10).max(1800).default(60),
   capacity: z.number().int().min(2).max(MAX_CARS_PER_RACE).default(MAX_CARS_PER_RACE),
   waitlistMax: z.number().int().min(0).max(50).default(10),

@@ -1,11 +1,4 @@
-import {
-  formatLapTime,
-  ROOM,
-  TRACE_WINDOW_MS,
-  type CarSetup,
-  type RaceDetailDto,
-  type TracePoint,
-} from '@tracado/shared';
+import { formatLapTime, ROOM, type CarSetup, type RaceDetailDto, type TracePoint } from '@tracado/shared';
 import { estimateLap } from '@tracado/sim';
 import {
   CAR_HALF_WIDTH,
@@ -41,6 +34,12 @@ import { ApiError, errorMessage, put } from '../../lib/api';
 import { useRoom, useServerNow } from '../../lib/realtime';
 import { useSession } from '../../lib/session';
 import { draftKey, saveDraft, speedColors, type PracticeInfo } from './common';
+
+/** Duração da janela de traçado em texto ("2 minutos", "90 segundos"). */
+const fmtWindow = (ms: number) => {
+  const s = Math.round(ms / 1000);
+  return s % 60 === 0 ? `${s / 60} ${s === 60 ? 'minuto' : 'minutos'}` : `${s} segundos`;
+};
 
 /** Corridas cujo rascunho já foi enviado automaticamente nesta aba (sobrevive a remontagens do componente). */
 const autoSubmitted = new Set<string>();
@@ -518,11 +517,23 @@ export function TraceTab({
             <Countdown to={deadline} className="text-4xl" />
           ) : canSend ? (
             <p className="text-sm text-muted">
-              Cada ajuste é salvo no servidor e já vale para a corrida, mesmo se você fechar a página. A
-              janela final de {TRACE_WINDOW_MS / 60_000} minutos abre às{' '}
-              <b className="text-ink">{new Date(race.timeline.traceWindowAt).toLocaleTimeString('pt-BR')}</b>{' '}
-              e o traçado trava às{' '}
-              <b className="text-ink">{new Date(race.timeline.setupLockAt).toLocaleTimeString('pt-BR')}</b>.
+              Cada ajuste é salvo no servidor e já vale para a corrida, mesmo se você fechar a página.{' '}
+              {race.timeline.setupLockAt > race.timeline.traceWindowAt ? (
+                <>
+                  A janela final de{' '}
+                  {fmtWindow(Date.parse(race.timeline.setupLockAt) - Date.parse(race.timeline.traceWindowAt))}{' '}
+                  abre às{' '}
+                  <b className="text-ink">
+                    {new Date(race.timeline.traceWindowAt).toLocaleTimeString('pt-BR')}
+                  </b>{' '}
+                  e o traçado
+                </>
+              ) : (
+                'O traçado'
+              )}{' '}
+              trava às{' '}
+              <b className="text-ink">{new Date(race.timeline.setupLockAt).toLocaleTimeString('pt-BR')}</b>
+              {race.timeline.setupLockAt > race.timeline.traceWindowAt ? '' : ', no fim do treino'}.
             </p>
           ) : editable && race.me?.entry?.status === 'waitlisted' ? (
             <p className="text-sm text-muted">

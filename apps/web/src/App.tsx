@@ -32,6 +32,8 @@ const TrackEditor = lazy(() => import('./pages/admin/TrackEditor'));
 const AdminSeasons = lazy(() => import('./pages/admin/AdminSeasons'));
 const AdminUsers = lazy(() => import('./pages/admin/AdminUsers'));
 const AdminAudit = lazy(() => import('./pages/admin/AdminAudit'));
+const AdminSettings = lazy(() => import('./pages/admin/AdminSettings'));
+const AdminTrackGen = lazy(() => import('./pages/admin/AdminTrackGen'));
 
 function RequireAuth({ children, role }: { children: ReactNode; role?: 'admin' | 'editor' }) {
   const { me, ready } = useSession();
@@ -40,6 +42,13 @@ function RequireAuth({ children, role }: { children: ReactNode; role?: 'admin' |
   if (!me) return <Navigate to={`/entrar?voltar=${encodeURIComponent(loc.pathname)}`} replace />;
   if (role === 'admin' && !isAdmin(me)) return <Navigate to="/" replace />;
   if (role === 'editor' && !isEditor(me)) return <Navigate to="/" replace />;
+  return <>{children}</>;
+}
+
+/** Telas de jogador: a conta de administração vai para o painel (ela só administra). */
+function PlayerOnly({ children }: { children: ReactNode }) {
+  const me = useSession((s) => s.me);
+  if (isAdmin(me)) return <Navigate to="/admin" replace />;
   return <>{children}</>;
 }
 
@@ -60,7 +69,14 @@ export function App() {
     <Layout>
       <Suspense fallback={<Spinner />}>
         <Routes>
-          <Route path="/" element={<Home />} />
+          <Route
+            path="/"
+            element={
+              <PlayerOnly>
+                <Home />
+              </PlayerOnly>
+            }
+          />
           <Route path="/entrar" element={<Login />} />
           <Route path="/cadastro" element={<Register />} />
           <Route path="/esqueci-senha" element={<ForgotPassword />} />
@@ -72,7 +88,9 @@ export function App() {
             path="/corridas/:id/box"
             element={
               <RequireAuth>
-                <Box />
+                <PlayerOnly>
+                  <Box />
+                </PlayerOnly>
               </RequireAuth>
             }
           />
@@ -80,8 +98,22 @@ export function App() {
           <Route path="/corridas/:id/replay" element={<Live mode="replay" />} />
           <Route path="/corridas/:id/resultado" element={<Results />} />
           <Route path="/rankings" element={<Rankings />} />
-          <Route path="/corrida-maluca" element={<CrazyHome />} />
-          <Route path="/corrida-maluca/convite/:code" element={<CrazyInvite />} />
+          <Route
+            path="/corrida-maluca"
+            element={
+              <PlayerOnly>
+                <CrazyHome />
+              </PlayerOnly>
+            }
+          />
+          <Route
+            path="/corrida-maluca/convite/:code"
+            element={
+              <PlayerOnly>
+                <CrazyInvite />
+              </PlayerOnly>
+            }
+          />
           <Route path="/corrida-maluca/voltar/:key" element={<CrazyResume />} />
           <Route path="/corrida-maluca/:id" element={<CrazyGroup />} />
           <Route path="/privacidade" element={<Privacy />} />
@@ -99,7 +131,9 @@ export function App() {
             path="/minhas-corridas"
             element={
               <RequireAuth>
-                <MyRaces />
+                <PlayerOnly>
+                  <MyRaces />
+                </PlayerOnly>
               </RequireAuth>
             }
           />
@@ -181,6 +215,22 @@ export function App() {
             element={
               <RequireAuth role="admin">
                 <AdminUsers />
+              </RequireAuth>
+            }
+          />
+          <Route
+            path="/admin/configuracoes"
+            element={
+              <RequireAuth role="admin">
+                <AdminSettings />
+              </RequireAuth>
+            }
+          />
+          <Route
+            path="/admin/gerador"
+            element={
+              <RequireAuth role="admin">
+                <AdminTrackGen />
               </RequireAuth>
             }
           />

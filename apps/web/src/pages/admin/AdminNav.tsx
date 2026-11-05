@@ -7,10 +7,12 @@ export function AdminNav() {
   const links = isAdmin(me)
     ? [
         ['/admin', 'Painel'],
+        ['/admin/configuracoes', 'Configurações'],
         ['/admin/corridas', 'Corridas'],
         ['/admin/categorias', 'Categorias'],
         ['/admin/eventos', 'Eventos'],
         ['/admin/pistas', 'Pistas'],
+        ['/admin/gerador', 'Gerador de pistas'],
         ['/admin/temporadas', 'Temporadas'],
         ['/admin/usuarios', 'Usuários'],
         ['/admin/auditoria', 'Auditoria'],

@@ -303,6 +303,19 @@ Fecha o ciclo de vida com resultados persistidos.
 - [x] Compartilhar com prévia: convite (`/s/maluca/:code`) e página do grupo (`/s/grupo/:id`)
 - [x] Trocar senha em "Minha conta"
 
+## Fase 18 — Painel administrativo de configuração ✅
+
+- [x] Configurações do jogo no banco, com efeito na hora e auditoria (padrão vindo das variáveis antigas)
+- [x] Tempo das etapas configurável (treino, parque fechado, classificação); janela de traçado removida
+- [x] Conta de administração só com visão de administrador (não corre, não entra em grupos)
+- [x] Grade automática: ligar, por dia, antecedência, voltas, ranqueada, rodízio de categorias, bots
+- [x] Terrenos liberados com peso no sorteio (corrige "só aparece asfalto"), comprimento, complexidade e largura
+- [x] Gerador de pistas por seed com prévia, tempo estimado, sugestões e rodízio de pistas salvas
+- [x] Categorias em formulário (JSON como modo avançado)
+- [x] Limites e padrões da Corrida Maluca
+- [x] Painel com jogadores, corridas por dia, terrenos, próximas corridas e atalhos
+- [ ] Coeficientes da física versionados por corrida
+
 ---
 
 ## Ordem recomendada (próximos passos)

@@ -14,12 +14,14 @@ import {
   Gauge,
   CarFront,
   PartyPopper,
+  Settings,
+  Map as MapIcon,
 } from 'lucide-react';
 import { useEffect, useState, type ReactNode } from 'react';
 import { Link, NavLink, useLocation, useNavigate } from 'react-router';
 import { useNotifications } from '../lib/queries';
 import { realtime, useConnection, useRoom } from '../lib/realtime';
-import { isEditor, useSession } from '../lib/session';
+import { isAdmin, isEditor, useSession } from '../lib/session';
 import { toast, Toaster } from './ui';
 
 function ConnectionDot() {
@@ -76,6 +78,14 @@ const NAV = [
   { to: '/corrida-maluca', label: 'Corrida Maluca', icon: PartyPopper },
 ];
 
+const ADMIN_NAV = [
+  { to: '/admin', label: 'Painel', icon: Gauge, end: true },
+  { to: '/admin/configuracoes', label: 'Configurações', icon: Settings },
+  { to: '/admin/corridas', label: 'Corridas', icon: CalendarDays },
+  { to: '/admin/pistas', label: 'Pistas', icon: MapIcon },
+  { to: '/admin/usuarios', label: 'Usuários', icon: User },
+];
+
 export function Layout({ children }: { children: ReactNode }) {
   const me = useSession((s) => s.me);
   const logout = useSession((s) => s.logout);
@@ -86,12 +96,15 @@ export function Layout({ children }: { children: ReactNode }) {
   useEffect(() => {
     document.documentElement.classList.toggle('reduce-motion', !!me?.profile.reducedMotion);
   }, [me?.profile.reducedMotion]);
-  const links = [
-    NAV[0]!,
-    ...(me ? [{ to: '/minhas-corridas', label: 'Minhas corridas', icon: CarFront }] : []),
-    ...NAV.slice(1),
-    ...(isEditor(me) ? [{ to: '/admin', label: 'Admin', icon: Shield }] : []),
-  ];
+  // A conta de administração não tem visão de jogador: só administração e configurações.
+  const links = isAdmin(me)
+    ? ADMIN_NAV
+    : [
+        NAV[0]!,
+        ...(me ? [{ to: '/minhas-corridas', label: 'Minhas corridas', icon: CarFront }] : []),
+        ...NAV.slice(1),
+        ...(isEditor(me) ? [{ to: '/admin', label: 'Admin', icon: Shield }] : []),
+      ];
   return (
     <div className="flex min-h-dvh flex-col">
       <a
@@ -131,12 +144,13 @@ export function Layout({ children }: { children: ReactNode }) {
               <>
                 <NotificationBell />
                 <Link
-                  to={`/pilotos/${me.id}`}
+                  to={isAdmin(me) ? '/conta' : `/pilotos/${me.id}`}
                   className="hidden items-center gap-2 rounded-xl px-2 py-1 hover:bg-night-3 sm:flex"
                 >
                   <User size={18} />
                   <span className="max-w-32 truncate text-sm font-bold">{me.profile.nickname}</span>
                   {me.guest && <span className="text-[10px] font-bold uppercase text-muted">convidado</span>}
+                  {isAdmin(me) && <span className="text-[10px] font-bold uppercase text-race">admin</span>}
                 </Link>
                 <button
                   className="hidden rounded-xl p-2 hover:bg-night-3 sm:block"

@@ -1,8 +1,7 @@
 import {
   CAR_COLORS,
   CRAZY_AWARDS,
-  CRAZY_DEFAULT_LAPS,
-  CRAZY_MAX_RACES,
+  DEFAULT_GAME_SETTINGS,
   PHASE_LABELS,
   type AuthResponse,
   type CrazyAwardKey,
@@ -25,6 +24,7 @@ import { ShareMenu } from '../components/ShareRace';
 import { CarIcon, Countdown, Empty, PhaseBadge, Segmented, Skeleton, Spinner, toast } from '../components/ui';
 import { ApiError, errorMessage, get, post } from '../lib/api';
 import { fmtDateTime } from '../lib/format';
+import { usePublicSettings } from '../lib/queries';
 import { realtime } from '../lib/realtime';
 import { useSession } from '../lib/session';
 
@@ -42,6 +42,7 @@ const STATUS_CLASS: Record<CrazyGroupSummaryDto['status'], string> = {
 const AWARD_KEYS = Object.keys(CRAZY_AWARDS) as CrazyAwardKey[];
 
 function Hero({ children }: { children?: ReactNode }) {
+  const maxRaces = (usePublicSettings().data?.crazy ?? DEFAULT_GAME_SETTINGS.crazy).maxRaces;
   return (
     <header className="card relative overflow-hidden border-violet/60">
       <div className="pointer-events-none absolute -right-6 -top-6 select-none text-[120px] leading-none opacity-15">
@@ -51,8 +52,8 @@ function Hero({ children }: { children?: ReactNode }) {
         Corrida <span className="text-violet">Maluca</span>
       </h1>
       <p className="mt-2 max-w-2xl text-muted">
-        Monte uma corrida ou um campeonato de até {CRAZY_MAX_RACES} corridas só para a sua turma. Mande o link
-        no grupo, cada um coloca o apelido e entra. Não vale ranking: vale a resenha.
+        Monte uma corrida ou um campeonato de até {maxRaces} corridas só para a sua turma. Mande o link no
+        grupo, cada um coloca o apelido e entra. Não vale ranking: vale a resenha.
       </p>
       <ul className="mt-3 flex flex-wrap gap-1.5" aria-label="Troféus da zoeira">
         {AWARD_KEYS.map((k) => (
@@ -178,19 +179,36 @@ const INTERVAL_OPTIONS = [
   { value: 10080, label: '1 semana' },
 ];
 
+/** Duração em texto curto: "2 min", "90 s", "1 min 30 s". */
+const dur = (sec: number) =>
+  sec >= 60 ? `${Math.floor(sec / 60)} min${sec % 60 ? ` ${sec % 60} s` : ''}` : `${sec} s`;
+
 function CreateGroup() {
+  const pub = usePublicSettings().data;
+  const lim = pub?.crazy ?? DEFAULT_GAME_SETTINGS.crazy;
+  const ph = pub?.phases ?? DEFAULT_GAME_SETTINGS.phases;
   const nav = useNavigate();
   const qc = useQueryClient();
   const [name, setName] = useState('');
   const [races, setRaces] = useState(1);
-  const [laps, setLaps] = useState(CRAZY_DEFAULT_LAPS);
+  const [laps, setLaps] = useState(lim.lapsDefault);
   const [startIn, setStartIn] = useState(15);
   const [startAt, setStartAt] = useState(() => localInput(Date.now() + 60 * 60_000));
   const [interval, setIntervalMin] = useState(20);
-  const [chaos, setChaos] = useState(true);
-  const [bots, setBots] = useState(false);
-  const [botFill, setBotFill] = useState(8);
+  const [chaos, setChaos] = useState(lim.chaosDefault);
+  const [bots, setBots] = useState(lim.botFillDefault > 0);
+  const [botFill, setBotFill] = useState(lim.botFillDefault || 8);
   const [busy, setBusy] = useState(false);
+  // Padrões do admin chegam depois do primeiro render: aplica uma vez.
+  const applied = useRef(false);
+  useEffect(() => {
+    if (!pub || applied.current) return;
+    applied.current = true;
+    setLaps(pub.crazy.lapsDefault);
+    setChaos(pub.crazy.chaosDefault);
+    setBots(pub.crazy.botFillDefault > 0);
+    if (pub.crazy.botFillDefault) setBotFill(pub.crazy.botFillDefault);
+  }, [pub]);
 
   async function submit(e: FormEvent) {
     e.preventDefault();
@@ -237,10 +255,10 @@ function CreateGroup() {
           label="Quantas corridas"
           value={races}
           onChange={setRaces}
-          options={[1, 2, 3, 5, 8, 10].map((n) => ({
-            value: n,
-            label: n === 1 ? 'Só uma' : `${n} (campeonato)`,
-          }))}
+          options={[...new Set([1, 2, 3, 5, 8, 10, lim.maxRaces])]
+            .filter((n) => n <= lim.maxRaces)
+            .sort((a, b) => a - b)
+            .map((n) => ({ value: n, label: n === 1 ? 'Só uma' : `${n} (campeonato)` }))}
         />
       </div>
       <div>
@@ -254,7 +272,10 @@ function CreateGroup() {
             { value: 8, label: '8 · rápida' },
             { value: 12, label: '12 · média' },
             { value: 20, label: '20 · longa' },
-          ]}
+            ...([5, 8, 12, 20].includes(lim.lapsDefault)
+              ? []
+              : [{ value: lim.lapsDefault, label: `${lim.lapsDefault} · padrão` }]),
+          ].sort((a, b) => a.value - b.value)}
         />
       </div>
       <div>
@@ -271,7 +292,8 @@ function CreateGroup() {
           />
         )}
         <p className="mt-1 text-xs text-muted">
-          Cada corrida tem treino (2 min), janela de traçado (2 min), classificação ao vivo e a corrida.
+          Cada corrida tem treino ({dur(Math.round(ph.practiceMin * 60))}), classificação ao vivo (
+          {dur(ph.qualifyingSec)}) e a corrida. O traçado e o setup valem até o fim do treino.
         </p>
       </div>
       {races > 1 && (

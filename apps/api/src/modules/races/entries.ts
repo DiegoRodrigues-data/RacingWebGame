@@ -112,7 +112,14 @@ export interface RegisterResult {
  * A linha da corrida é travada (SELECT ... FOR UPDATE) e há um mutex por corrida no processo,
  * então duas tentativas simultâneas pela última vaga são serializadas: a primeira confirma, a segunda vai para a fila.
  */
+/** A conta de administração só administra: não corre nem entra em grupos. */
+export function assertPlayer(user: AuthUser) {
+  if (user.roles.includes('admin'))
+    throw new AppError('FORBIDDEN', 'A conta de administração não corre. Use uma conta de jogador.');
+}
+
 export async function register(ctx: Ctx, raceId: string, user: AuthUser): Promise<RegisterResult> {
+  assertPlayer(user);
   const res = await ctx.mutex
     .run(`race:${raceId}`, () =>
       ctx.db.transaction(async (tx) => {

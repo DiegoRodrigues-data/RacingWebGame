@@ -2,12 +2,10 @@ import { randomUUID } from 'node:crypto';
 import {
   AppError,
   CRAZY_AWARDS,
-  CRAZY_MAX_MEMBERS,
   CRAZY_SKIP_LOCK_MS,
   CRAZY_SKIPPABLE_PHASES,
   crazyStartAllowed,
   crazyPointsFor,
-  DEFAULT_PRACTICE_MINUTES,
   type AuthResponse,
   type CrazyAwardKey,
   type CrazyCreateInput,
@@ -17,6 +15,7 @@ import {
   type CrazyRaceDto,
   type CrazyStandingDto,
   type GuestJoinInput,
+  type RaceCreate,
   type RaceSummaryDto,
 } from '@tracado/shared';
 import { and, asc, eq, gt, inArray, sql } from 'drizzle-orm';
@@ -35,7 +34,9 @@ import {
 import type { AuthUser } from '../../lib/auth';
 import { hashPassword, randomToken, sha256 } from '../../lib/crypto';
 import { getMe, issueTokens, sendVerification } from '../auth/service';
-import { assignCar } from '../races/entries';
+import { autoTrack, phaseInput } from '../engine/autoRaces';
+import { getSettings } from '../settings/service';
+import { assertPlayer, assignCar } from '../races/entries';
 import {
   broadcastRace,
   createRace,
@@ -48,8 +49,6 @@ import { raceAwards } from './awards';
 
 type GroupRow = typeof crazyGroups.$inferSelect;
 
-const SETUP_LOCK_S = 30;
-const QUALIFYING_S = 60;
 /** Fases em que um membro novo ainda entra na corrida (até o parque fechado). */
 const ENTERABLE = ['scheduled', 'registration_open', 'practice', 'trace_window'] as const;
 const DONE = ['finished', 'archived', 'cancelled'];
@@ -99,18 +98,30 @@ function statusOf(rs: RaceRow[]): CrazyGroupSummaryDto['status'] {
  * agora. As corridas são amistosas (não ranqueadas) e ficam fora das listas públicas.
  */
 export async function createGroup(ctx: Ctx, user: AuthUser, input: CrazyCreateInput) {
+  assertPlayer(user);
   if (await isGuest(ctx, user.id))
     throw new AppError('FORBIDDEN', 'Crie sua conta para montar um grupo da Corrida Maluca.');
   const now = ctx.clock.now();
   const start = Date.parse(input.startAt);
   if (start < now + 60_000)
     throw new AppError('VALIDATION_ERROR', 'A primeira corrida precisa começar daqui a pelo menos 1 minuto.');
-  const [cat] = await ctx.db
-    .select()
-    .from(categories)
-    .where(eq(categories.slug, ctx.config.AUTO_RACES_CATEGORY));
-  if (!cat) throw new AppError('NOT_FOUND', 'Categoria padrão não encontrada.');
+  const st = await getSettings(ctx);
+  if (input.races > st.crazy.maxRaces)
+    throw new AppError('VALIDATION_ERROR', `No máximo ${st.crazy.maxRaces} corridas por grupo.`);
+  // Categoria: a primeira ativa do rodízio da grade automática (empresta clima e limites de setup).
+  let cat: typeof categories.$inferSelect | undefined;
+  for (const slug of st.autoRaces.categories) {
+    if (cat) break;
+    [cat] = await ctx.db
+      .select()
+      .from(categories)
+      .where(and(eq(categories.slug, slug), eq(categories.active, true)));
+  }
+  if (!cat) throw new AppError('NOT_FOUND', 'Nenhuma categoria ativa para as corridas.');
   const step = input.intervalMinutes * 60_000;
+  // Pistas sorteadas fora da transação (consultam o rodízio de pistas salvas).
+  const trackFor: RaceCreate['track'][] = [];
+  for (let i = 0; i < input.races; i++) trackFor.push(await autoTrack(ctx, st, cat));
   const groupId = await ctx.db.transaction(async (tx) => {
     const [g] = await tx
       .insert(crazyGroups)
@@ -133,17 +144,15 @@ export async function createGroup(ctx: Ctx, user: AuthUser, input: CrazyCreateIn
         ctx,
         {
           name: input.races === 1 ? input.name : `${input.name} · Etapa ${i + 1}`,
-          categoryId: cat.id,
+          categoryId: cat!.id,
           ranked: false,
           startAt: new Date(at).toISOString(),
           registrationLeadMinutes: Math.ceil((at - now) / 60_000) + 1,
-          practiceMinutes: DEFAULT_PRACTICE_MINUTES,
-          setupLockSeconds: SETUP_LOCK_S,
-          qualifyingSeconds: QUALIFYING_S,
+          ...phaseInput(st),
           capacity: 22,
           waitlistMax: 0,
           laps: input.laps,
-          track: { type: 'procedural' },
+          track: trackFor[i]!,
         },
         user.id,
         tx,
@@ -205,7 +214,8 @@ export async function enterMember(ctx: Ctx, groupId: string, userId: string) {
 async function addMember(ctx: Ctx, g: GroupRow, userId: string) {
   const ids = await memberIds(ctx, g.id);
   if (ids.includes(userId)) return;
-  if (ids.length >= CRAZY_MAX_MEMBERS) throw new AppError('CONFLICT', 'Este grupo já está completo.');
+  if (ids.length >= (await getSettings(ctx)).crazy.maxMembers)
+    throw new AppError('CONFLICT', 'Este grupo já está completo.');
   if (statusOf(await groupRaces(ctx, g.id)) === 'finished')
     throw new AppError('CONFLICT', 'Este campeonato já terminou.');
   await ctx.db
@@ -217,6 +227,7 @@ async function addMember(ctx: Ctx, g: GroupRow, userId: string) {
 
 /** Entrada pelo convite de quem já tem conta (ou já é convidado). */
 export async function joinGroup(ctx: Ctx, user: AuthUser, inviteCode: string) {
+  assertPlayer(user);
   const g = await groupByCode(ctx, inviteCode);
   await addMember(ctx, g, user.id);
   return { groupId: g.id };
@@ -247,7 +258,7 @@ export async function createGuest(
 ): Promise<AuthResponse & { refresh: string; groupId: string }> {
   const now = ctx.clock.now();
   const g = await groupByCode(ctx, input.inviteCode);
-  if ((await memberIds(ctx, g.id)).length >= CRAZY_MAX_MEMBERS)
+  if ((await memberIds(ctx, g.id)).length >= (await getSettings(ctx)).crazy.maxMembers)
     throw new AppError('CONFLICT', 'Este grupo já está completo.');
   if (ip) {
     const [c] = await ctx.db
@@ -458,7 +469,7 @@ export async function invitePreview(ctx: Ctx, code: string, user: AuthUser | nul
     nextRaceAt: s.nextRaceAt,
     status: s.status,
     isMember: !!user && mem.some((m) => m.u === user.id),
-    full: mem.length >= CRAZY_MAX_MEMBERS,
+    full: mem.length >= (await getSettings(ctx)).crazy.maxMembers,
   };
 }
 

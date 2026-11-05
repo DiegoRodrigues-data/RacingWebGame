@@ -233,7 +233,7 @@ export default function Account() {
             defaultChecked={me.profile.emailReminders}
             className="size-4 accent-[#ffcc00]"
           />{' '}
-          Receber lembretes por e-mail (janela de traçado, largada)
+          Receber lembretes por e-mail (fim do treino, largada)
         </label>
         <button className="btn-primary" disabled={busy}>
           Salvar

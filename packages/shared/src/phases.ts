@@ -77,12 +77,14 @@ export interface TimelineInput {
   practiceMs: number;
   setupLockMs: number;
   qualifyingMs: number;
+  /** Janela de traçado; padrão TRACE_WINDOW_MS (configurável pelo admin). */
+  traceWindowMs?: number;
 }
 
 export function buildTimeline(i: TimelineInput): RaceTimeline {
   const practiceAt = i.startAt;
   const traceWindowAt = practiceAt + i.practiceMs;
-  const setupLockAt = traceWindowAt + TRACE_WINDOW_MS;
+  const setupLockAt = traceWindowAt + (i.traceWindowMs ?? TRACE_WINDOW_MS);
   const qualifyingAt = setupLockAt + i.setupLockMs;
   const raceAt = qualifyingAt + i.qualifyingMs;
   return {

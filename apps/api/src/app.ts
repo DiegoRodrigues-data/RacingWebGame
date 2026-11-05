@@ -17,6 +17,7 @@ import type { Store } from './lib/store';
 import { adminRoutes } from './modules/admin/routes';
 import { authRoutes } from './modules/auth/routes';
 import { crazyRoutes } from './modules/crazy/routes';
+import { settingsRoutes } from './modules/settings/routes';
 import { redeemWsTicket } from './modules/auth/service';
 import { PhaseEngine } from './modules/engine/engine';
 import { elapsedSim, loadReplay } from './modules/engine/runner';
@@ -172,6 +173,7 @@ export async function buildApp(
   authRoutes(app, ctx);
   raceRoutes(app, ctx);
   crazyRoutes(app, ctx, engine);
+  settingsRoutes(app, ctx, engine);
   miscRoutes(app, ctx);
   shareRoutes(app, ctx);
   adminRoutes(app, ctx, engine);

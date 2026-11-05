@@ -7,3 +7,4 @@ export * from './time';
 export * from './levels';
 export * from './setup';
 export * from './crazy';
+export * from './settings';

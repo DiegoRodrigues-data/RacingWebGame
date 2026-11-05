@@ -38,6 +38,8 @@ export function JoinRaceButton({
   const [busy, setBusy] = useState(false);
   const late = lateEntryOpen(race, now);
   if (!me || isRegistered(race) || (race.status !== 'registration_open' && !late)) return null;
+  if (me.roles.includes('admin'))
+    return <p className="text-sm text-muted">Conta de administração: acompanha, mas não corre.</p>;
   // Corrida Maluca: grupo fechado (entra quem recebeu o convite); convidado só corre nos grupos.
   if (race.crazy)
     return (

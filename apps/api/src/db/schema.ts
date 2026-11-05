@@ -18,6 +18,7 @@ import type {
   CategoryConfig,
   EditorTrack,
   EntryStatus,
+  GameSettings,
   Level,
   NotificationType,
   RacePhase,
@@ -477,5 +478,13 @@ export const crazyMembers = pgTable(
   },
   (t) => [primaryKey({ columns: [t.groupId, t.userId] }), index('crazy_members_user_idx').on(t.userId)],
 );
+
+// ---------------------------------------------------------------- Configurações do jogo (admin)
+export const gameSettings = pgTable('game_settings', {
+  id: text('id').primaryKey(),
+  value: jsonb('value').$type<GameSettings>().notNull(),
+  updatedAt: ts('updated_at').notNull().defaultNow(),
+  updatedBy: uuid('updated_by').references(() => users.id),
+});
 
 export type EditorTrackJson = EditorTrack;

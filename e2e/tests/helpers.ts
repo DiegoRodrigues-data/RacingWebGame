@@ -55,6 +55,7 @@ export async function createRaceAsAdmin(
       startAt: new Date(now + startInMin * 60_000).toISOString(),
       registrationLeadMinutes: startInMin + 10,
       practiceMinutes: 2,
+      traceWindowSeconds: 120,
       setupLockSeconds: 10,
       qualifyingSeconds: 15,
       track: { type: 'procedural', seed: `e2e-${Date.now()}` },

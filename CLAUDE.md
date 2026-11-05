@@ -52,7 +52,7 @@ Os pacotes são consumidos direto como TypeScript: o `exports` aponta para `src/
   - Schemas Zod e DTOs (`schemas.ts`).
   - Máquina de fases (`phases.ts`: `ALLOWED_TRANSITIONS`, `buildTimeline`, `duePhase`).
   - Envelope e eventos do WebSocket (`ws.ts`).
-  - Constantes do jogo, como `MAX_CARS = 22` e a janela de traçado de 2 min.
+  - Constantes do jogo, como `MAX_CARS = 22`. A janela de traçado depois do treino foi desligada (`TRACE_WINDOW_MS = 0`); as durações das fases vêm das configurações do jogo (admin).
   - `ClockSync`, a sincronização de relógio com o servidor.
   - `AppError` e `ERROR_CODES`.
   - Mudou um DTO? Ajuste aqui primeiro.

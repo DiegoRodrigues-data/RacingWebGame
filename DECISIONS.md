@@ -121,6 +121,31 @@ traçado e corrida contra fantasmas rodam no aparelho e nada é enviado ao servi
 - **Miniatura da pista:** o card do grupo e cada etapa do calendário mostram o mini mapa da pista (com os carros quando a
   etapa está no ar), no mesmo padrão dos cards de corrida.
 
+### Configurações do jogo no admin
+
+- **Onde ficam:** uma linha `game_settings` (JSON validado por `gameSettingsSchema`), com efeito na hora e registro
+  na auditoria. Sem ela, valem os padrões montados das variáveis antigas (`AUTO_RACES_*`, `DEMO_BOTS`), então nada
+  muda no deploy até o admin salvar. Cada instância relê a cada 5 s.
+- **O que controlam:** tempo das etapas (treino, janela de traçado, parque fechado, classificação) da grade, das
+  corridas teste e da Corrida Maluca, e padrão do formulário de corrida do admin; grade automática (ligada, por dia,
+  antecedência, ranqueada, voltas, rodízio de categorias, bots); corridas teste; bots das corridas do admin; pistas
+  (pesos por terreno, comprimento, complexidade, largura, prefixo de seed, rodízio de pistas salvas e chance de usar
+  uma); limites e padrões da Corrida Maluca. Valem para corridas criadas daqui em diante.
+- **Por que só aparecia asfalto:** toda corrida automática usava uma categoria só (Copa Novatos), que só tinha
+  asfalto. Agora o terreno das corridas automáticas sai dos pesos das configurações, não da categoria; a categoria
+  segue dando clima, limites de setup, pontuação e velocidade da transmissão.
+- **Janela de traçado configurável:** `buildTimeline` aceita `traceWindowMs`; a corrida guarda os horários, então as
+  telas leem a duração da própria corrida (não mais da constante).
+- **Sem janela de traçado:** o treino (2 min por padrão, ajustável no admin) vai direto ao parque fechado. O traçado
+  e o setup são salvos e editados da inscrição até lá, então a janela só fazia todo mundo esperar. O motor ainda
+  aceita janela (corridas antigas a têm guardada nos horários; passa pela fase sem aviso quando a duração é zero, e
+  bots e grid da Corrida Maluca continuam sendo preparados nessa passagem). A migração 0009 tira a janela das corridas
+  ainda não começadas, antecipando classificação e largada.
+- **Gerador de pistas:** roda no navegador (o gerador é determinístico e igual ao do servidor) e salva a pista de uma
+  seed como pista oficial (`kind: special`, não é apagada com as corridas teste), opcionalmente já no rodízio.
+- **Fora por enquanto:** coeficientes da física (`COEF`). Mudá-los muda resultados e precisa valer igual no servidor e
+  no treino do navegador; exigiria versionar a simulação por corrida.
+
 ## Modelo de simulação
 
 Determinístico (PRNG sfc32 semeado; nenhuma fonte de aleatoriedade externa). Por volta, cada carro tem um perfil de velocidade

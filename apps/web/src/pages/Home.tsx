@@ -161,7 +161,7 @@ export function Home() {
           </motion.h1>
           <p className="mt-4 max-w-lg text-muted">
             Corridas multiplayer de estratégia com até <b className="text-ink">22 carros</b>, com largada toda
-            hora cheia. Treino, janela de traçado, classificação e corrida, tudo controlado pelo servidor.
+            hora cheia. Treino, classificação e corrida, tudo controlado pelo servidor.
           </p>
           <div className="mt-6 flex flex-wrap gap-3">
             {me ? (

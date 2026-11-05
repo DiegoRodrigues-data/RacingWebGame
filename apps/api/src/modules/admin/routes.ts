@@ -39,6 +39,7 @@ import { reprocess } from '../engine/runner';
 import { notify } from '../notifications/service';
 import { closeSeason, rebuildSeason } from '../rankings/service';
 import { capacityOf, createRace, getRaceRow, getSummary, raceSummaries } from '../races/service';
+import { getSettings } from '../settings/service';
 import * as tracksSvc from '../tracks/service';
 
 const idParam = z.object({ id: z.string().uuid() });
@@ -96,6 +97,81 @@ export function adminRoutes(app: FastifyInstance, ctx: Ctx, engine: PhaseEngine)
       db: ctx.dbHandle.kind,
     };
   });
+  /** Números do jogo para o painel: jogadores, corridas por dia e por terreno, grupos e próximas corridas. */
+  app.get('/admin/stats', async (req) => {
+    admin(req);
+    const now = ctx.clock.now();
+    const d7 = new Date(now - 7 * 86_400_000);
+    const d14 = new Date(now - 14 * 86_400_000);
+    const [pl] = await ctx.db
+      .select({
+        total: sql<number>`count(*) filter (where not ${users.isBot} and not ${users.isGuest})::int`,
+        guests: sql<number>`count(*) filter (where ${users.isGuest})::int`,
+        bots: sql<number>`count(*) filter (where ${users.isBot})::int`,
+        new7d: sql<number>`count(*) filter (where not ${users.isBot} and ${users.createdAt} >= ${d7})::int`,
+      })
+      .from(users);
+    const [act] = await ctx.db
+      .select({ n: sql<number>`count(distinct ${entries.userId})::int` })
+      .from(entries)
+      .innerJoin(users, eq(users.id, entries.userId))
+      .where(and(gte(entries.createdAt, d7), eq(users.isBot, false)));
+    // Dia no fuso de Brasília (UTC-3, sem horário de verão).
+    const day = sql<string>`to_char(${races.practiceAt} - interval '3 hours', 'YYYY-MM-DD')`;
+    const perDay = await ctx.db
+      .select({ day, status: races.status, n: sql<number>`count(*)::int` })
+      .from(races)
+      .where(and(gte(races.practiceAt, d14), sql`${races.practiceAt} <= ${new Date(now)}`))
+      .groupBy(day, races.status);
+    const byTerrain = await ctx.db
+      .select({ terrain: trackVersions.terrain, n: sql<number>`count(*)::int` })
+      .from(races)
+      .innerJoin(trackVersions, eq(trackVersions.id, races.trackVersionId))
+      .where(gte(races.practiceAt, d14))
+      .groupBy(trackVersions.terrain);
+    const [crazy] = await ctx.db
+      .select({ groups: sql<number>`count(distinct ${races.crazyGroupId})::int` })
+      .from(races)
+      .where(
+        and(
+          sql`${races.crazyGroupId} is not null`,
+          inArray(races.status, [
+            'scheduled',
+            'registration_open',
+            'practice',
+            'trace_window',
+            'setup_lock',
+            'qualifying',
+            'race',
+          ]),
+        ),
+      );
+    const upcomingRows = await ctx.db
+      .select()
+      .from(races)
+      .where(
+        and(inArray(races.status, ['scheduled', 'registration_open']), gte(races.practiceAt, new Date(now))),
+      )
+      .orderBy(races.practiceAt)
+      .limit(8);
+    const days: Record<string, { finished: number; cancelled: number; other: number }> = {};
+    for (const r of perDay) {
+      const d = (days[r.day] ??= { finished: 0, cancelled: 0, other: 0 });
+      if (r.status === 'finished' || r.status === 'archived') d.finished += r.n;
+      else if (r.status === 'cancelled') d.cancelled += r.n;
+      else d.other += r.n;
+    }
+    return {
+      players: { ...pl!, active7d: act?.n ?? 0 },
+      racesPerDay: Object.entries(days)
+        .sort(([a], [b]) => a.localeCompare(b))
+        .map(([d, v]) => ({ day: d, ...v })),
+      byTerrain: Object.fromEntries(byTerrain.map((t) => [t.terrain, t.n])),
+      crazyActiveGroups: crazy?.groups ?? 0,
+      upcoming: await raceSummaries(ctx.db, upcomingRows),
+    };
+  });
+
   app.get('/admin/audit', async (req) => {
     admin(req);
     const rows = await ctx.db
@@ -183,6 +259,7 @@ export function adminRoutes(app: FastifyInstance, ctx: Ctx, engine: PhaseEngine)
   app.post('/admin/races', async (req, reply) => {
     const u = admin(req);
     const b = parse(raceCreateSchema, req.body);
+    b.traceWindowSeconds ??= (await getSettings(ctx)).phases.traceWindowSec;
     const r = await createRace(ctx, b, u.id).catch((e) => {
       if (e instanceof TrackGenerationError) throw new AppError('TRACK_INVALID', e.message, e.issues);
       throw e;
@@ -197,6 +274,7 @@ export function adminRoutes(app: FastifyInstance, ctx: Ctx, engine: PhaseEngine)
   app.post('/admin/races/batch', async (req, reply) => {
     const u = admin(req);
     const b = parse(raceBatchSchema, req.body);
+    const traceWindowSeconds = b.traceWindowSeconds ?? (await getSettings(ctx)).phases.traceWindowSec;
     const from = Date.parse(`${b.fromDate}T00:00:00Z`),
       to = Date.parse(`${b.toDate}T00:00:00Z`);
     if (to < from) throw new AppError('VALIDATION_ERROR', 'Data final antes da inicial.');
@@ -216,7 +294,12 @@ export function adminRoutes(app: FastifyInstance, ctx: Ctx, engine: PhaseEngine)
             .replace('T', ' ');
           const r = await createRace(
             ctx,
-            { ...rest, name: `${namePrefix} ${label}`, startAt: new Date(at).toISOString() },
+            {
+              ...rest,
+              traceWindowSeconds,
+              name: `${namePrefix} ${label}`,
+              startAt: new Date(at).toISOString(),
+            },
             u.id,
             tx,
           );

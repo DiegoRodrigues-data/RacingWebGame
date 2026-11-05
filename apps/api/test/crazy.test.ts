@@ -275,11 +275,11 @@ describe('Corrida Maluca', () => {
     await t.advanceTo(Date.parse(race.timeline.raceAt));
     expect((await t.race(r1)).status).toBe('race');
 
-    // Etapa 2 sem mudança de horário; todos prontos pulam sozinhos (já na janela de traçado).
+    // Etapa 2 sem mudança de horário; todos prontos pulam sozinhos.
     let race2 = await t.race(r2);
     expect(Date.parse(race2.timeline.practiceAt)).toBe(Date.parse(startAt) + 30 * 60_000);
-    await t.advanceTo(Date.parse(race2.timeline.traceWindowAt) + 1000);
-    expect((await t.race(r2)).status).toBe('trace_window');
+    await t.advanceTo(Date.parse(race2.timeline.practiceAt) + 1000);
+    expect((await t.race(r2)).status).toBe('practice');
     for (const p of [a, b]) await t.json('PUT', `/races/${r2}/ready`, { ready: true }, p.token);
     r = (await t.json('PUT', `/races/${r2}/ready`, { ready: true }, org.token)).body;
     expect(r).toMatchObject({ humans: 3, ready: 3, skipped: true });

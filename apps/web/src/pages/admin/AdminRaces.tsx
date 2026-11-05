@@ -1,17 +1,11 @@
-import {
-  DEFAULT_PRACTICE_MINUTES,
-  RACE_LAPS_MAX,
-  RACE_LAPS_MIN,
-  TRACE_WINDOW_MS,
-  type RaceSummaryDto,
-} from '@tracado/shared';
+import { DEFAULT_GAME_SETTINGS, RACE_LAPS_MAX, RACE_LAPS_MIN, type RaceSummaryDto } from '@tracado/shared';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useState, type FormEvent } from 'react';
 import { Link } from 'react-router';
 import { PhaseBadge, Tabs, toast } from '../../components/ui';
 import { errorMessage, get, post } from '../../lib/api';
 import { fmtDateTime } from '../../lib/format';
-import { useCategories } from '../../lib/queries';
+import { useCategories, usePublicSettings } from '../../lib/queries';
 import { AdminPage } from './AdminNav';
 
 interface TrackRow {
@@ -30,6 +24,7 @@ function CreateRace({ batch }: { batch: boolean }) {
     queryFn: () => get<TrackRow[]>('/admin/tracks?kind=special'),
   });
   const [busy, setBusy] = useState(false);
+  const ph = usePublicSettings().data?.phases ?? DEFAULT_GAME_SETTINGS.phases;
   async function submit(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
     const f = Object.fromEntries(new FormData(e.currentTarget)) as Record<string, string>;
@@ -148,7 +143,7 @@ function CreateRace({ batch }: { batch: boolean }) {
       </label>
       <label>
         <span className="label">Fila máx.</span>
-        <input name="waitlistMax" type="number" min={0} max={50} defaultValue={DEFAULT_PRACTICE_MINUTES} className="input" />
+        <input name="waitlistMax" type="number" min={0} max={50} defaultValue={10} className="input" />
       </label>
       <label>
         <span className="label">Inscrições abrem (min antes)</span>
@@ -156,21 +151,47 @@ function CreateRace({ batch }: { batch: boolean }) {
       </label>
       <label>
         <span className="label">Treino (min)</span>
-        <input name="practice" type="number" min={0.5} step={0.5} defaultValue={10} className="input" />
+        <input
+          key={`p${ph.practiceMin}`}
+          name="practice"
+          type="number"
+          min={0.5}
+          step={0.5}
+          defaultValue={ph.practiceMin}
+          className="input"
+        />
       </label>
       <label>
         <span className="label">Parque fechado (s)</span>
-        <input name="setupLock" type="number" min={5} defaultValue={30} className="input" />
+        <input
+          key={`s${ph.setupLockSec}`}
+          name="setupLock"
+          type="number"
+          min={5}
+          defaultValue={ph.setupLockSec}
+          className="input"
+        />
       </label>
       <label>
         <span className="label">Classificação (s)</span>
-        <input name="quali" type="number" min={10} defaultValue={60} className="input" />
+        <input
+          key={`q${ph.qualifyingSec}`}
+          name="quali"
+          type="number"
+          min={20}
+          defaultValue={ph.qualifyingSec}
+          className="input"
+        />
       </label>
       <label className="flex items-center gap-2 self-end pb-3 text-sm font-bold">
         <input type="checkbox" name="ranked" defaultChecked className="size-4 accent-[#ffcc00]" /> Ranqueada
       </label>
       <p className="text-xs text-muted sm:col-span-2 lg:col-span-3">
-        A janela de traçado dura sempre {TRACE_WINDOW_MS / 60_000} minutos e começa ao fim do treino.
+        Os tempos vêm das{' '}
+        <Link to="/admin/configuracoes" className="font-bold text-race underline">
+          configurações do jogo
+        </Link>
+        ; mude aqui só para esta corrida. O traçado trava no fim do treino (parque fechado).
       </p>
       <button className="btn-primary" disabled={busy}>
         {batch ? 'Gerar lote' : 'Criar corrida'}

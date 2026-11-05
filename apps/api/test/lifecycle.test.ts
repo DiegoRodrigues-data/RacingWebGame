@@ -1,4 +1,4 @@
-import { DEFAULT_SETUP, TRACE_WINDOW_MS } from '@tracado/shared';
+import { DEFAULT_SETUP } from '@tracado/shared';
 import { offsetsToTrace, suggestedLine, type TrackGeometry } from '@tracado/trackgen';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { clearGeometryCache } from '../src/modules/tracks/service';
@@ -84,7 +84,7 @@ describe('ciclo de vida completo de uma corrida (fluxo crítico)', () => {
     await t.advanceTo(Date.parse(race.timeline.traceWindowAt));
     race = await t.race(raceId);
     expect(race.status).toBe('trace_window');
-    expect(Date.parse(race.phaseDeadline) - Date.parse(race.timeline.traceWindowAt)).toBe(TRACE_WINDOW_MS);
+    expect(Date.parse(race.phaseDeadline) - Date.parse(race.timeline.traceWindowAt)).toBe(120_000);
     const ok = await t.json('PUT', `/races/${raceId}/trace`, { points: trace }, ana.token);
     expect(ok.status).toBe(200);
     expect(ok.body.version).toBe(2); // a v1 foi salva antes da janela

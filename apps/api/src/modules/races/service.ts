@@ -98,6 +98,7 @@ export async function createRace(
     practiceMs: input.practiceMinutes * 60_000,
     setupLockMs: input.setupLockSeconds * 1000,
     qualifyingMs: input.qualifyingSeconds * 1000,
+    ...(input.traceWindowSeconds ? { traceWindowMs: input.traceWindowSeconds * 1000 } : {}),
   });
   const [row] = await db
     .insert(races)

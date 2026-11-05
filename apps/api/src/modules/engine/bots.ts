@@ -14,7 +14,7 @@ import { crazyGroups, entries, profiles, setups, traces, users } from '../../db/
 import { broadcastRace, getCategory, getRaceRow } from '../races/service';
 import { getGeometry } from '../tracks/service';
 
-/** Pilotos de demonstração (DEMO_BOTS > 0): preenchem o grid para o jogo não ficar vazio em ambiente de teste. */
+/** Pilotos de demonstração: preenchem o grid (quantos, por tipo de corrida, vem das configurações do jogo). */
 export async function fillBots(ctx: Ctx, raceId: string, count: number) {
   if (count <= 0) return 0;
   const race = await getRaceRow(ctx.db, raceId);

@@ -23,12 +23,14 @@ import { del, errorMessage, get } from '../lib/api';
 import { fmtDateTime, fmtKm, TERRAIN_LABEL, WEATHER_ICON, WEATHER_LABEL } from '../lib/format';
 import { useGeometry, useRace } from '../lib/queries';
 import { useServerNow } from '../lib/realtime';
-import { useSession } from '../lib/session';
+import { isAdmin, useSession } from '../lib/session';
 import { ShareRace } from '../components/ShareRace';
 
 export default function RaceDetail() {
   const { id } = useParams();
   const me = useSession((s) => s.me);
+  // Conta de administração acompanha a corrida, mas não treina nem corre.
+  const adminView = isAdmin(me);
   const qc = useQueryClient();
   const { data: race, isLoading, error } = useRace(id);
   const geo = useGeometry(race?.track.versionId);
@@ -84,7 +86,8 @@ export default function RaceDetail() {
           title: 'Treino',
           text: 'Pilotos testando setups e linhas',
           until: race.timeline.traceWindowAt,
-          untilLabel: 'traçado abre em',
+          untilLabel:
+            race.timeline.setupLockAt > race.timeline.traceWindowAt ? 'traçado abre em' : 'parque fechado em',
         }
       : race.status === 'trace_window'
         ? {
@@ -174,7 +177,7 @@ export default function RaceDetail() {
                   </div>
                 </div>
               )}
-              {prepPhase && (
+              {prepPhase && !adminView && (
                 <Link
                   to={`/corridas/${race.id}/box?aba=treino`}
                   className="btn-go absolute bottom-3 left-3 !px-3 !py-2 text-sm shadow-xl"
@@ -236,7 +239,7 @@ export default function RaceDetail() {
                   O grid está completo. Você ainda pode treinar nesta pista.
                 </p>
               )}
-            {!active && prepPhase && (
+            {!active && prepPhase && !adminView && (
               <Link to={`/corridas/${race.id}/box?aba=treino`} className="btn-ghost w-full">
                 ⏱️ Treinar nesta pista
               </Link>
