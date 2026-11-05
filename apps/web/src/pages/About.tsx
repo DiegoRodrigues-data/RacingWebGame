@@ -40,9 +40,9 @@ export default function About() {
           <img
             src={authorPhoto}
             alt={`Foto de ${AUTHOR}`}
-            width={112}
-            height={112}
-            className="size-28 shrink-0 rounded-full border-2 border-race object-cover object-top"
+            width={160}
+            height={160}
+            className="size-40 shrink-0 rounded-xl border-2 border-race object-cover object-top"
           />
           <div className="space-y-3">
             <p>
