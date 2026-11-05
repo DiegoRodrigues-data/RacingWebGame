@@ -201,6 +201,8 @@ traçado e corrida contra fantasmas rodam no aparelho e nada é enviado ao servi
 - **Rodízio diário**: entre `activeMin` e `activeMax` personas ficam ativas por dia (sorteio estável pela data de
   Brasília). São criadas `activeMax + 10`, para variar quem aparece. Os bots de demonstração (`DEMO_BOTS`, seed)
   não entram nesse rodízio, e as personas não entram nas corridas teste nem na Corrida Maluca.
+- **Sem bots de demonstração na grade automática**: com o recurso ligado, os bots de `DEMO_BOTS` (marcados) não
+  entram nas corridas automáticas, e os que já estavam em corridas abertas saem na checagem por minuto do motor.
 - **Ligados por padrão** (`SIMULATED_DRIVERS=true`), como a grade automática. Os testes da API e o E2E
   desligam, para não mudar as contagens dos outros testes.
 - **Desligar**: um piloto desligado pelo admin sai das corridas ainda abertas (como uma desistência) e perde os

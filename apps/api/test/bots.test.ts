@@ -1,6 +1,6 @@
-import { and, eq, isNull } from 'drizzle-orm';
+import { and, eq, inArray, isNull } from 'drizzle-orm';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import { botPersonas, botPlans, entries, rankingEntries } from '../src/db/schema';
+import { botPersonas, botPlans, entries, profiles, rankingEntries, users } from '../src/db/schema';
 import { forgetOnlineBotCache } from '../src/modules/bots/service';
 import { ensureActiveSeason } from '../src/modules/rankings/service';
 import { setupApp, T0, type TestApp } from './helpers';
@@ -184,11 +184,31 @@ describe('pilotos simulados', () => {
 
 describe('pilotos simulados ligados com a grade já aberta', () => {
   it('planeja as corridas que já estavam com inscrições abertas', async () => {
-    const u = await setupApp({ AUTO_RACES_PER_DAY: 24, AUTO_RACES_CATEGORY: 'teste' });
+    const u = await setupApp({ AUTO_RACES_PER_DAY: 24, AUTO_RACES_CATEGORY: 'teste', DEMO_BOTS: 3 });
     try {
-      await u.engine.tick(); // grade criada e aberta sem pilotos simulados
+      // Bots de demonstração (marcados) para preencher a grade, como em produção com DEMO_BOTS.
+      const demo: string[] = [];
+      for (let i = 0; i < 3; i++) {
+        const [usr] = await u.ctx.db
+          .insert(users)
+          .values({ email: `demo${i}@t.dev`, passwordHash: 'x', isBot: true })
+          .returning();
+        await u.ctx.db
+          .insert(profiles)
+          .values({ userId: usr!.id, nickname: `Demo${i}`, country: 'BR', region: 'SP', city: 'SP' });
+        demo.push(usr!.id);
+      }
+      await u.engine.tick(); // grade criada e aberta sem pilotos simulados, com os bots de demonstração
       const before = await u.ctx.db.select().from(botPlans);
       expect(before).toHaveLength(0);
+      const demoIn = async () =>
+        (
+          await u.ctx.db
+            .select()
+            .from(entries)
+            .where(and(inArray(entries.userId, demo), eq(entries.status, 'confirmed')))
+        ).length;
+      expect(await demoIn()).toBeGreaterThan(0);
       const cur = (await u.json('GET', '/admin/settings', undefined, u.admin)).body.settings;
       await u.json(
         'PUT',
@@ -201,6 +221,8 @@ describe('pilotos simulados ligados com a grade já aberta', () => {
       await u.engine.tick(); // o PUT antecipa a checagem por minuto
       const plans = await u.ctx.db.select().from(botPlans);
       expect(new Set(plans.map((p) => p.raceId)).size).toBeGreaterThan(1);
+      // Os bots de demonstração saem da grade automática (entregariam a camuflagem).
+      expect(await demoIn()).toBe(0);
       // Uma vez só por corrida.
       await u.advance(2 * MIN);
       expect((await u.ctx.db.select().from(botPlans)).length).toBeGreaterThanOrEqual(plans.length);

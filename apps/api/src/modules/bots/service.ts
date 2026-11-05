@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { AppError, CAR_COLORS, LEVEL_XP, meetsLevel, type GameSettings, type Level } from '@tracado/shared';
 import { createRng } from '@tracado/trackgen';
-import { and, asc, eq, inArray, isNull, lte, sql } from 'drizzle-orm';
+import { and, asc, eq, gt, inArray, isNull, lte, sql } from 'drizzle-orm';
 import type { Ctx } from '../../context';
 import { botPersonas, botPlans, entries, profiles, races, users } from '../../db/schema';
 import { hashPassword } from '../../lib/crypto';
@@ -362,7 +362,48 @@ export async function planOpenAutoRaces(ctx: Ctx): Promise<number> {
     );
   let n = 0;
   for (const r of open) n += await planBotEntries(ctx, r);
+  await dropDemoBots(ctx);
   return n;
+}
+
+/**
+ * Com os pilotos simulados ligados, a grade automática não tem bots de demonstração (eles levam a marca de bot e
+ * entregariam o resto). Corridas abertas antes de ligar o recurso foram preenchidas com eles: saem aqui, antes do
+ * parque fechado.
+ */
+async function dropDemoBots(ctx: Ctx): Promise<number> {
+  const now = ctx.clock.now();
+  const rows = await ctx.db
+    .select({ id: entries.id, raceId: entries.raceId })
+    .from(entries)
+    .innerJoin(races, eq(races.id, entries.raceId))
+    .innerJoin(users, eq(users.id, entries.userId))
+    .leftJoin(botPersonas, eq(botPersonas.userId, entries.userId))
+    .where(
+      and(
+        eq(entries.status, 'confirmed'),
+        eq(users.isBot, true),
+        isNull(botPersonas.userId),
+        inArray(races.status, ['registration_open', 'practice']),
+        gt(races.setupLockAt, new Date(now + 15_000)),
+        isNull(races.crazyGroupId),
+        sql`${races.flags} ? 'auto'`,
+        sql`not (${races.flags} ? 'autoTest')`,
+      ),
+    );
+  if (!rows.length) return 0;
+  await ctx.db
+    .update(entries)
+    .set({ status: 'cancelled', updatedAt: new Date(now) })
+    .where(
+      inArray(
+        entries.id,
+        rows.map((r) => r.id),
+      ),
+    );
+  for (const id of new Set(rows.map((r) => r.raceId))) await broadcastRace(ctx, id);
+  ctx.log.info({ removed: rows.length }, 'Bots de demonstração retirados da grade automática');
+  return rows.length;
 }
 
 /** Tick do motor: inscreve os pilotos simulados cuja hora chegou. */
