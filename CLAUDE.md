@@ -18,7 +18,7 @@ pnpm typecheck      # tsc em todos os pacotes
 pnpm test           # vitest em todos os pacotes
 pnpm build          # bundle da API (tsup) + build da web (vite)
 pnpm test:e2e       # Playwright; sobe API :3101 e web :5174 sozinho
-pnpm balance        # balanceamento da simulação (packages/sim/scripts/balance.ts)
+pnpm balance        # balanceamento da simulação (packages/sim/scripts/balance.ts); sem pnpm no PATH: corepack pnpm --filter @tracado/sim balance
 pnpm loadtest       # carga de WebSocket e inscrições (apps/api/scripts/loadtest.ts)
 pnpm db:generate    # drizzle-kit: gera migração SQL a partir de apps/api/src/db/schema.ts
 ```
@@ -40,6 +40,7 @@ Na primeira vez, rode `pnpm --filter @tracado/e2e install-browsers` antes do E2E
 - Sem `REDIS_URL`, o `Store` usa memória.
 - O `apps/api/.env` é lido por `loadDotEnv()`. O `.env.example` traz `SEED_DEMO` e `DEMO_BOTS`, que criam categorias, bots e corridas de demonstração.
 - O admin padrão é `admin@tracado.local` / `admin12345`. Em produção a config recusa essa senha, um JWT secret fraco e `ENABLE_DEV_ROUTES`.
+- O admin é criado uma vez no boot (`db/bootstrap.ts`); trocar `ADMIN_PASSWORD` depois não muda a senha. Para recuperar o acesso, `ADMIN_RESET_PASSWORD=true` por um deploy.
 - O `docker-compose.yml` sobe Postgres e Redis reais para desenvolvimento. O `docker-compose.prod.yml` é o deploy no Dokploy.
 
 ## Arquitetura
@@ -53,6 +54,7 @@ Os pacotes são consumidos direto como TypeScript: o `exports` aponta para `src/
   - Máquina de fases (`phases.ts`: `ALLOWED_TRANSITIONS`, `buildTimeline`, `duePhase`).
   - Envelope e eventos do WebSocket (`ws.ts`).
   - Constantes do jogo, como `MAX_CARS = 22`. A janela de traçado depois do treino foi desligada (`TRACE_WINDOW_MS = 0`); as durações das fases vêm das configurações do jogo (admin).
+  - `settings.ts`: `gameSettingsSchema` e `DEFAULT_GAME_SETTINGS` (ver "Configurações do jogo"). `crazy.ts`: DTOs e troféus da Corrida Maluca.
   - `ClockSync`, a sincronização de relógio com o servidor.
   - `AppError` e `ERROR_CODES`.
   - Mudou um DTO? Ajuste aqui primeiro.
@@ -65,6 +67,8 @@ Os pacotes são consumidos direto como TypeScript: o `exports` aponta para `src/
   - `race.ts`: `simulateRace` e `simulateQualifying`.
   - Os frames saem a 4 Hz.
   - Ela roda no servidor e no navegador (`probe.ts` e a página `/determinism`). Por isso, nada de `Math.random` nem `Date.now`: toda aleatoriedade vem do PRNG com seed.
+  - Cada frame tem 8 números por carro (`CAR_FRAME_STRIDE`: x, y, direção, progresso, pneu, status, desgaste do pneu %, desgaste do motor %); replays antigos têm 6 e o cliente decodifica os dois.
+  - Mudou o resultado da simulação? Incremente `SIM_VERSION`: o reprocessamento do admin passa a marcar as corridas antigas como `outdated` em vez de divergentes.
   - Depois de mexer em `COEF`, rode `pnpm balance`.
 
 ### API (`apps/api`): Fastify 5 + `ws` + Drizzle
@@ -74,8 +78,9 @@ Os pacotes são consumidos direto como TypeScript: o `exports` aponta para `src/
 - **Motor de fases** (`modules/engine/engine.ts`): substitui o BullMQ.
   - Um `tick` periódico lê do banco as corridas com transição vencida e avança cada uma com um UPDATE condicional na fase atual. Isso deixa o avanço idempotente e retoma sozinho depois de uma queda.
   - Só uma instância executa: há eleição de líder pela chave `engine:leader` no `Store`, com TTL.
-  - As fases são agendamento → inscrições → treino → classificação → traçado → corrida → resultados.
-  - `runner.ts` simula a corrida e grava o replay em gzip na tabela `race_replays`. Depois publica resultados e rankings e transmite o playback em tempo real pelo hub de WebSocket.
+  - As fases são `scheduled` → `registration_open` → `practice` → `trace_window` (duração zero por padrão: o motor passa por ela no mesmo tick) → `setup_lock` → `qualifying` → `race` → `finished` → `archived` (ou `cancelled`). O traçado e o setup são editáveis da inscrição até o parque fechado.
+  - Na entrada da classificação, `runner.ts` já simula classificação e corrida inteiras e grava o replay em gzip em `race_replays`. A classificação é transmitida aos poucos como sessão de volta lançada (`qualiLive.ts`, `GET /races/:id/qualifying/live`) sem revelar o futuro; o grid só é publicado na largada. Na corrida, o motor transmite os frames pelo hub; em `finished`, publica resultados e rankings.
+  - Grade automática e corridas teste (`autoRaces.ts`): corridas criadas sozinhas a partir das configurações do jogo. Corrida teste é uma só por vez: a próxima nasce na bandeirada da anterior, com terrenos em rodízio.
 - **Vagas**: as inscrições (`races/entries.ts`) usam `SELECT … FOR UPDATE` mais um `KeyedMutex` por corrida, no lugar de Lua no Redis. Excedeu 22 carros, a inscrição vai para a lista de espera.
 - **Auth**: access token JWT HS256 de 15 min mais o cookie de refresh `tracado_rt`. O refresh é rotativo e detecta reuso. Requisições que mudam estado exigem o header `x-tracado-csrf: 1`. Senhas usam Argon2id.
 - **Banco**:
@@ -91,18 +96,22 @@ Os pacotes são consumidos direto como TypeScript: o `exports` aponta para `src/
   - O tsup embute tudo menos `@electric-sql/pglite` e `@node-rs/argon2`, que têm WASM ou binário nativo.
   - `scripts/runtime-package.mjs` gera `dist/package.json` só com esses dois pacotes.
   - Ao adicionar uma dependência nativa, inclua-a nos dois lugares.
-- **Testes** (`apps/api/test`): `setupApp()` em `helpers.ts` sobe o app com PGlite em memória, `ENGINE_ENABLED=false` e relógio manual. Os helpers aceitam os tokens marcadores `'ADMIN'` e `'USER:<id>'`, que geram um JWT válido no relógio atual.
+- **Configurações do jogo** (`modules/settings`, tabela `game_settings`): durações das fases, grade automática, corridas teste, bots, terrenos e cenários com peso, rodízio de pistas salvas e limites da Corrida Maluca. Editadas pelo admin, valem na hora (cache de 5 s por instância) e para corridas criadas daqui em diante. Sem linha salva, os padrões vêm das variáveis antigas (`AUTO_RACES_*`, `DEMO_BOTS`). Use `getSettings(ctx)`; dentro de uma transação do PGlite, leia antes de abrir a transação.
+- **Corrida Maluca** (`modules/crazy`): grupos fechados com convite por link; convidados (`users.is_guest`) entram só com apelido. As corridas do grupo têm `crazy_group_id` e ficam fora das listas públicas (`listRaces` só as traz com `crazy: true`). A conta de admin não corre nem entra em grupos (`assertPlayer`).
+- **Migrações**: depois de `pnpm db:generate`, confira se o `when` da entrada nova em `drizzle/meta/_journal.json` é maior que o da anterior; o drizzle pula migração com data menor que a última aplicada (`test/migrations.test.ts` cobre). Não rode o prettier sobre `drizzle/meta`.
+- **Testes** (`apps/api/test`): `setupApp()` em `helpers.ts` sobe o app com PGlite em memória, `ENGINE_ENABLED=false` e relógio manual. Os helpers aceitam os tokens marcadores `'ADMIN'` e `'USER:<id>'`, que geram um JWT válido no relógio atual. O `createRace` dos helpers (e do E2E) cria corridas com janela de traçado de 120 s para os testes que ainda a exercitam.
 
 ### Web (`apps/web`): React 19 + Vite 6 + Tailwind 4 + PixiJS 8
 
 - Estado do servidor no TanStack Query e sessão no Zustand (`lib/session`). `lib/api` refaz a requisição depois de renovar o token num 401.
 - `lib/realtime`: cliente WebSocket com `lastSeq` para retomar e reconexão com backoff. Os eventos atualizam o cache do Query direto em `lib/queries`.
-- `game/scene.ts`: a pista é desenhada em vetor com as cores do racing_pack e os carros são sprites do atlas.
+- `game/scene.ts`: a pista é desenhada em vetor com as cores do racing_pack e os carros são sprites do atlas. O cenário (`races.biome`: grama, deserto, cânion) muda o fundo e troca a decoração na hora de desenhar, sem mudar a geometria nem o hash da pista.
+- `game/audio.ts`: trilha e efeitos sintetizados com Web Audio a partir de notas MIDI escritas no código (sem arquivos de áudio); o som só começa no primeiro gesto do usuário.
 - `game/playback.ts`: `FrameBuffer` interpola os frames de 4 Hz usando o relógio sincronizado.
 - Tailwind 4: classes de componente se declaram com `@utility` em `styles.css`. O `@apply` de classes próprias não funciona.
 - Os assets estão em `src/assets/racing_pack` (licença CC0, créditos em `CREDITS.md`).
 - `pages/Box.tsx` concentra a preparação: setup, desenho do traçado e treino com carro fantasma. O envio automático do traçado tem uma trava em nível de módulo contra envio duplicado quando o componente remonta após renovar o token.
-- As páginas de admin ficam em `pages/admin/` e incluem o editor de pistas.
+- As páginas de admin ficam em `pages/admin/`: configurações do jogo, corridas teste, gerador de pistas por seed (roda o gerador no navegador) e editor de pistas. A conta de admin só vê o painel (`PlayerOnly` em `App.tsx` redireciona as telas de jogador).
 - `pages/Crazy.tsx` é a Corrida Maluca (grupos de amigos com convite por link, convidados só com apelido e troféus de zoeira). No servidor fica em `modules/crazy`; as corridas do grupo têm `crazy_group_id` e ficam fora das listas públicas.
 
 ## Deploy (VPS com Dokploy)
