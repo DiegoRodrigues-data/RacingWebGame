@@ -2,6 +2,7 @@ import type { Biome, Terrain } from '@tracado/shared';
 import type { TrackGeometry } from '@tracado/trackgen';
 import { Application, Container, Graphics, Sprite, Text, TextStyle } from 'pixi.js';
 import { CAR_HEX, loadAtlases, type Atlases } from './assets';
+import { curbMask } from './curbs';
 
 /** 1 m em pixels dos sprites do racing_pack (carro de 131 px ≈ 5 m). */
 const PX_PER_M = 26.2;
@@ -385,16 +386,17 @@ export class TrackScene {
     }
     this.road.addChild(edge);
 
-    // Zebras vermelho/branco nas duas bordas, em toda a volta.
+    // Zebras vermelho/branco nas curvas fechadas e faixa branca lisa no resto (ver curbs.ts).
     const curbs = new Graphics();
+    const curb = curbMask(g.curvature);
     for (let i = 0; i < n; i++) {
-      const color = i % 2 ? 0xff4d4d : 0xffffff;
+      const color = curb[i] && i % 2 ? 0xff4d4d : 0xffffff;
       for (const side of [1, -1] as const) {
         const [ax, ay] = side === 1 ? L(i) : R(i);
         const [bx, by] = side === 1 ? L(i + 1) : R(i + 1);
         const [nx, ny] = N(i);
         const [mx, my] = N(i + 1);
-        const o = 1.3 * side;
+        const o = (curb[i] ? 1.3 : 0.6) * side;
         curbs
           .poly([ax, ay, bx, by, bx + mx * o, by + my * o, ax + nx * o, ay + ny * o], true)
           .fill({ color });
