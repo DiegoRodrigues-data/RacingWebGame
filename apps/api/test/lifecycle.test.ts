@@ -68,10 +68,8 @@ describe('ciclo de vida completo de uma corrida (fluxo crítico)', () => {
       `/races/${raceId}/setup`,
       {
         ...DEFAULT_SETUP,
-        pitStops: [
-          { lap: 1, tyre: 'hard' },
-          { lap: 2, tyre: 'soft' },
-        ],
+        // Parada na última volta não existe (corrida de 30 voltas).
+        pitStops: [{ lap: 30, tyre: 'hard' }],
       },
       ana.token,
     );

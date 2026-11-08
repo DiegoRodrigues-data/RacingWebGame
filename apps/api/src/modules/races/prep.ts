@@ -93,7 +93,8 @@ export async function saveSetup(ctx: Ctx, raceId: string, user: AuthUser, body: 
     throw new AppError('SETUP_LOCKED', 'A configuração do carro está travada (parque fechado).');
   await requireEntry(ctx, raceId, user.id, ['confirmed', 'waitlisted']);
   const cat = await getCategory(ctx.db, race.categoryId);
-  const problems = checkSetupLimits(setup, cat.config, race.laps);
+  const g = await getGeometry(ctx, race.trackVersionId);
+  const problems = checkSetupLimits(setup, cat.config, race.laps, g.count * g.ds);
   if (problems.length) throw new AppError('SETUP_INVALID', problems[0]!, problems);
   const [had] = await ctx.db
     .select({ at: setups.updatedAt })

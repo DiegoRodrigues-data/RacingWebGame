@@ -78,7 +78,8 @@ Tipos TypeScript e schemas Zod em `packages/shared/src/schemas.ts` e `packages/s
 `POST /admin/tracks/:id/versions` _(editor)_ · `PATCH /admin/tracks/versions/:id` _(editor, só rascunho)_ ·
 `POST /admin/tracks/versions/:id/submit` _(editor)_ · `.../publish` · `.../reject` · `.../deprecate` ·
 `POST /admin/seasons` · `POST /admin/seasons/:id/close` · `POST /admin/rankings/rebuild` · `GET|PATCH /admin/users`.
-Toda ação administrativa grava em `admin_audit_log`.
+O `.../deprecate` devolve `retired: {pool, plans, races}`: a pista sai do rodízio, as reservas são apagadas e as
+corridas ainda abertas que a usavam passam para uma pista gerada. Toda ação administrativa grava em `admin_audit_log`.
 
 Configurações e painel (admin):
 
@@ -121,7 +122,9 @@ PUT /races/0b5c…/setup
 ```
 
 Toda corrida tem de 30 a 60 voltas e exige ao menos uma parada: `pitStops` vazio responde `422 SETUP_INVALID`
-("Parada obrigatória…"). Cada parada precisa ficar antes da última volta e respeitar o `maxPitStops` da categoria.
+("Parada obrigatória…"). Cada parada precisa ficar antes da última volta e respeitar o máximo de paradas da corrida: o `maxPitStops` da
+categoria ou, em corridas longas, uma a cada 20 km (`maxPitStopsFor`, até 8). O `GET /races/:id/practice` já devolve
+`limits.maxPitStops` com esse valor.
 
 ## WebSocket (`/ws`, protocolo v1)
 

@@ -3,12 +3,13 @@ import {
   DEFAULT_SETUP,
   defaultPitStops,
   formatLapTime,
+  MIN_PIT_STOPS,
   type CarSetup,
   type RaceDetailDto,
   type Tyre,
   type Weather,
 } from '@tracado/shared';
-import { estimateLap, simulateRace, type CarResult } from '@tracado/sim';
+import { estimateLap, simulateRace, stopsNeeded, type CarResult } from '@tracado/sim';
 import { offsetsToTrace, racingLine, type TrackGeometry } from '@tracado/trackgen';
 import clsx from 'clsx';
 import { FastForward, Pause, Play, Square } from 'lucide-react';
@@ -226,8 +227,16 @@ export function PracticeTab({
         ...DEFAULT_SETUP,
         tyre: t,
         aero: 3 + i,
-        // Todos cumprem a parada obrigatória; quem larga de macio para duas vezes.
-        pitStops: defaultPitStops(practice.laps, ['medium', 'hard'], t === 'soft' ? 2 : 1),
+        // Paradas para a distância (o pneu gasta por km), contando com o composto da largada; quem larga de macio
+        // para uma vez a mais.
+        pitStops: defaultPitStops(
+          practice.laps,
+          ['medium', 'hard'],
+          Math.min(
+            practice.limits.maxPitStops,
+            stopsNeeded(t, (practice.laps * g.count * g.ds) / 1000, MIN_PIT_STOPS) + (t === 'soft' ? 1 : 0),
+          ),
+        ),
       } satisfies CarSetup,
       car: {
         id: `fantasma-${i + 1}`,

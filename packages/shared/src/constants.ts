@@ -19,6 +19,10 @@ export const RACE_LAPS_MIN = 30;
 export const RACE_LAPS_MAX = 60;
 /** Toda corrida exige ao menos esta quantidade de paradas nos boxes. */
 export const MIN_PIT_STOPS = 1;
+/** Teto de paradas de qualquer corrida (as longas liberam mais que o limite da categoria). */
+export const MAX_PIT_STOPS = 8;
+/** A cada tantos km de corrida, uma parada a mais liberada (o pneu gasta por distância). */
+export const PIT_STOP_KM = 20;
 /** Traçado enviado pelo cliente. */
 export const TRACE_MIN_POINTS = 64;
 export const TRACE_MAX_POINTS = 1024;

@@ -384,6 +384,14 @@ Fecha o ciclo de vida com resultados persistidos.
 - [x] Troca da pista de uma corrida aberta (especial ou outra gerada), com aviso aos inscritos e traçados apagados
 - [x] Reserva de especial para horários ainda não criados (`track_plans`), consumida pela grade
 - [x] Especiais listadas no dia, com quantas vezes entram e o botão do rodízio
+- [x] Pista descontinuada sai do rodízio, das reservas e das corridas abertas; aba própria na lista de pistas
+
+## Fase 26 — Desgaste dos pneus por distância
+
+- [x] Desgaste por km: cada composto dura uma distância, e as voltas que rende saem do tamanho da pista (`SIM_VERSION` 5)
+- [x] Máximo de paradas pela distância da corrida (uma a cada 20 km, até 8), além do limite da categoria
+- [x] Setup padrão e pilotos simulados planejam as paradas pela vida dos pneus
+- [x] Box mostra a vida de cada composto em voltas e km, e a distância da corrida
 
 ---
 

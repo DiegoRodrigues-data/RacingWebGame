@@ -5,6 +5,8 @@ import {
   checkSetupLimits,
   effectiveDriver,
   defaultPitStops,
+  MIN_PIT_STOPS,
+  raceSetupLimits,
   xpForRace,
   type CarSetup,
   type CategoryConfig,
@@ -18,6 +20,7 @@ import {
 } from '@tracado/shared';
 import {
   SIM_VERSION,
+  stopsNeeded,
   simulateQualifying,
   simulateRace,
   type CarResult,
@@ -50,14 +53,18 @@ const END_BUFFER_MS = 2000;
  * Setup padrão ajustado aos limites da categoria (usado por quem não configurou o carro
  * ou mandou um setup inválido). Já cumpre a parada obrigatória.
  */
-export function defaultSetupFor(cfg: CategoryConfig, laps: number): CarSetup {
-  const lim = cfg.setupLimits;
+export function defaultSetupFor(cfg: CategoryConfig, laps: number, trackLengthM: number): CarSetup {
+  const lim = raceSetupLimits(cfg.setupLimits, laps, trackLengthM);
+  const tyre = lim.allowedTyres.includes('medium') ? 'medium' : lim.allowedTyres[0]!;
+  // Paradas suficientes para a distância (o pneu gasta por km); os stints são iguais, o da largada é o mais curto
+  // de vida.
+  const stops = Math.min(lim.maxPitStops, stopsNeeded(tyre, (laps * trackLengthM) / 1000, MIN_PIT_STOPS));
   return {
     ...DEFAULT_SETUP,
-    tyre: lim.allowedTyres.includes('medium') ? 'medium' : lim.allowedTyres[0]!,
+    tyre,
     engine: lim.allowedEngines.includes('balanced') ? 'balanced' : lim.allowedEngines[0]!,
     aero: Math.max(lim.aero.min, Math.min(lim.aero.max, DEFAULT_SETUP.aero)),
-    pitStops: defaultPitStops(laps, lim.allowedTyres),
+    pitStops: defaultPitStops(laps, lim.allowedTyres, stops),
   };
 }
 
@@ -135,11 +142,11 @@ export async function runSimulation(
   if (!confirmed.length) return null;
   const setupRows = await tx.select().from(setups).where(eq(setups.raceId, race.id));
   const traceRows = await tx.select().from(traces).where(eq(traces.raceId, race.id));
-  const fallback = defaultSetupFor(cat.config, race.laps);
+  const fallback = defaultSetupFor(cat.config, race.laps, g.count * g.ds);
   const flags = new Map<string, { defSetup: boolean; defTrace: boolean }>();
   const cars: SimCar[] = confirmed.map(({ e, p }) => {
     let setup = setupRows.find((s) => s.userId === e.userId)?.setup;
-    if (setup && checkSetupLimits(setup, cat.config, race.laps).length) setup = undefined;
+    if (setup && checkSetupLimits(setup, cat.config, race.laps, g.count * g.ds).length) setup = undefined;
     let trace = traceRows.find((t) => t.userId === e.userId)?.points ?? null;
     if (trace && !validateTrace(g, trace).ok) trace = null; // revalidação defensiva
     flags.set(e.userId, { defSetup: !setup, defTrace: !trace });

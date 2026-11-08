@@ -17,7 +17,7 @@ test('capturas de tela para revisão visual', async ({ page, request }) => {
   await page.screenshot({ path: `${OUT}/03-corrida.png`, fullPage: true });
   await page.goto(`/corridas/${id}/box?aba=setup`);
   await page.waitForTimeout(1500);
-  await page.screenshot({ path: `${OUT}/05-box-setup.png` });
+  await page.screenshot({ path: `${OUT}/05-box-setup.png`, fullPage: true });
   await page.goto(`/corridas/${id}/box?aba=treino`);
   await page.waitForTimeout(1500);
   await page

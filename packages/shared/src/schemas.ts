@@ -5,6 +5,7 @@ import {
   CAR_MODELS,
   DEFAULT_PRACTICE_MINUTES,
   MAX_CARS_PER_RACE,
+  MAX_PIT_STOPS,
   MIN_PIT_STOPS,
   RACE_LAPS_MAX,
   RACE_LAPS_MIN,
@@ -184,7 +185,7 @@ export const carSetupSchema = z.object({
   /** Estratégia de troca: em que volta parar e qual composto colocar. */
   pitStops: z
     .array(z.object({ lap: z.number().int().min(1).max(200), tyre: tyreSchema }))
-    .max(3)
+    .max(MAX_PIT_STOPS)
     .refine(
       (a) => a.every((s, i) => i === 0 || s.lap > a[i - 1]!.lap),
       'Voltas das paradas devem ser crescentes',

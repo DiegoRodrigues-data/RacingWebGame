@@ -3,6 +3,7 @@ import {
   DEFAULT_DRIVER_RULES,
   DEFAULT_TRACK_WIDTH,
   ENGINE_MAPS,
+  MIN_PIT_STOPS,
   TERRAINS,
   TYRES,
   WEATHER_BETS,
@@ -12,7 +13,8 @@ import { simulateRace } from './race';
 
 export function randomSetup(rng: Rng, laps: number): CarSetup {
   const tyre = rng.pick(TYRES);
-  const stops = rng.int(0, 2);
+  // Como no jogo: pelo menos a parada obrigatória.
+  const stops = rng.int(MIN_PIT_STOPS, 3);
   const pitStops: { lap: number; tyre: Tyre }[] = [];
   // Paradas em voltas plausíveis (espaçadas igualmente, com variação), para comparar estratégias de forma justa.
   for (let k = 1; k <= stops; k++) {
@@ -75,7 +77,7 @@ export const SCENARIOS: Scenario[] = [
     length: 2200,
     complexity: 1,
     weather: { base: 'dry', rainChance: 0, temperature: 22 },
-    laps: 8,
+    laps: 14,
   },
   {
     name: 'asfalto chuva',
@@ -83,7 +85,7 @@ export const SCENARIOS: Scenario[] = [
     length: 3000,
     complexity: 0.5,
     weather: { base: 'rain', rainChance: 0.6, temperature: 16 },
-    laps: 8,
+    laps: 10,
   },
   {
     name: 'clima instável',
@@ -99,7 +101,7 @@ export const SCENARIOS: Scenario[] = [
     length: 2500,
     complexity: 0.6,
     weather: { base: 'dry', rainChance: 0.2, temperature: 25 },
-    laps: 6,
+    laps: 12,
   },
   {
     name: 'areia',
@@ -107,7 +109,7 @@ export const SCENARIOS: Scenario[] = [
     length: 2500,
     complexity: 0.4,
     weather: { base: 'dry', rainChance: 0.1, temperature: 32 },
-    laps: 6,
+    laps: 12,
   },
   {
     name: 'misto',
@@ -115,7 +117,7 @@ export const SCENARIOS: Scenario[] = [
     length: 3200,
     complexity: 0.6,
     weather: { base: 'cloudy', rainChance: 0.3, temperature: 24 },
-    laps: 8,
+    laps: 9,
   },
 ];
 

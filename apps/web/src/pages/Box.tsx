@@ -1,4 +1,11 @@
-import { DEFAULT_SETUP, defaultPitStops, type CarSetup, type TracePoint } from '@tracado/shared';
+import {
+  DEFAULT_SETUP,
+  defaultPitStops,
+  MIN_PIT_STOPS,
+  type CarSetup,
+  type TracePoint,
+} from '@tracado/shared';
+import { stopsNeeded } from '@tracado/sim';
 import { traceToOffsets } from '@tracado/trackgen';
 import { useQuery } from '@tanstack/react-query';
 import { useEffect, useState } from 'react';
@@ -57,17 +64,21 @@ export default function Box() {
     setOffsets(pts ? traceToOffsets(geo.data, pts) : new Float64Array(geo.data.count));
   }, [geo.data, serverTrace.isLoading, serverTrace.data, offsets, id, versionId]);
   useEffect(() => {
-    if (setup || serverSetup.isLoading || !practice.data) return;
+    if (setup || serverSetup.isLoading || !practice.data || !geo.data) return;
     const lim = practice.data.limits;
+    const tyre = lim.allowedTyres.includes('medium') ? 'medium' : lim.allowedTyres[0]!;
+    // Paradas suficientes para a distância da corrida (o pneu gasta por km).
+    const km = (practice.data.laps * geo.data.count * geo.data.ds) / 1000;
+    const stops = Math.min(lim.maxPitStops, stopsNeeded(tyre, km, MIN_PIT_STOPS));
     const fallback: CarSetup = {
       ...DEFAULT_SETUP,
-      tyre: lim.allowedTyres.includes('medium') ? 'medium' : lim.allowedTyres[0]!,
-      pitStops: defaultPitStops(practice.data.laps, lim.allowedTyres),
+      tyre,
+      pitStops: defaultPitStops(practice.data.laps, lim.allowedTyres, stops),
       terrainPrep:
         race?.track.terrain === 'dirt' || race?.track.terrain === 'sand' ? race.track.terrain : 'asphalt',
     };
     setSetup(serverSetup.data?.setup ?? loadDraft<CarSetup>(draftKey(id!, 'setup')) ?? fallback);
-  }, [serverSetup.isLoading, serverSetup.data, setup, practice.data, id, race?.track.terrain]);
+  }, [serverSetup.isLoading, serverSetup.data, setup, practice.data, geo.data, id, race?.track.terrain]);
 
   if (isLoading || !race) return <Spinner />;
   const late = lateEntryOpen(race, now);

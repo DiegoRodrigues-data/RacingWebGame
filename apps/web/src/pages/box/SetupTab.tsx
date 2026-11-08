@@ -1,5 +1,6 @@
 import {
   checkSetupLimits,
+  PIT_STOP_KM,
   formatLapTime,
   MIN_PIT_STOPS,
   TYRE_LABELS,
@@ -40,15 +41,17 @@ const TYRE_STARS: Record<Tyre, { grip: number; note: string }> = {
 };
 const lapsLabel = (n: number) => `${n} ${n === 1 ? 'volta' : 'voltas'}`;
 /** "~12 voltas (10–14)": média e faixa da variação sorteada; avisa quando aguenta a corrida inteira. */
-function LifeText({ life, laps }: { life: TyreLife; laps: number }) {
+/** Voltas (e km) que um composto rende: o desgaste é por distância, então numa pista longa rende menos voltas. */
+function LifeText({ life, laps, lapKm }: { life: TyreLife; laps: number; lapKm: number }) {
+  const km = Math.round(life.avg * lapKm);
   return (
     <span
       className="block text-[11px] text-muted"
-      title={`Rende em média ${lapsLabel(life.avg)} antes de perder rendimento; com a variação do clima, de ${life.min} a ${life.max}. A corrida tem ${lapsLabel(laps)}.`}
+      title={`Rende em média ${lapsLabel(life.avg)} (~${km} km) antes de perder rendimento; com a variação do clima, de ${life.min} a ${life.max} voltas. A corrida tem ${lapsLabel(laps)} (${Math.round(laps * lapKm)} km).`}
     >
       <span className={clsx('font-bold', life.min >= laps ? 'text-go' : 'text-ink')}>~{life.avg}</span> voltas{' '}
       <span className="whitespace-nowrap">
-        ({life.min}–{life.max})
+        ({life.min}–{life.max}) · ~{km} km
       </span>
     </span>
   );
@@ -554,7 +557,7 @@ export function SetupTab({
             <span className="min-w-0">
               <span className={clsx('block text-sm font-bold', on && 'text-race')}>{TYRE_LABELS[t]}</span>
               <Stars n={TYRE_STARS[t].grip} label={t === 'wet' ? 'Chuva' : 'Aderência'} />
-              <LifeText life={life[t]} laps={laps} />
+              <LifeText life={life[t]} laps={laps} lapKm={dry.lapKm} />
             </span>
           </button>
         );
@@ -644,8 +647,11 @@ export function SetupTab({
             <div>
               <div className="label flex justify-between">
                 <span>Stints e desgaste</span>
-                <span className="normal-case tracking-normal">
-                  parada obrigatória · máx. {lim.maxPitStops}
+                <span
+                  className="normal-case tracking-normal"
+                  title={`Corrida de ${Math.round(laps * dry.lapKm)} km. O pneu gasta por distância: corridas longas liberam mais paradas (uma a cada ${PIT_STOP_KM} km).`}
+                >
+                  parada obrigatória · máx. {lim.maxPitStops} · {Math.round(laps * dry.lapKm)} km
                 </span>
               </div>
               <div

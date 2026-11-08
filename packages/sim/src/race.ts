@@ -40,7 +40,7 @@ import {
  * 2: desgaste de pneu com variação sorteada por stint, desgaste do motor e os dois nos frames.
  * 3: perfil do piloto (ataque, defesa, ritmo), colisões e carros lado a lado nas disputas.
  */
-export const SIM_VERSION = 4;
+export const SIM_VERSION = 5;
 export const FRAME_HZ = 4;
 const DT = 0.25;
 
@@ -176,6 +176,8 @@ export function simulateRace(input: RaceSimInput): RaceSimOutput {
   const g = input.geometry;
   const n = g.count;
   const laps = input.laps;
+  /** Comprimento da volta (km): o desgaste do pneu é por distância. */
+  const lapKm = (g.count * g.ds) / 1000;
   const rng = createRng(`${input.seed}|race`);
   const rules = input.rules ?? DEFAULT_DRIVER_RULES;
   const D = COEF.driver;
@@ -191,7 +193,7 @@ export function simulateRace(input: RaceSimInput): RaceSimOutput {
 
   const buildProfile = (s: CarState) => {
     const m = carModifiers(g, s.car.setup, s.tyre, s.wear, cond(), gripZones);
-    s.wearPerLap = (m.wearPerRace / laps) * driverWearFactor(s.drv);
+    s.wearPerLap = m.wearPerKm * lapKm * driverWearFactor(s.drv);
     s.engineWearPerLap = (m.engineWearPerRace / laps) * (1 + D.paceEngineWear * s.drv.pace);
     s.failurePerLap = m.failurePerLap;
     s.gripRatio = m.gripRatio;
@@ -745,6 +747,8 @@ export interface LapEstimate {
   sectorMs: number[];
   topSpeedKmh: number;
   wearPerLap: number;
+  /** Comprimento da volta (km): o desgaste do pneu é por distância. */
+  lapKm: number;
   /** Voltas até o "penhasco" de desgaste, na média (sem a variação sorteada). */
   lapsToCliff: number;
   /** Desgaste do motor por volta (1 = vida útil inteira). */
@@ -801,12 +805,14 @@ export function estimateLap(
     const to = g.sectors[k + 1] ?? g.count;
     return Math.round((p.t[to]! - p.t[from]!) * 1000);
   });
-  const wearPerLap = (m.wearPerRace / laps) * driverWearFactor(drv);
+  const lapKm = (g.count * g.ds) / 1000;
+  const wearPerLap = m.wearPerKm * lapKm * driverWearFactor(drv);
   return {
     lapTimeMs: Math.round(p.lapTime * 1000),
     sectorMs,
     topSpeedKmh: Math.round(p.topSpeed * 3.6),
     wearPerLap,
+    lapKm,
     lapsToCliff: Math.max(0, Math.floor((COEF.cliffAt - wear) / wearPerLap)),
     engineWearPerLap: m.engineWearPerRace / laps,
     profile: p.v,

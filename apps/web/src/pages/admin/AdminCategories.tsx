@@ -253,7 +253,7 @@ function ConfigForm({ cfg, set }: { cfg: CategoryConfig; set: (c: CategoryConfig
               }
             />
           </Field>
-          <Field label="Paradas máx.">
+          <Field label="Paradas máx. (corridas longas liberam 1 a cada 20 km)">
             <input
               className="input"
               type="number"

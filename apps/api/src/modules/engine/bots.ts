@@ -1,6 +1,7 @@
 import {
   CAR_COLORS,
   clampTrait,
+  maxPitStopsFor,
   ENGINE_MAPS,
   MIN_PIT_STOPS,
   TERRAINS,
@@ -9,6 +10,7 @@ import {
   type DriverProfile,
   type Tyre,
 } from '@tracado/shared';
+import { stopsNeeded } from '@tracado/sim';
 import { createRng, offsetsToTrace, suggestedLine, enforceLateralRate } from '@tracado/trackgen';
 import { and, eq, isNull, notInArray, sql } from 'drizzle-orm';
 import type { Ctx } from '../../context';
@@ -79,6 +81,7 @@ function personaSetup(
   seed: string,
   cfg: CategoryConfig,
   laps: number,
+  trackLengthM: number,
   wet: boolean,
   p: Persona,
   driver: DriverProfile | null,
@@ -99,8 +102,13 @@ function personaSetup(
     return ok.length && r.chance(0.5 + p.skill * 0.45) ? r.pick(ok) : r.pick(pool);
   };
   const tyre: Tyre = wet && allowed.includes('wet') && r.chance(0.6 + p.skill * 0.4) ? 'wet' : pickTyre();
-  const max = Math.max(MIN_PIT_STOPS, cfg.setupLimits.maxPitStops);
-  const stops = Math.min(max, MIN_PIT_STOPS + (r.chance(p.pitRisk * 0.6) ? 1 : 0));
+  const max = maxPitStopsFor(cfg.setupLimits, laps, trackLengthM);
+  // Paradas para a distância (o pneu gasta por km) com o composto mais macio que costuma usar; quem arrisca para
+  // uma vez a mais.
+  const softest =
+    (['soft', 'medium', 'hard'] as const).find((t) => pref.includes(t) && pool.includes(t)) ?? 'medium';
+  const need = stopsNeeded(softest, (laps * trackLengthM) / 1000, MIN_PIT_STOPS, 0.85 + 0.1 * p.skill);
+  const stops = Math.min(max, need + (r.chance(p.pitRisk * 0.6) ? 1 : 0));
   const pitStops: CarSetup['pitStops'] = [];
   const jitter = Math.round(3 * (1 - p.skill));
   for (let k = 1; k <= stops; k++) {
@@ -128,14 +136,21 @@ function personaSetup(
   };
 }
 
-function botSetup(seed: string, cfg: CategoryConfig, laps: number, wet: boolean): CarSetup {
+function botSetup(
+  seed: string,
+  cfg: CategoryConfig,
+  laps: number,
+  trackLengthM: number,
+  wet: boolean,
+): CarSetup {
   const r = createRng(seed);
   const allowed = cfg.setupLimits.allowedTyres;
   const dry = allowed.filter((t) => t !== 'wet');
   const tyre: Tyre = wet && allowed.includes('wet') ? 'wet' : r.pick(dry.length ? dry : allowed);
   // Cumpre a parada obrigatória; às vezes arrisca uma parada a mais, espaçando as trocas.
-  const max = Math.max(MIN_PIT_STOPS, cfg.setupLimits.maxPitStops);
-  const stops = Math.min(max, MIN_PIT_STOPS + (r.chance(0.35) ? 1 : 0));
+  const max = maxPitStopsFor(cfg.setupLimits, laps, trackLengthM);
+  const need = stopsNeeded('medium', (laps * trackLengthM) / 1000, MIN_PIT_STOPS);
+  const stops = Math.min(max, need + (r.chance(0.35) ? 1 : 0));
   const pitStops: CarSetup['pitStops'] = [];
   for (let k = 1; k <= stops; k++) {
     const prev = pitStops.at(-1)?.lap ?? 0;
@@ -210,8 +225,16 @@ export async function prepareBots(ctx: Ctx, raceId: string) {
         raceId,
         userId: b.id,
         setup: p
-          ? personaSetup(`${race.seed}|setup|${b.id}`, cat.config, race.laps, wet, p, b.driver)
-          : botSetup(`${race.seed}|setup|${b.id}`, cat.config, race.laps, wet),
+          ? personaSetup(
+              `${race.seed}|setup|${b.id}`,
+              cat.config,
+              race.laps,
+              g.count * g.ds,
+              wet,
+              p,
+              b.driver,
+            )
+          : botSetup(`${race.seed}|setup|${b.id}`, cat.config, race.laps, g.count * g.ds, wet),
         updatedAt: now,
       })
       .onConflictDoNothing();

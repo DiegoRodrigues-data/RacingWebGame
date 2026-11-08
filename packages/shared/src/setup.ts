@@ -1,10 +1,34 @@
-import { MIN_PIT_STOPS } from './constants';
+import { MAX_PIT_STOPS, MIN_PIT_STOPS, PIT_STOP_KM } from './constants';
 import type { CarSetup, CategoryConfig, Tyre } from './schemas';
 
-/** Verifica o setup contra os limites da categoria. Retorna mensagens de violação (vazio = válido). */
-export function checkSetupLimits(setup: CarSetup, cfg: CategoryConfig, laps: number): string[] {
+type Limits = CategoryConfig['setupLimits'];
+
+/**
+ * Máximo de paradas de uma corrida: o da categoria ou, em corridas longas, uma a cada `PIT_STOP_KM` km (o pneu
+ * gasta por distância, então uma pista de 6 km pede mais trocas que uma de 1,5 km com as mesmas voltas).
+ */
+export function maxPitStopsFor(lim: Pick<Limits, 'maxPitStops'>, laps: number, trackLengthM: number): number {
+  const km = (laps * trackLengthM) / 1000;
+  return Math.min(MAX_PIT_STOPS, Math.max(lim.maxPitStops, Math.ceil(km / PIT_STOP_KM)));
+}
+
+/** Limites de setup valendo numa corrida (os da categoria, com o máximo de paradas pela distância). */
+export function raceSetupLimits(lim: Limits, laps: number, trackLengthM: number): Limits {
+  return { ...lim, maxPitStops: maxPitStopsFor(lim, laps, trackLengthM) };
+}
+
+/**
+ * Verifica o setup contra os limites da categoria. Com o comprimento da pista, o máximo de paradas segue a distância
+ * da corrida. Retorna mensagens de violação (vazio = válido).
+ */
+export function checkSetupLimits(
+  setup: CarSetup,
+  cfg: Pick<CategoryConfig, 'setupLimits'>,
+  laps: number,
+  trackLengthM?: number,
+): string[] {
   const out: string[] = [];
-  const lim = cfg.setupLimits;
+  const lim = trackLengthM ? raceSetupLimits(cfg.setupLimits, laps, trackLengthM) : cfg.setupLimits;
   const tyres = [setup.tyre, ...setup.pitStops.map((p) => p.tyre)];
   for (const t of tyres)
     if (!lim.allowedTyres.includes(t)) out.push(`Pneu ${t} não permitido nesta categoria.`);

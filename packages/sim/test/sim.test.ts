@@ -1,13 +1,15 @@
 import { describe, expect, it } from 'vitest';
-import { DEFAULT_DRIVER_RULES, DEFAULT_SETUP, type CarSetup } from '@tracado/shared';
+import { DEFAULT_DRIVER_RULES, DEFAULT_SETUP, defaultPitStops, type CarSetup } from '@tracado/shared';
 import { generateProceduralTrack, offsetsToTrace } from '@tracado/trackgen';
 import {
+  COEF,
   decodeFrame,
   estimateLap,
   qualifyingSession,
   runBalance,
   simulateQualifying,
   simulateRace,
+  stopsNeeded,
   weatherByLap,
   type RaceSimInput,
 } from '../src';
@@ -257,5 +259,55 @@ describe('sessão de classificação', () => {
     expect(last.every((c) => c.status === 3)).toBe(true);
     expect(decodeFrame(s.frames[0]!)[0]!.status).toBe(0);
     expect(decodeFrame(s.frames[0]!)[1]!.status).toBe(1);
+  });
+});
+
+describe('desgaste dos pneus por distância', () => {
+  const long = generateProceduralTrack('pista-longa-6km', {
+    length: 6000,
+    complexity: 0.5,
+    width: 14,
+    terrain: 'asphalt',
+  });
+  const short = generateProceduralTrack('pista-curta-1500', {
+    length: 1500,
+    complexity: 0.5,
+    width: 14,
+    terrain: 'asphalt',
+  });
+
+  it('o pneu dura os mesmos km: numa pista 4× mais longa, rende ~4× menos voltas', () => {
+    const lapsOn = (geo: typeof long) => estimateLap(geo, DEFAULT_SETUP, null, 'dry', 25, 20).lapsToCliff;
+    const kmOn = (geo: typeof long) => {
+      const e = estimateLap(geo, DEFAULT_SETUP, null, 'dry', 25, 20);
+      return (COEF.cliffAt / e.wearPerLap) * e.lapKm;
+    };
+    expect(lapsOn(short)).toBeGreaterThan(lapsOn(long) * 3);
+    expect(kmOn(long)).toBeCloseTo(kmOn(short), 0);
+    // O número de voltas da corrida não muda o desgaste por volta.
+    expect(estimateLap(long, DEFAULT_SETUP, null, 'dry', 25, 10).wearPerLap).toBeCloseTo(
+      estimateLap(long, DEFAULT_SETUP, null, 'dry', 25, 40).wearPerLap,
+      9,
+    );
+  });
+
+  it('corrida longa (120 km): uma parada só perde para quem para mais vezes', () => {
+    const laps = 20;
+    const car = (id: string, stops: number) => ({
+      id,
+      setup: { ...DEFAULT_SETUP, tyre: 'hard' as const, pitStops: defaultPitStops(laps, ['hard'], stops) },
+      trace: null,
+    });
+    const out = simulateRace({
+      geometry: long,
+      cars: [car('uma', 1), car('tres', 3)],
+      laps,
+      seed: 'longa',
+      weather: { base: 'dry', rainChance: 0, temperature: 25 },
+      randomEvents: { safetyCar: false, oil: false, mechanical: false },
+    });
+    expect(out.results[0]!.id).toBe('tres');
+    expect(stopsNeeded('hard', 120, 1)).toBeGreaterThanOrEqual(3);
+    expect(stopsNeeded('hard', 30, 1)).toBe(1);
   });
 });

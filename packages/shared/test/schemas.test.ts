@@ -79,3 +79,34 @@ describe('corridas longas e parada obrigatória', () => {
     expect(two.every((p) => p.tyre === 'medium')).toBe(true);
   });
 });
+
+describe('paradas pela distância da corrida', () => {
+  it('corridas longas liberam mais paradas que o limite da categoria (uma a cada 20 km, até 8)', async () => {
+    const { maxPitStopsFor, checkSetupLimits } = await import('../src');
+    expect(maxPitStopsFor({ maxPitStops: 1 }, 20, 1500)).toBe(2); // 30 km
+    expect(maxPitStopsFor({ maxPitStops: 1 }, 20, 6000)).toBe(6); // 120 km
+    expect(maxPitStopsFor({ maxPitStops: 3 }, 10, 1000)).toBe(3); // curta: vale a categoria
+    expect(maxPitStopsFor({ maxPitStops: 1 }, 60, 5000)).toBe(8); // teto
+    const cfg = {
+      setupLimits: {
+        allowedTyres: ['soft', 'medium', 'hard', 'wet'],
+        aero: { min: 1, max: 10 },
+        allowedEngines: ['economy', 'balanced', 'power'],
+        maxPitStops: 1,
+      },
+    } as never;
+    const setup = (stops: number) =>
+      ({
+        tyre: 'medium',
+        pitStops: Array.from({ length: stops }, (_, i) => ({ lap: (i + 1) * 3, tyre: 'hard' })),
+        tyrePressure: { front: 23, rear: 23 },
+        aero: 5,
+        engine: 'balanced',
+        gearing: 5,
+        terrainPrep: 'asphalt',
+        weatherBet: 'dry',
+      }) as never;
+    expect(checkSetupLimits(setup(4), cfg, 20)).toContain('No máximo 1 parada(s).');
+    expect(checkSetupLimits(setup(4), cfg, 20, 6000)).toEqual([]);
+  });
+});

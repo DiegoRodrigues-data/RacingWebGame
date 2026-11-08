@@ -30,8 +30,13 @@ export const COEF = {
     hard: { dry: 1.0, wet: 0.63 },
     wet: { dry: 0.9, wet: 0.97 },
   } as Record<Tyre, { dry: number; wet: number }>,
-  /** Desgaste total do composto ao longo de uma corrida completa (1 = vida útil). */
-  raceWear: { soft: 1.2, medium: 0.98, hard: 0.6, wet: 0.7 } as Record<Tyre, number>,
+  /**
+   * Desgaste do composto a cada `wearRefKm` km rodados (1 = vida útil). O desgaste é por distância: numa pista
+   * longa cada volta gasta mais, e uma corrida longa precisa de mais paradas. Com 30 km (corrida típica: 20 voltas
+   * de 1,5 km), o macio perde rendimento por volta de 19 km, o médio 23 km, o duro 37 km e o de chuva 32 km.
+   */
+  tyreWear: { soft: 1.2, medium: 0.98, hard: 0.6, wet: 0.7 } as Record<Tyre, number>,
+  wearRefKm: 30,
   wetTyreOnDryWear: 2.2,
   wearLinearLoss: 0.1,
   cliffAt: 0.75,
@@ -166,7 +171,8 @@ export interface CarModifiers {
   top: Float64Array; // velocidade máxima por amostra (m/s)
   accel: number;
   brakeScale: number;
-  wearPerRace: number;
+  /** Desgaste do pneu por km rodado (1 = vida útil). */
+  wearPerKm: number;
   engineWearPerRace: number;
   failurePerLap: number;
   /** Aderência relativa ao ideal para a condição (para risco de rodada). */
@@ -289,7 +295,7 @@ export function carModifiers(
     top,
     accel: COEF.baseAccel * eng.accel * gearAccel,
     brakeScale: Math.min(1.15, tyreMu * pressureGrip),
-    wearPerRace: COEF.raceWear[tyre] * wearMul,
+    wearPerKm: (COEF.tyreWear[tyre] * wearMul) / COEF.wearRefKm,
     engineWearPerRace: COEF.engineWear[setup.engine] * (1 - COEF.engineGearingWear * gx),
     failurePerLap: eng.failure,
     gripRatio: (tyreMu * pressureGrip * betGrip) / idealTyreMu,
@@ -370,4 +376,17 @@ export function lapProfile(
 /** Deslocamento lateral em metros a partir do offset normalizado. */
 export function lateralMeters(g: TrackGeometry, i: number, d: number): number {
   return d * Math.max(0.5, g.widths[i]! / 2 - CAR_HALF_WIDTH);
+}
+
+/** Km que um composto roda até perder rendimento (o "penhasco"), num carro neutro e pista seca. */
+export function tyreLifeKm(tyre: Tyre): number {
+  return (COEF.cliffAt * COEF.wearRefKm) / COEF.tyreWear[tyre];
+}
+
+/**
+ * Paradas para cobrir `raceKm` com um composto, com `margin` de folga (0,9 = trocar com 10% de vida sobrando).
+ * Usado pelo setup padrão e pelos pilotos simulados; nunca menos que a parada obrigatória.
+ */
+export function stopsNeeded(tyre: Tyre, raceKm: number, minStops: number, margin = 0.9): number {
+  return Math.max(minStops, Math.ceil(raceKm / (tyreLifeKm(tyre) * margin)) - 1);
 }

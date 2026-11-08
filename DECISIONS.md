@@ -320,6 +320,25 @@ Pedido de 07/11/2026 ("ainda vejo um carro passando por cima de outro"). Medido 
   ~4,7 toques por corrida, diferença de 1,1 posição entre faixas do perfil. As ultrapassagens contadas subiram (antes
   boa parte das trocas de posição acontecia "por dentro" do outro carro, sem registro).
 
+### Desgaste dos pneus por distância (simulação v5)
+
+Pedido de 08/11/2026: numa pista de 6 km, uma troca bastava, como numa de 1,5 km. O desgaste era uma fração fixa da
+corrida (o macio gastava 120% da vida numa corrida inteira, fosse ela de 30 ou de 120 km), e o máximo de paradas vinha
+só da categoria (a Copa Novatos permite 1).
+
+- **Desgaste por km**: `COEF.tyreWear` é o desgaste a cada `wearRefKm` (30 km, a corrida típica da grade: 20 voltas de
+  1,5 km). Até perder rendimento (75%): macio ~19 km, médio ~23 km, duro ~37 km, chuva ~32 km, ajustados pelo carro,
+  pelo clima e pelo ritmo do piloto. As voltas que cada um rende saem do tamanho da pista: na de 6 km, o macio dura 3
+  voltas e o duro 6; na de 1,5 km, 12 e 24. O box mostra voltas e km.
+- **Paradas pela distância**: o máximo de paradas é o da categoria ou, em corridas longas, uma a cada 20 km
+  (`maxPitStopsFor`, teto 8). Numa corrida de 120 km, até 6.
+- **Estratégias automáticas**: o setup padrão (quem não configurou) e os pilotos simulados planejam as paradas pela vida
+  do composto (`stopsNeeded`), em vez de sempre 1 ou 2.
+- **Motor**: continua com desgaste por corrida (não por km), para uma corrida longa não virar quebra certa.
+- Conferido: na pista de 6 km com 20 voltas, quem faz 1 parada perde ~1,5 min para quem faz 2 ou 3. Os cenários do
+  `pnpm balance` passaram a ter ~30 km (antes alguns tinham 15 km, curtos demais para o desgaste por distância) e as
+  estratégias sorteadas cumprem a parada obrigatória; o balanceamento segue OK.
+
 ### Pistas do dia
 
 Pedido de 07/11/2026: saber que pista entra em cada horário do dia e ajustar. A página `/admin/pistas-do-dia` mostra o
@@ -336,6 +355,11 @@ dia no horário de Brasília (ontem até 6 dias à frente):
   geração automática (com a chance do rodízio).
 - **Especiais**: as publicadas, com quantas vezes entram no dia e um botão para pôr ou tirar do rodízio (a chance do
   rodízio continua nas configurações).
+
+**Pista descontinuada sai de circulação** (`retireUnpublishedTracks`): na hora em que o admin descontinua e, por
+garantia, na checagem por minuto do motor. Sai do rodízio, as reservas são apagadas e as corridas ainda abertas que a
+usavam passam para uma pista gerada (com o aviso aos inscritos). Corridas em andamento ou encerradas mantêm a pista
+(histórico e replay). Na lista de pistas do admin, as descontinuadas ficam numa aba própria.
 
 Corridas da Corrida Maluca e corridas teste ficam de fora. A categoria de cada horário segue o rodízio da grade
 (`slotCategory`, o mesmo cálculo da criação).

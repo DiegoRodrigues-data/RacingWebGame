@@ -63,7 +63,7 @@ Os pacotes são consumidos direto como TypeScript: o `exports` aponta para `src/
   - `trace.ts`: o traçado do jogador é uma lista de pontos `(s, d)`, com `s` = distância ao longo da linha central e `d` = deslocamento lateral. O arquivo valida o traçado e converte para coordenadas do mundo.
   - O snapshot do hash golden prende o resultado: se mudar o algoritmo, incremente `GENERATOR_VERSION`.
 - `packages/sim`: simulação determinística da corrida.
-  - `model.ts`: coeficientes de pneu, aero, motor e pit em `COEF`.
+  - `model.ts`: coeficientes de pneu, aero, motor e pit em `COEF`. O pneu gasta por km (`tyreWear` a cada `wearRefKm`); o máximo de paradas de uma corrida sai da distância (`maxPitStopsFor` em `shared/setup.ts`).
   - `race.ts`: `simulateRace` e `simulateQualifying`.
   - Os frames saem a 4 Hz.
   - Perfil do piloto (`DriverProfile` em `shared/driver.ts`: ataque, defesa, ritmo) e colisões: `COEF.driver`. As regras do admin (`GameSettings.drivers`) entram como `RaceSimInput.rules` e ficam em `simInput`. A simulação usa `setup.driver ?? profiles.driver ?? driverProfileFor(id)`.

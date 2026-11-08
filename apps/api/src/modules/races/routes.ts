@@ -1,4 +1,12 @@
-import { AppError, DEFAULT_SETUP, LIVE_PHASES, RACE_PHASES, ROOM, type RacePhase } from '@tracado/shared';
+import {
+  AppError,
+  DEFAULT_SETUP,
+  LIVE_PHASES,
+  RACE_PHASES,
+  raceSetupLimits,
+  ROOM,
+  type RacePhase,
+} from '@tracado/shared';
 import { estimateLap } from '@tracado/sim';
 import { offsetsToTrace, suggestedLine } from '@tracado/trackgen';
 import { and, asc, desc, eq, gte, inArray, isNull, notInArray, sql } from 'drizzle-orm';
@@ -126,7 +134,8 @@ export function raceRoutes(app: FastifyInstance, ctx: Ctx) {
     return {
       laps: race.laps,
       weather: race.weather,
-      limits: cat.config.setupLimits,
+      // Máximo de paradas pela distância da corrida (o pneu gasta por km).
+      limits: raceSetupLimits(cat.config.setupLimits, race.laps, g.count * g.ds),
       suggestedTrace: suggested,
       reference: {
         suggestedLapMs: estimateLap(g, DEFAULT_SETUP, suggested, wx, race.weather.temperature, race.laps)
