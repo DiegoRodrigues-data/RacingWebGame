@@ -19,16 +19,35 @@ const STATUS_LABEL: Record<string, string> = {
 export default function AdminTracks() {
   const me = useSession((s) => s.me);
   const qc = useQueryClient();
-  const [kind, setKind] = useState<'special' | 'procedural'>('special');
-  const { data } = useQuery({
+  // Descontinuadas saem das listas: ficam só na aba própria (histórico das corridas que já usaram).
+  const [tab, setTab] = useState<'special' | 'procedural' | 'deprecated'>('special');
+  const kind = tab === 'procedural' ? 'procedural' : 'special';
+  const { data: all } = useQuery({
     queryKey: ['admin-tracks', kind],
     queryFn: () => get<Row[]>(`/admin/tracks?kind=${kind}`),
   });
+  const data = all?.filter((t) => (tab === 'deprecated') === (t.status === 'deprecated'));
   const act = async (id: string, action: string) => {
     try {
-      await post(`/admin/tracks/versions/${id}/${action}`);
-      toast('Pista atualizada', undefined, 'ok');
+      const r = await post<{ retired?: { pool: number; plans: number; races: number } }>(
+        `/admin/tracks/versions/${id}/${action}`,
+      );
+      const out = r.retired;
+      toast(
+        action === 'deprecate' ? 'Pista descontinuada' : 'Pista atualizada',
+        out
+          ? [
+              out.races && `${out.races} corrida(s) aberta(s) passaram para pista gerada`,
+              out.pool && 'saiu do rodízio',
+              out.plans && `${out.plans} reserva(s) cancelada(s)`,
+            ]
+              .filter(Boolean)
+              .join(' · ') || 'Não estava em uso.'
+          : undefined,
+        'ok',
+      );
       void qc.invalidateQueries({ queryKey: ['admin-tracks'] });
+      void qc.invalidateQueries({ queryKey: ['admin-track-day'] });
     } catch (x) {
       toast('Ação recusada', errorMessage(x), 'error');
     }
@@ -43,13 +62,20 @@ export default function AdminTracks() {
       }
     >
       <Tabs
-        value={kind}
-        onChange={setKind}
+        value={tab}
+        onChange={setTab}
         items={[
           { value: 'special', label: 'Especiais' },
           { value: 'procedural', label: 'Procedurais' },
+          { value: 'deprecated', label: 'Descontinuadas' },
         ]}
       />
+      {tab === 'deprecated' && (
+        <p className="mt-3 text-sm text-muted">
+          Fora do rodízio, das reservas e das corridas novas. Ficam aqui pelo histórico das corridas que já
+          usaram.
+        </p>
+      )}
       <ul className="mt-4 grid gap-3 md:grid-cols-2">
         {data?.map((t) => (
           <li key={t.id} className="card">

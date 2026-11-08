@@ -65,7 +65,7 @@ export async function getSettings(ctx: Pick<Ctx, 'db' | 'config' | 'clock'>): Pr
 export async function saveSettings(
   ctx: Pick<Ctx, 'db' | 'config' | 'clock'>,
   value: GameSettings,
-  actorId: string,
+  actorId: string | null,
 ): Promise<GameSettings> {
   const now = new Date(ctx.clock.now());
   await ctx.db

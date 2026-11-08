@@ -40,6 +40,7 @@ import { notify } from '../notifications/service';
 import { closeSeason, rebuildSeason } from '../rankings/service';
 import { capacityOf, createRace, getRaceRow, getSummary, raceSummaries } from '../races/service';
 import { getSettings } from '../settings/service';
+import { retireUnpublishedTracks } from '../schedule/service';
 import * as tracksSvc from '../tracks/service';
 import { eventDtos, publicEvents } from '../events/service';
 
@@ -478,8 +479,10 @@ export function adminRoutes(app: FastifyInstance, ctx: Ctx, engine: PhaseEngine)
     // track_editor cria e submete rascunhos; apenas admin publica, rejeita ou descontinua.
     const u = action === 'submit' ? editor(req) : admin(req);
     const v = await tracksSvc.changeStatus(ctx, id, action, u.id);
-    await audit(ctx, u, `track.version.${action}`, 'track_version', id);
-    return v;
+    // Descontinuada sai de circulação na hora: rodízio, reservas e corridas ainda abertas.
+    const retired = action === 'deprecate' ? await retireUnpublishedTracks(ctx, u.id) : undefined;
+    await audit(ctx, u, `track.version.${action}`, 'track_version', id, retired);
+    return retired ? { ...v, retired } : v;
   });
 
   // ------------------------------------------------------------ Temporadas e rankings

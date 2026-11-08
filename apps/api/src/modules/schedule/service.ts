@@ -21,7 +21,7 @@ import {
 import { autoBiome, autoTrack, gridStep, slotCategory } from '../engine/autoRaces';
 import { notify } from '../notifications/service';
 import { getCategory, getRaceRow, getSummary, raceSummaries, resolveTrackVersion } from '../races/service';
-import { getSettings } from '../settings/service';
+import { getSettings, saveSettings } from '../settings/service';
 
 /** Horário de Brasília (UTC−3, sem horário de verão desde 2019). */
 const BRT_OFFSET_MS = 3 * 3_600_000;
@@ -210,7 +210,12 @@ export async function planSlot(ctx: Ctx, at: number, versionId: string | null, a
  * automaticamente. O cenário é sorteado de novo (compatível com o terreno), os traçados salvos são apagados (eram
  * da outra pista) e quem está inscrito é avisado.
  */
-export async function changeRaceTrack(ctx: Ctx, raceId: string, versionId: string | null, actorId: string) {
+export async function changeRaceTrack(
+  ctx: Ctx,
+  raceId: string,
+  versionId: string | null,
+  actorId: string | null,
+) {
   const st = await getSettings(ctx);
   const before = await getRaceRow(ctx.db, raceId);
   const cat = await getCategory(ctx.db, before.categoryId);
@@ -271,4 +276,54 @@ export async function changeRaceTrack(ctx: Ctx, raceId: string, versionId: strin
     { raceId, raceName: s.name, trackName: s.track.name },
   );
   return { ...res, race: s };
+}
+
+/**
+ * Pistas que não estão mais publicadas (descontinuadas) saem de circulação: do rodízio da grade, das reservas e
+ * das corridas ainda abertas (que passam para uma pista gerada, com aviso aos inscritos). Corridas em andamento ou
+ * encerradas mantêm a pista (histórico e replay). Idempotente: roda ao descontinuar e na checagem por minuto do
+ * motor (cobre o que já estava descontinuado antes).
+ */
+export async function retireUnpublishedTracks(ctx: Ctx, actorId: string | null = null) {
+  const st = await getSettings(ctx);
+  let pool = 0;
+  if (st.tracks.pool.length) {
+    const ok = new Set(
+      (
+        await ctx.db
+          .select({ id: trackVersions.id })
+          .from(trackVersions)
+          .where(and(inArray(trackVersions.id, st.tracks.pool), eq(trackVersions.status, 'published')))
+      ).map((r) => r.id),
+    );
+    const keep = st.tracks.pool.filter((id) => ok.has(id));
+    pool = st.tracks.pool.length - keep.length;
+    if (pool) await saveSettings(ctx, { ...st, tracks: { ...st.tracks, pool: keep } }, actorId);
+  }
+  const plans = await ctx.db
+    .delete(trackPlans)
+    .where(sql`${trackPlans.trackVersionId} in (select id from track_versions where status <> 'published')`)
+    .returning({ at: trackPlans.slotAt });
+  const open = await ctx.db
+    .select({ id: races.id, lock: races.setupLockAt })
+    .from(races)
+    .innerJoin(trackVersions, eq(trackVersions.id, races.trackVersionId))
+    .innerJoin(tracks, eq(tracks.id, trackVersions.trackId))
+    .where(
+      and(
+        inArray(races.status, [...OPEN]),
+        isNull(races.crazyGroupId),
+        eq(tracks.kind, 'special'),
+        sql`${trackVersions.status} <> 'published'`,
+      ),
+    );
+  let swapped = 0;
+  for (const r of open) {
+    if (ctx.clock.now() >= r.lock.getTime() - CHANGE_LOCK_MS) continue;
+    await changeRaceTrack(ctx, r.id, null, actorId);
+    swapped++;
+  }
+  if (pool || plans.length || swapped)
+    ctx.log.info({ pool, plans: plans.length, swapped }, 'Pistas descontinuadas tiradas de circulação');
+  return { pool, plans: plans.length, races: swapped };
 }

@@ -136,4 +136,41 @@ describe('pistas do dia', () => {
   });
 });
 
+describe('pista descontinuada', () => {
+  it('sai do rodízio, das reservas e das corridas abertas (que passam para uma gerada)', async () => {
+    const mk = await t.json('POST', '/admin/tracks', { name: 'Vai Sair', editor: SPECIAL_TRACK }, t.admin);
+    const vid = mk.body.id;
+    await t.json('POST', `/admin/tracks/versions/${vid}/publish`, {}, t.admin);
+    await t.json('PUT', '/admin/track-day/pool', { trackVersionId: vid, inPool: true }, t.admin);
+    const now = t.clock.now();
+    const step = 3_600_000;
+    const far = Math.ceil((now + 30 * step) / step) * step;
+    await t.json('PUT', `/admin/track-day/slots/${iso(far)}`, { trackVersionId: vid }, t.admin);
+    // Uma corrida aberta (hoje ou amanhã, no horário de Brasília).
+    let d = '';
+    let open: any;
+    for (const k of [0, 1]) {
+      d = new Date(now - 3 * step + k * 86_400_000).toISOString().slice(0, 10);
+      open = (await day(d)).body.slots.find((s: any) => s.editable && s.race);
+      if (open) break;
+    }
+    await t.json('PUT', `/admin/races/${open.race.id}/track`, { trackVersionId: vid }, t.admin);
+    expect((await t.race(open.race.id)).track.versionId).toBe(vid);
+
+    const dep = await t.json('POST', `/admin/tracks/versions/${vid}/deprecate`, {}, t.admin);
+    expect(dep.body.status).toBe('deprecated');
+    expect(dep.body.retired).toEqual({ pool: 1, plans: 1, races: 1 });
+    expect((await t.race(open.race.id)).track.versionId).not.toBe(vid);
+    const settings = (await t.json('GET', '/admin/settings', undefined, t.admin)).body.settings;
+    expect(settings.tracks.pool).not.toContain(vid);
+    const farSlot = (await day(new Date(far - 3 * step).toISOString().slice(0, 10))).body.slots.find(
+      (s: any) => s.at === iso(far),
+    );
+    expect(farSlot.plan).toBeNull();
+    expect((await day(d)).body.specials.some((s: any) => s.versionId === vid)).toBe(false);
+    // Idempotente: rodar de novo não acha mais nada.
+    await t.advance(61_000);
+  });
+});
+
 void T0;

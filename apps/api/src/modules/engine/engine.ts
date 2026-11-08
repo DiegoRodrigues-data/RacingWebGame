@@ -17,6 +17,7 @@ import { getRaceRow, listEntries, raceSummaries, timelineOf, type RaceRow } from
 import { getSettings } from '../settings/service';
 import { planBotEntries, planOpenAutoRaces, runBotPlans } from '../bots/service';
 import { ensureAutoRaces, ensureAutoTestRaces } from './autoRaces';
+import { retireUnpublishedTracks } from '../schedule/service';
 import { fillBots, fillCrazyBots, prepareBots } from './bots';
 import { forgetQualiLive, qualifyingRows } from './qualiLive';
 import {
@@ -97,6 +98,8 @@ export class PhaseEngine {
         if (created) for (const r of await this.dueRaces()) await this.advance(r);
         // Pilotos simulados ligados com a grade já aberta: planeja as corridas que ficaram sem plano.
         await planOpenAutoRaces(this.ctx);
+        // Pistas descontinuadas saem do rodízio, das reservas e das corridas ainda abertas.
+        await retireUnpublishedTracks(this.ctx);
       }
       await this.broadcastPlayback();
     } catch (e) {
