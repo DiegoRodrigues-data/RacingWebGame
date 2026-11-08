@@ -16,11 +16,13 @@ import { Link, useParams } from 'react-router';
 import { CarWearPanel, TyreWearMini } from '../components/CarWear';
 import { Minimap, RainOverlay } from '../components/Minimap';
 import { QualifyingLive } from '../components/QualifyingLive';
+import { Speedometer, type SpeedometerHandle } from '../components/Speedometer';
 import { CameraControls, TrackCanvas } from '../components/TrackCanvas';
 import { Countdown, Empty, PhaseBadge, Spinner } from '../components/ui';
 import { CAR_CSS } from '../game/assets';
 import { audio } from '../game/audio';
 import { FrameBuffer, type CarState } from '../game/playback';
+import { SpeedTracker } from '../game/speed';
 import type { TrackScene } from '../game/scene';
 import { get } from '../lib/api';
 import { WEATHER_ICON } from '../lib/format';
@@ -92,7 +94,8 @@ export default function Live({ mode }: { mode: 'live' | 'replay' }) {
   const [playing, setPlaying] = useState(true);
   const [rate, setRate] = useState(4);
   const replayT = useRef(0);
-  const lastPos = useRef<{ i: number; x: number; y: number; t: number } | null>(null);
+  const speed = useRef(new SpeedTracker());
+  const speedo = useRef<SpeedometerHandle>(null);
   const [scrub, setScrub] = useState(0);
 
   const needReplay =
@@ -191,17 +194,14 @@ export default function Live({ mode }: { mode: 'live' | 'replay' }) {
       } else t = (realtime.clock.now() - LIVE_DELAY_MS - meta.startedAt) * meta.speed;
       const states = buffer.current.sample(Math.max(0, t), cars.length);
       if (!states) return;
-      // Som do motor do carro em foco: velocidade pela distância percorrida entre quadros (tempo simulado).
+      // Carro em foco (o seguido, o seu ou o líder): som do motor e velocímetro, pela distância entre quadros.
       let fi = cars.findIndex((c) => c.userId === (follow ?? me?.id));
       if (fi < 0) fi = states.reduce((best, s, i) => (s.progress > states[best]!.progress ? i : best), 0);
       soundFocus.current = cars[fi]?.userId ?? null;
       const fs = states[fi]!;
-      const prev = lastPos.current;
-      if (prev && prev.i === fi && t > prev.t) {
-        const v = Math.hypot(fs.x - prev.x, fs.y - prev.y) / ((t - prev.t) / 1000);
-        audio.engineSpeed(v / 60, fs.status === 0 && (mode === 'live' || playing));
-      }
-      lastPos.current = { i: fi, x: fs.x, y: fs.y, t };
+      const v = speed.current.push(cars[fi]?.userId ?? '', fs.x, fs.y, t);
+      if (v !== null) audio.engineSpeed(v / 60, fs.status === 0 && (mode === 'live' || playing));
+      speedo.current?.show(speed.current.kmh, fs.status);
       scene.setCars(
         cars.map((c, i) => ({
           id: c.userId,
@@ -374,6 +374,13 @@ export default function Live({ mode }: { mode: 'live' | 'replay' }) {
                 highlight={follow}
               />
             </div>
+          )}
+          {standings.length > 0 && (
+            <Speedometer
+              ref={speedo}
+              className="absolute right-3 top-3"
+              caption={focus ? `P${focusPos + 1} · #${focus.car.carNumber} ${focus.car.nickname}` : undefined}
+            />
           )}
           {waiting && (
             <div className="absolute inset-0 grid place-items-center bg-night/60 text-center backdrop-blur-sm">

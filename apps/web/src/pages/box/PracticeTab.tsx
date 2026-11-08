@@ -21,6 +21,8 @@ import { CAR_CSS } from '../../game/assets';
 import { FrameBuffer } from '../../game/playback';
 import type { CarView, TrackScene } from '../../game/scene';
 import { WEATHER_ICON, WEATHER_LABEL } from '../../lib/format';
+import { Speedometer, type SpeedometerHandle } from '../../components/Speedometer';
+import { SpeedTracker } from '../../game/speed';
 import { speedColors, useRaceDriver, type PracticeInfo } from './common';
 
 interface PracticeCar {
@@ -98,6 +100,8 @@ export function PracticeTab({
   const [follow, setFollow] = useState(true);
   const [, setTick] = useState(0);
   const anim = useRef<Anim>({ kind: 'idle' });
+  const speed = useRef(new SpeedTracker());
+  const speedo = useRef<SpeedometerHandle>(null);
   const trace = useMemo(() => offsetsToTrace(offsets, 256), [offsets]);
   const driver = useRaceDriver(setup);
   const est = useMemo(
@@ -151,7 +155,10 @@ export function PracticeTab({
       });
       if (a.kind === 'lap') {
         a.t = Math.min(a.lap.t[a.lap.t.length - 1]!, a.t + dt * a.rate);
-        scene.setCars([view(m, lapPose(a.lap, a.t))]);
+        const pose = lapPose(a.lap, a.t);
+        scene.setCars([view(m, pose)]);
+        speed.current.push('voce', pose.x, pose.y, a.t);
+        speedo.current?.show(speed.current.kmh, 0);
         const total = a.lap.t[a.lap.t.length - 1]!;
         if (a.t >= total) {
           const lapMs = Math.round(total);
@@ -163,7 +170,12 @@ export function PracticeTab({
       } else if (a.kind === 'race') {
         if (a.playing) a.t = Math.min(a.durationMs, a.t + dt * a.rate);
         const st = a.buf.sample(a.t, a.cars.length);
-        if (st) scene.setCars(a.cars.map((c, i) => view(c, st[i]!, st[i]!.status)));
+        if (st) {
+          scene.setCars(a.cars.map((c, i) => view(c, st[i]!, st[i]!.status)));
+          // O seu carro é o primeiro da lista.
+          speed.current.push('voce', st[0]!.x, st[0]!.y, a.t);
+          speedo.current?.show(speed.current.kmh, st[0]!.status);
+        }
       } else scene.setCars([view(m, idlePose)]);
       acc += dt;
       if (acc > 120) {
@@ -307,6 +319,13 @@ export function PracticeTab({
             ) : undefined
           }
         />
+        {a.kind !== 'idle' && (
+          <Speedometer
+            ref={speedo}
+            className="absolute right-3 top-3"
+            caption={a.kind === 'race' && myPos >= 0 ? `P${myPos + 1} · seu carro` : 'Seu carro'}
+          />
+        )}
         <div className="pointer-events-none absolute left-3 top-3 flex flex-col gap-2">
           {a.kind === 'lap' ? (
             <div className="rounded-2xl bg-night/85 px-3 py-2 backdrop-blur">

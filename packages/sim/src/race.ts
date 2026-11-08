@@ -40,7 +40,7 @@ import {
  * 2: desgaste de pneu com variação sorteada por stint, desgaste do motor e os dois nos frames.
  * 3: perfil do piloto (ataque, defesa, ritmo), colisões e carros lado a lado nas disputas.
  */
-export const SIM_VERSION = 3;
+export const SIM_VERSION = 4;
 export const FRAME_HZ = 4;
 const DT = 0.25;
 
@@ -146,6 +146,11 @@ interface CarState {
   drv: DriverTraits;
   /** Carro avariado num toque: mais lento até a parada obrigatória no fim da volta. */
   damaged: boolean;
+  /** Só desenho: quanto o carro está fora da própria linha (m) para não ficar em cima de outro. */
+  side: number;
+  /** Ultrapassagem em andamento: índice do carro que está sendo passado e até quando a manobra pode durar. */
+  passing: number | null;
+  passUntil: number;
 }
 
 function pitLoss(laps: number): number {
@@ -230,6 +235,9 @@ export function simulateRace(input: RaceSimInput): RaceSimOutput {
       lastAttempt: -10,
       drv: driverTraits(car.driver, rules),
       damaged: false,
+      side: 0,
+      passing: null,
+      passUntil: 0,
     };
     void slot;
     buildProfile(s);
@@ -270,9 +278,28 @@ export function simulateRace(input: RaceSimInput): RaceSimOutput {
       return fb - fa || a.idx - b.idx;
     });
 
-  /** Separação lateral mínima entre dois carros lado a lado (m) e alcance longitudinal da disputa (m). */
-  const SIDE_GAP = CAR_HALF_WIDTH * 2 + 0.5;
-  const SIDE_REACH = 8;
+  /**
+   * Desenho dos carros (não muda a corrida: a ordem, os tempos e as ultrapassagens já foram decididos).
+   * - Dois carros que vão ficar a menos de um carro de distância (olhando LOOKAHEAD s à frente pela velocidade de
+   *   aproximação) se afastam para os lados até SIDE_GAP; o lado de cada um se mantém durante toda a disputa.
+   * - O afastamento muda no máximo LAT_SPEED m/s, então de um quadro para o outro ninguém atravessa ninguém.
+   * - Quem abandona sai da pista; nos boxes, cada carro tem a sua vaga.
+   */
+  const SIDE_GAP = CAR_HALF_WIDTH * 2 + 1;
+  const CAR_LEN = 5.6;
+  const LOOKAHEAD = 0.8;
+  const LAT_SPEED = 8;
+  const FRAME_DT = 1 / FRAME_HZ;
+  const lane = g.pit.lane;
+  const laneN = lane.length / 2;
+  const pitSlot = (idx: number) => {
+    // Vagas espalhadas pelo trecho reto da via dos boxes.
+    const u = 0.15 + (0.7 * (idx + 0.5)) / cars.length;
+    const a = Math.max(0, Math.min(laneN - 2, Math.floor(u * (laneN - 1))));
+    const x = lane[a * 2]!,
+      y = lane[a * 2 + 1]!;
+    return { x, y, heading: Math.atan2(lane[a * 2 + 3]! - y, lane[a * 2 + 2]! - x) };
+  };
   const recordFrame = () => {
     const c: number[] = [];
     // Posição de cada carro na própria linha (amostra, fração e deslocamento lateral em metros).
@@ -282,37 +309,72 @@ export function simulateRace(input: RaceSimInput): RaceSimOutput {
         j = (i + 1) % n,
         t = f - i;
       const traceLat = lateralMeters(g, i, s.offsets[i]! + (s.offsets[j]! - s.offsets[i]!) * t);
-      let lat = traceLat;
+      let base = traceLat;
       if (s.total < 12) {
         const back = (10 + Math.floor(s.idx / 2) * 8 + (s.idx % 2) * 4) / g.ds;
         const a = Math.max(0, Math.min(1, (s.total + back) / (back + 12)));
-        lat = s.gridLat * (1 - a) + traceLat * a;
+        base = s.gridLat * (1 - a) + traceLat * a;
       }
-      return { f, i, j, t, lat };
+      const usable = Math.max(0.5, g.widths[i]! / 2 - CAR_HALF_WIDTH);
+      return { f, i, j, t, base, usable, side: s.side, near: false, lat: 0 };
     });
-    // Lado a lado: quem chega por trás sai da linha do carro da frente para o lado com mais espaço. Só desenho; a
-    // ordem, os tempos e as ultrapassagens já foram decididos.
+    const clampLat = (k: number, v: number) => Math.max(-pos[k]!.usable, Math.min(pos[k]!.usable, v));
+    // Na pista: correndo, depois da bandeirada e quem acabou de abandonar e ainda não saiu do traçado.
     const onTrack = cars
-      .map((s, k) => k)
-      .filter((k) => cars[k]!.status === 'running' && cars[k]!.total > 0)
-      .sort((a, b) => pos[b]!.f - pos[a]!.f);
+      .map((_, k) => k)
+      .filter((k) => {
+        const st = cars[k]!.status;
+        if (st === 'dnf') return Math.abs(pos[k]!.base + pos[k]!.side) < pos[k]!.usable + CAR_HALF_WIDTH;
+        return st === 'running' || st === 'finished';
+      })
+      .sort((a, b) => pos[b]!.f - pos[a]!.f || a - b);
+    // Pares que vão se encontrar: o da frente (A) e os que vêm logo atrás (B), até a distância passar do alcance.
+    const pairs: [number, number][] = [];
     for (let x = 0; x < onTrack.length; x++)
-      for (let y = 1; y <= 3 && y < onTrack.length; y++) {
+      for (let y = 1; y <= 8 && y < onTrack.length; y++) {
         const ka = onTrack[x]!,
           kb = onTrack[(x + y) % onTrack.length]!;
-        if (ka === kb) continue;
+        const dist = ((((pos[ka]!.f - pos[kb]!.f) % n) + n) % n) * g.ds;
+        if (dist > CAR_LEN + 60 * LOOKAHEAD) break;
+        const closing = Math.max(0, cars[kb]!.v - cars[ka]!.v);
+        if (dist - closing * LOOKAHEAD < CAR_LEN) pairs.push([ka, kb]);
+      }
+    // Algumas passadas de relaxamento: cada par em conflito se afasta, cada um metade (ou tudo, se o outro abandonou
+    // ou está encostado na borda). O lado de cada um segue a posição atual, então ninguém troca de lado no meio.
+    for (let it = 0; it < 8; it++)
+      for (const [ka, kb] of pairs) {
         const A = pos[ka]!,
           B = pos[kb]!;
-        const dist = ((((A.f - B.f) % n) + n) % n) * g.ds;
-        if (dist > SIDE_REACH) continue;
-        if (Math.abs(A.lat - B.lat) >= SIDE_GAP) continue;
-        const usable = Math.max(0.5, g.widths[B.i]! / 2 - CAR_HALF_WIDTH);
-        let side = A.lat > 0 ? -1 : 1;
-        if (Math.abs(A.lat + side * SIDE_GAP) > usable) side = -side;
-        const target = Math.max(-usable, Math.min(usable, A.lat + side * SIDE_GAP));
-        const w = Math.max(0, Math.min(1, (SIDE_REACH - dist) / 4));
-        B.lat += (target - B.lat) * w;
+        A.near = B.near = true;
+        const la = clampLat(ka, A.base + A.side),
+          lb = clampLat(kb, B.base + B.side);
+        const gap = Math.abs(la - lb);
+        if (gap >= SIDE_GAP) continue;
+        // Empate: quem está mais à frente na corrida (o que dá a volta, por exemplo) fica com o lado positivo, então
+        // uma fila de retardatários fica toda de um lado e a dos líderes do outro.
+        const dir = la > lb ? 1 : la < lb ? -1 : cars[ka]!.total >= cars[kb]!.total ? 1 : -1;
+        const need = SIDE_GAP - gap;
+        const aOut = cars[ka]!.status === 'dnf',
+          bOut = cars[kb]!.status === 'dnf';
+        const shareA = aOut ? 0 : bOut ? need : need / 2;
+        const na = clampLat(ka, la + dir * shareA);
+        const nb = clampLat(kb, lb - dir * (need - Math.abs(na - la)));
+        A.side = na - A.base;
+        B.side = nb - B.base;
       }
+    cars.forEach((s, k) => {
+      const P = pos[k]!;
+      let target: number;
+      if (s.status === 'pit') target = 0;
+      else if (s.status === 'dnf') {
+        // Encosta fora da pista, do lado em que estava.
+        const side = P.base + s.side >= 0 ? 1 : -1;
+        target = side * (g.widths[P.i]! / 2 + 3) - P.base;
+      } else target = P.near ? P.side : 0;
+      const step = LAT_SPEED * FRAME_DT;
+      s.side = s.status === 'pit' ? 0 : s.side + Math.max(-step, Math.min(step, target - s.side));
+      P.lat = s.status === 'dnf' ? P.base + s.side : clampLat(k, P.base + s.side);
+    });
     cars.forEach((s, k) => {
       const { i, j, t, lat } = pos[k]!;
       const lerp = (arr: number[], q: number) => arr[i * 2 + q]! + (arr[j * 2 + q]! - arr[i * 2 + q]!) * t;
@@ -322,13 +384,7 @@ export function simulateRace(input: RaceSimInput): RaceSimOutput {
         g.points[j * 2 + 1]! - g.points[i * 2 + 1]!,
         g.points[j * 2]! - g.points[i * 2]!,
       );
-      if (s.status === 'pit') {
-        // Parado no box, ao lado da linha de largada.
-        const q = Math.round((n - g.pit.entryIndex) % n) * 2;
-        x = g.pit.lane[q] ?? x;
-        y = g.pit.lane[q + 1] ?? y;
-        heading = Math.atan2(g.points[3]! - g.points[1]!, g.points[2]! - g.points[0]!);
-      }
+      if (s.status === 'pit') ({ x, y, heading } = pitSlot(s.idx));
       const status = CAR_STATUS[s.status];
       c.push(
         Math.round(x * 10) / 10,
@@ -501,40 +557,54 @@ export function simulateRace(input: RaceSimInput): RaceSimOutput {
       let adv = (s.v * DT) / g.ds;
       // Interação com o carro à frente na ordem de corrida.
       const ahead = k > 0 ? ord[k - 1]! : null;
+      // Depois da bandeirada, o carro segue quem está à frente na volta de desaceleração (sem ultrapassar); quem
+      // ainda corre passa direto por quem já terminou.
       if (
         ahead &&
         ahead.status !== 'dnf' &&
         ahead.status !== 'pit' &&
-        s.status === 'running' &&
-        ahead.status !== 'finished'
+        (s.status === 'running' ? ahead.status !== 'finished' : s.status === 'finished')
       ) {
+        // O carro da frente já andou neste passo (a ordem é processada do líder para trás): `gap` já é a distância
+        // depois do movimento dele.
         const gap = ahead.total - s.total;
-        const newGap = gap - adv + (ahead.v * DT) / g.ds;
         const minGap = 6 / g.ds;
-        if (newGap < minGap && gap >= 0) {
+        if (gap - adv < minGap && gap >= 0) {
           const lapped =
             ahead.total < s.total - n * 0.5 || Math.floor(ahead.total / n) < Math.floor(s.total / n);
-          let pass = lapped;
+          // Manobra já ganha: segue lado a lado, um pouco mais rápido (vácuo), até passar ou esgotar o tempo.
+          let pass = lapped || (s.passing === ahead.idx && time < s.passUntil);
           // Quem ataca mais tenta mais vezes.
-          const cooldown = 2 * (1 - D.attackCooldown * s.drv.attack);
-          if (!pass && scUntilLap === null && time - s.lastAttempt > cooldown && s.total > 0) {
-            s.lastAttempt = time;
+          const cooldown = D.attackInterval * (1 - D.attackCooldown * s.drv.attack);
+          if (
+            !pass &&
+            s.status === 'running' &&
+            scUntilLap === null &&
+            time - s.lastAttempt > cooldown &&
+            s.total > 0
+          ) {
             const fi = Math.floor(f);
             const straight = Math.abs(s.curvature[fi]!) < 1 / 150 ? 1 : 0;
-            // O paciente prefere esperar a reta.
+            // Vantagem de quem vem atrás: ritmo de volta (fração) e velocidade possível neste ponto.
+            const lapAdv = (ahead.profile.lapTime - s.profile.lapTime) / ahead.profile.lapTime;
+            const speedAdv = (target - ahead.v) / Math.max(10, ahead.v);
+            // Sem vantagem nenhuma, só o agressivo arrisca; o paciente espera a reta.
+            const reason =
+              lapAdv > D.attackLapEdge || speedAdv > D.attackSpeedEdge || (straight && s.drv.attack > 0);
             const waits = !straight && s.drv.attack < 0 && rng.next() < -s.drv.attack * D.attackPatience;
-            if (!waits) {
+            if (reason && !waits) {
+              s.lastAttempt = time;
               const lap = Math.max(1, Math.floor(s.total / n) + 1);
               const lateralSep = Math.abs(s.offsets[fi]! - ahead.offsets[fi]!);
-              const dv = (s.v - ahead.v) / Math.max(10, ahead.v);
               const p = Math.max(
-                0.04,
+                0.02,
                 Math.min(
-                  0.85,
-                  0.08 +
-                    dv * 2.5 +
-                    lateralSep * 0.25 +
-                    straight * 0.2 +
+                  0.75,
+                  D.passBase +
+                    Math.max(0, lapAdv) * D.passLapAdv +
+                    Math.max(0, speedAdv) * D.passSpeedAdv +
+                    lateralSep * 0.15 +
+                    straight * D.passStraight +
                     (ahead.wear - s.wear) * 0.3 +
                     D.attackPass * s.drv.attack -
                     D.defensePass * ahead.drv.defense,
@@ -555,7 +625,9 @@ export function simulateRace(input: RaceSimInput): RaceSimOutput {
               if (collisionP > 0 && rng.chance(collisionP)) collide(s, ahead, lap);
               else {
                 pass = rng.chance(p);
-                if (pass)
+                if (pass) {
+                  s.passing = ahead.idx;
+                  s.passUntil = time + D.passMaxTime;
                   incidents.push({
                     t: Math.round(time * 1000),
                     userId: s.car.id,
@@ -563,13 +635,15 @@ export function simulateRace(input: RaceSimInput): RaceSimOutput {
                     lap,
                     detail: ahead.car.id,
                   });
+                }
                 // Fechar a porta custa tempo a quem defende.
                 else if (ahead.drv.defense > 0) ahead.v *= 1 - D.defenseCost * ahead.drv.defense;
               }
             }
           }
+          if (pass && !lapped) s.v = Math.max(s.v, ahead.v + D.passSpeed);
           if (!pass) {
-            adv = Math.max(0, gap + (ahead.v * DT) / g.ds - minGap);
+            adv = Math.max(0, Math.min(adv, gap - minGap));
             s.v = Math.min(s.v, ahead.v);
           }
         }

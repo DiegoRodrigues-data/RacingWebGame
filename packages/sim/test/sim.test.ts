@@ -130,7 +130,8 @@ describe('perfil do piloto e colisões', () => {
     expect(dmg.length).toBeGreaterThan(0);
     for (const d of dmg.filter((i) => i.detail === 'dnf'))
       expect(out.results.find((r) => r.id === d.userId)!.dnfReason).toBe('collision');
-    for (const d of dmg.filter((i) => i.detail === 'pit')) {
+    // Avaria antes da última volta: o carro para nos boxes para consertar (na última, termina como está).
+    for (const d of dmg.filter((i) => i.detail === 'pit' && i.lap < 8)) {
       const r = out.results.find((x) => x.id === d.userId)!;
       if (r.status === 'finished') expect(r.pitStops).toBeGreaterThan(0);
     }
@@ -159,6 +160,30 @@ describe('perfil do piloto e colisões', () => {
     }
     expect(close).toBeGreaterThan(0);
     expect(overlapped / close).toBeLessThan(0.05);
+  });
+
+  it('ninguém passa por cima de ninguém: carros correndo ficam a mais de meio carro, nos boxes cada um na sua vaga', () => {
+    const out = simulateRace(brawl(80, 60));
+    let pairs = 0,
+      inside = 0,
+      pitShared = 0;
+    for (const f of out.frames.slice(40)) {
+      const cs = decodeFrame(f);
+      for (let a = 0; a < cs.length; a++)
+        for (let b = a + 1; b < cs.length; b++) {
+          const A = cs[a]!,
+            B = cs[b]!;
+          const d = Math.hypot(A.x - B.x, A.y - B.y);
+          if (A.status === 0 && B.status === 0) {
+            pairs++;
+            if (d < 2.4) inside++;
+          }
+          if (A.status === 1 && B.status === 1 && d < 4) pitShared++;
+        }
+    }
+    expect(pairs).toBeGreaterThan(0);
+    expect(inside / pairs).toBeLessThan(0.0005);
+    expect(pitShared).toBe(0);
   });
 });
 

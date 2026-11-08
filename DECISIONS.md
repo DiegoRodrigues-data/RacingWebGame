@@ -296,6 +296,37 @@ horários. Outros ajustes:
 - Na Corrida Maluca, "Estou pronto" e "Largar agora" valem com as inscrições abertas, só para a próxima etapa do grupo.
 - A aba "Treino" do box virou "Teste": o teste de volta e de corrida contra fantasmas, que roda no aparelho, continua lá.
 
+### Física das disputas e carros sem sobreposição (simulação v4)
+
+Pedido de 07/11/2026 ("ainda vejo um carro passando por cima de outro"). Medido com corridas de 22 carros, quadro a quadro:
+
+- **Distância para o carro da frente**: a regra de seguir somava de novo o deslocamento do carro da frente, que já tinha
+  andado naquele passo. Quem vinha atrás terminava de 0 a 4 m do outro (centro a centro, carros de 5 m) e, em alta
+  velocidade, até passava à frente sem ultrapassagem registrada. Corrigido: o carro preso fica a 6 m (96% dos bloqueios
+  terminavam sobrepostos; agora 4%, nos encontros em curva).
+- **Ultrapassagem como manobra**: antes, a tentativa bem-sucedida liberava o carro por um passo (0,25 s) e ele atravessava
+  o outro. Agora a manobra dura até `passMaxTime` (6 s), lado a lado, com `passSpeed` (2 m/s) de vácuo. Só tenta quem
+  tem ritmo de volta melhor (`attackLapEdge`), velocidade a mais naquele ponto (`attackSpeedEdge`) ou, sem vantagem, o
+  agressivo na reta. A chance de completar vem da vantagem (`passLapAdv`, `passSpeedAdv`), da reta e do perfil.
+- **Desenho** (não muda o resultado): cada carro tem um afastamento lateral persistente. Dois carros que vão ficar a
+  menos de um carro de distância (olhando 0,8 s à frente) se afastam até 3,4 m entre centros, cada um para o lado em que
+  já está, e o afastamento muda no máximo 8 m/s, então ninguém troca de lado de um quadro para o outro. Retardatários e
+  líderes intercalados (safety car) ficam em filas, uma de cada lado.
+- **Boxes**: cada carro tem a sua vaga na via dos boxes (antes todos eram desenhados no mesmo ponto).
+- **Abandono**: o carro encosta fora da pista, do lado em que estava.
+- **Bandeirada**: na volta de desaceleração, o carro segue quem está à frente em vez de atravessá-lo.
+- **Resultado**: sobreposições entre carros correndo caíram de ~8.500 para ~70 pares em 6 corridas (o que sobra é
+  encosto leve na interpolação em linha reta entre quadros nas curvas). Rebalanceado com `pnpm balance`:
+  ~4,7 toques por corrida, diferença de 1,1 posição entre faixas do perfil. As ultrapassagens contadas subiram (antes
+  boa parte das trocas de posição acontecia "por dentro" do outro carro, sem registro).
+
+### Velocímetro
+
+Na corrida ao vivo, no replay e no teste do box, canto superior direito da pista. Mostra o carro em foco (o seguido, o
+seu ou o líder), o mesmo do som do motor. A velocidade sai da distância entre as posições desenhadas em tempo simulado
+(`game/speed.ts`), suavizada porque os frames chegam a 4 Hz, e o número é escrito direto no DOM ~10 vezes por segundo.
+Nos boxes mostra "box"; depois do abandono, "fora".
+
 ## Riscos técnicos
 
 - **Determinismo de ponto flutuante entre motores JS**: `Math.sin/cos/atan2` podem divergir no último bit entre V8, SpiderMonkey e JavaScriptCore. Mitigação: o servidor é a única autoridade sobre resultados; o cliente recebe a geometria pronta do servidor (não a regenera); hashes usam valores quantizados. Verificado: Chromium = Node (teste E2E). Firefox e Safari não foram testados.

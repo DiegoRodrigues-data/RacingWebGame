@@ -20,7 +20,10 @@ test('capturas de tela para revisão visual', async ({ page, request }) => {
   await page.screenshot({ path: `${OUT}/05-box-setup.png` });
   await page.goto(`/corridas/${id}/box?aba=treino`);
   await page.waitForTimeout(1500);
-  await page.getByRole('button', { name: /Corrida de teste/ }).click();
+  await page
+    .getByRole('button', { name: /Corrida de teste/ })
+    .first()
+    .click();
   await page.getByRole('button', { name: /Volta de treino/ }).click();
   await page.waitForTimeout(800);
   await page.screenshot({ path: `${OUT}/06-box-treino.png` });

@@ -370,6 +370,14 @@ Fecha o ciclo de vida com resultados persistidos.
 - [x] Sem etapa de treino: 0 min por padrão, preparação da inscrição ao parque fechado; Corrida Maluca com "Estou pronto" nas inscrições abertas
 - [ ] Acompanhar em produção: carros por corrida, toques e abandonos por toque, e ajustar no admin se precisar
 
+## Fase 24 — Física das disputas e velocímetro
+
+- [x] Distância mínima para o carro da frente corrigida (o carro de trás ficava sobreposto ou passava por dentro)
+- [x] Ultrapassagem como manobra de alguns segundos, lado a lado, guiada pela vantagem de ritmo
+- [x] Desenho sem sobreposição: afastamento lateral persistente, vaga própria nos boxes, abandonado fora da pista, fila na volta de desaceleração
+- [x] Rebalanceamento (`pnpm balance`) e `SIM_VERSION` 4
+- [x] Velocímetro digital na corrida ao vivo, no replay e no teste do box
+
 ---
 
 ## Ordem recomendada (próximos passos)

@@ -74,27 +74,42 @@ export const COEF = {
    * Perfil do piloto (ataque, defesa e ritmo, cada um de −1 a 1 depois do peso das configurações) e colisões.
    * - Ritmo: ±`paceSpeed` de velocidade, ±`paceWear` de desgaste de pneu; com ritmo alto, mais rodadas e mais erro na
    *   volta de classificação; com ritmo baixo, menos rodadas.
-   * - Ataque: intervalo entre tentativas de ultrapassagem `2 s × (1 − attackCooldown × ataque)`, chance de passar
-   *   ±`attackPass`, desgaste de pneu por tentativa. O paciente espera a reta.
+   * - Ataque: intervalo entre tentativas de ultrapassagem `attackInterval × (1 − attackCooldown × ataque)`, chance
+   *   de passar ±`attackPass`, desgaste de pneu por tentativa. O paciente espera a reta. Sem ritmo melhor nem
+   *   velocidade a mais naquele ponto, só o agressivo tenta (e só na reta).
    * - Defesa: tira até `defensePass` da chance de quem ataca e custa `defenseCost` da velocidade a cada ataque segurado.
    * - Toque numa tentativa: `collisionBase × (1 + collisionAttack × ataque) × (1 + collisionDefense × defesa)`, mais
    *   na curva e na chuva. Dano (chance das configurações): abandono (`damageDnfShare`) ou parada obrigatória.
    */
   driver: {
     paceSpeed: 0.0035,
-    paceWear: 0.25,
+    paceWear: 0.12,
     paceEngineWear: 0.3,
-    paceSpin: 0.045,
+    paceSpin: 0.035,
     paceSpinSave: 0.5,
     qualiMistake: 0.04,
     qualiMistakePace: 0.2,
+    /** Intervalo base entre tentativas (s); o ataque encurta até `attackCooldown`. */
+    attackInterval: 5,
     attackCooldown: 0.5,
+    /** Sem ritmo melhor, só tenta se puder andar esta fração mais rápido que o da frente neste ponto. */
+    attackSpeedEdge: 0.06,
+    /** Ritmo de volta melhor que conta como motivo para tentar (fração; abaixo disso é empate técnico). */
+    attackLapEdge: 0.004,
+    /** Chance de completar a tentativa: base, por fração de ritmo de volta e de velocidade a mais, e na reta. */
+    passBase: 0.02,
+    passLapAdv: 8,
+    passSpeedAdv: 1.2,
+    passStraight: 0.12,
+    /** A manobra: quanto mais rápido que o passado (m/s, vácuo) e por quanto tempo no máximo (s). */
+    passSpeed: 2,
+    passMaxTime: 6,
     attackPass: 0.14,
     attackWear: 0.0025,
     attackPatience: 0.7,
     defensePass: 0.16,
     defenseCost: 0.04,
-    collisionBase: 0.02,
+    collisionBase: 0.01,
     collisionAttack: 0.9,
     collisionDefense: 0.7,
     collisionCorner: 1.5,
