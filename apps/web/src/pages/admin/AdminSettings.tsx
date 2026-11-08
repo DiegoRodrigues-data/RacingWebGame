@@ -1,10 +1,13 @@
 import {
   BIOME_LABEL,
   BIOMES,
+  DEFAULT_DRIVER_RULES,
+  DRIVER_TRAITS,
   type DriverRules,
   type GameSettings,
   type TerrainWeights,
 } from '@tracado/shared';
+import type { BalanceReport } from '@tracado/sim';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import clsx from 'clsx';
 import { useEffect, useState, type ReactNode } from 'react';
@@ -553,14 +556,16 @@ export default function AdminSettings() {
   );
 }
 
-interface BalanceResult {
-  races: number;
+type BalanceResult = Pick<BalanceReport, 'races' | 'perRace' | 'avgPosition' | 'profileSpread'> & {
   ms: number;
-  perRace: { overtakes: number; collisions: number; collisionDnfs: number; damagePits: number; dnfs: number };
-  avgPosition: Record<string, Record<string, number>>;
-}
+};
 
-const TRAIT_LABEL: Record<string, string> = { attack: 'Ataque', defense: 'Defesa', pace: 'Ritmo' };
+const TRAIT_LABEL: Record<string, string> = Object.fromEntries(DRIVER_TRAITS.map((t) => [t.key, t.label]));
+const EFFECTS = [
+  ['attackEffect', 'Peso do ataque'],
+  ['defenseEffect', 'Peso da defesa'],
+  ['paceEffect', 'Peso do ritmo'],
+] as const;
 
 /**
  * Perfil do piloto e colisões: liga os toques, regula a frequência e o dano e o peso de cada característica do
@@ -585,13 +590,8 @@ function DriverRulesSection({
       setRunning(false);
     }
   }
-  const spread = test
-    ? Math.max(
-        ...Object.values(test.avgPosition).map(
-          (b) => Math.max(...Object.values(b)) - Math.min(...Object.values(b)),
-        ),
-      )
-    : 0;
+  // Limite mais folgado que o do `pnpm balance` (1,5): com 2 corridas por cenário o resultado oscila mais.
+  const spread = test?.profileSpread ?? 0;
   return (
     <Section
       title="Pilotos e colisões"
@@ -610,7 +610,7 @@ function DriverRulesSection({
           max={3}
           step={0.1}
           suffix="×"
-          onChange={(v) => onChange({ collisionRate: v ?? 1 })}
+          onChange={(v) => onChange({ collisionRate: v ?? DEFAULT_DRIVER_RULES.collisionRate })}
         />
         <Num
           label="Chance de avaria no toque"
@@ -619,35 +619,20 @@ function DriverRulesSection({
           max={100}
           step={5}
           suffix="%"
-          onChange={(v) => onChange({ damageRate: (v ?? 30) / 100 })}
+          onChange={(v) => onChange({ damageRate: v == null ? DEFAULT_DRIVER_RULES.damageRate : v / 100 })}
         />
-        <Num
-          label="Peso do ataque"
-          value={value.attackEffect}
-          min={0}
-          max={2}
-          step={0.1}
-          suffix="×"
-          onChange={(v) => onChange({ attackEffect: v ?? 1 })}
-        />
-        <Num
-          label="Peso da defesa"
-          value={value.defenseEffect}
-          min={0}
-          max={2}
-          step={0.1}
-          suffix="×"
-          onChange={(v) => onChange({ defenseEffect: v ?? 1 })}
-        />
-        <Num
-          label="Peso do ritmo"
-          value={value.paceEffect}
-          min={0}
-          max={2}
-          step={0.1}
-          suffix="×"
-          onChange={(v) => onChange({ paceEffect: v ?? 1 })}
-        />
+        {EFFECTS.map(([k, label]) => (
+          <Num
+            key={k}
+            label={label}
+            value={value[k]}
+            min={0}
+            max={2}
+            step={0.1}
+            suffix="×"
+            onChange={(v) => onChange({ [k]: v ?? DEFAULT_DRIVER_RULES[k] })}
+          />
+        ))}
       </div>
       <p className="text-xs text-muted">
         1× é o padrão balanceado; 0× desliga o efeito. Uma avaria leva o carro aos boxes no fim da volta

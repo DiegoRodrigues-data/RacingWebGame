@@ -3,7 +3,7 @@ import {
   DEFAULT_DRIVER_RULES,
   DEFAULT_SETUP,
   checkSetupLimits,
-  driverProfileFor,
+  effectiveDriver,
   defaultPitStops,
   xpForRace,
   type CarSetup,
@@ -143,8 +143,7 @@ export async function runSimulation(
     let trace = traceRows.find((t) => t.userId === e.userId)?.points ?? null;
     if (trace && !validateTrace(g, trace).ok) trace = null; // revalidação defensiva
     flags.set(e.userId, { defSetup: !setup, defTrace: !trace });
-    // Perfil do piloto: o ajuste desta corrida (no setup), senão o do jogador, senão o sorteado pelo id.
-    const driver = setup?.driver ?? p.driver ?? driverProfileFor(e.userId);
+    const driver = effectiveDriver(e.userId, p.driver, setup?.driver);
     return { id: e.userId, setup: setup ?? fallback, trace, driver };
   });
   const quali = simulateQualifying(g, cars, race.seed, race.weather, race.laps, rules);

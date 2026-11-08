@@ -33,7 +33,14 @@ import type { Marker, TrackScene } from '../../game/scene';
 import { ApiError, errorMessage, put } from '../../lib/api';
 import { useRoom, useServerNow } from '../../lib/realtime';
 import { useSession } from '../../lib/session';
-import { draftKey, saveDraft, speedColors, type PracticeInfo } from './common';
+import {
+  draftKey,
+  isSetupEditable,
+  saveDraft,
+  speedColors,
+  useRaceDriver,
+  type PracticeInfo,
+} from './common';
 
 /** Duração da janela de traçado em texto ("2 minutos", "90 segundos"). */
 const fmtWindow = (ms: number) => {
@@ -88,11 +95,8 @@ export function TraceTab({
   const deadline = Date.parse(race.timeline.setupLockAt);
   const windowOpen = race.status === 'trace_window' && now < deadline;
   // Quem está confirmado salva o traçado no servidor a cada ajuste até o parque fechado.
-  const canSend =
-    ['registration_open', 'practice', 'trace_window'].includes(race.status) &&
-    now < deadline &&
-    race.me?.entry?.status === 'confirmed';
-  const editable = ['registration_open', 'practice', 'trace_window'].includes(race.status) && now < deadline;
+  const editable = isSetupEditable(race.status, race.timeline.setupLockAt, now);
+  const canSend = editable && race.me?.entry?.status === 'confirmed';
   const submitTimer = useRef<number | null>(null);
   const lastSent = useRef(0);
 
@@ -104,9 +108,20 @@ export function TraceTab({
 
   const trace = useMemo(() => offsetsToTrace(offsets, 256), [offsets]);
   const validation = useMemo(() => validateTrace(g, trace), [g, trace]);
+  const driver = useRaceDriver(setup);
   const est = useMemo(
-    () => estimateLap(g, setup, trace, practice.weather.base, practice.weather.temperature, practice.laps),
-    [g, setup, trace, practice],
+    () =>
+      estimateLap(
+        g,
+        setup,
+        trace,
+        practice.weather.base,
+        practice.weather.temperature,
+        practice.laps,
+        0,
+        driver,
+      ),
+    [g, setup, trace, practice, driver],
   );
 
   const handlePos = useCallback((k: number, d: number) => traceToWorld(g, idx[k]! / g.count, d), [g, idx]);

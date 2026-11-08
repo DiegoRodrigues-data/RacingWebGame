@@ -11,7 +11,7 @@ import clsx from 'clsx';
 import { Dices, X } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router';
-import { DriverSliders } from '../../components/DriverProfile';
+import { DriverSliders, RangeRow } from '../../components/DriverProfile';
 import { Spinner, toast } from '../../components/ui';
 import { errorMessage, get, patch, post, put } from '../../lib/api';
 import { AdminPage } from './AdminNav';
@@ -64,44 +64,18 @@ type Edit = Pick<
   'active' | 'skill' | 'aggression' | 'pitRisk' | 'joinRate' | 'hourFrom' | 'hourTo' | 'driver'
 >;
 
-/** Controle de 0 a 100% para os atributos da persona (guardados de 0 a 1). */
-function Pct({
-  label,
-  value,
-  onChange,
-  left,
-  right,
-}: {
-  label: string;
-  value: number;
-  onChange: (v: number) => void;
-  left: string;
-  right: string;
-}) {
-  return (
-    <label className="block">
-      <span className="flex justify-between text-sm">
-        <span className="font-bold">{label}</span>
-        <span className="font-mono text-muted">{pct(value)}</span>
-      </span>
-      <input
-        type="range"
-        min={0}
-        max={100}
-        value={Math.round(value * 100)}
-        aria-label={label}
-        onChange={(e) => onChange(Number(e.target.value) / 100)}
-        className="mt-1 w-full accent-[#ffcc00]"
-      />
-      <span className="flex justify-between text-[11px] text-muted">
-        <span>{left}</span>
-        <span>{right}</span>
-      </span>
-    </label>
-  );
-}
+/** Atributos da persona (guardados de 0 a 1, editados de 0 a 100%). */
+const PERSONA_FIELDS = [
+  ['skill', 'Habilidade', 'erra traçado e setup', 'perto do ideal'],
+  ['aggression', 'Estilo de setup', 'duros, motor econômico', 'macios, motor potente'],
+  ['pitRisk', 'Arrisca parada extra', 'nunca', 'sempre'],
+  ['joinRate', 'Vontade de correr', 'quase nunca entra', 'entra em todas'],
+] as const;
 
-/** Edição de um piloto simulado: persona (habilidade, estilo, horário, vontade de correr) e perfil do piloto. */
+/**
+ * Edição de um piloto simulado: persona (habilidade, estilo, horário, vontade de correr) e perfil do piloto.
+ * Renderizado com `key` = id do piloto, então trocar de piloto recomeça o formulário.
+ */
 function BotEditor({ bot, onClose }: { bot: Bot; onClose: () => void }) {
   const qc = useQueryClient();
   const pick = (b: Bot): Edit => ({
@@ -114,13 +88,10 @@ function BotEditor({ bot, onClose }: { bot: Bot; onClose: () => void }) {
     hourTo: b.hourTo,
     driver: b.driver,
   });
-  const [v, setV] = useState<Edit>(pick(bot));
+  const [v, setV] = useState<Edit>(() => pick(bot));
   const [busy, setBusy] = useState(false);
   const ref = useRef<HTMLElement>(null);
-  useEffect(() => {
-    setV(pick(bot));
-    ref.current?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
-  }, [bot.userId]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => ref.current?.scrollIntoView({ behavior: 'smooth', block: 'nearest' }), []);
   const set = (p: Partial<Edit>) => setV({ ...v, ...p });
   const dirty = JSON.stringify(v) !== JSON.stringify(pick(bot));
   async function save() {
@@ -162,34 +133,17 @@ function BotEditor({ bot, onClose }: { bot: Bot; onClose: () => void }) {
       <div className="grid gap-4 md:grid-cols-2">
         <div className="space-y-3">
           <h3 className="label">Persona</h3>
-          <Pct
-            label="Habilidade"
-            value={v.skill}
-            onChange={(x) => set({ skill: x })}
-            left="erra traçado e setup"
-            right="perto do ideal"
-          />
-          <Pct
-            label="Estilo de setup"
-            value={v.aggression}
-            onChange={(x) => set({ aggression: x })}
-            left="duros, motor econômico"
-            right="macios, motor potente"
-          />
-          <Pct
-            label="Arrisca parada extra"
-            value={v.pitRisk}
-            onChange={(x) => set({ pitRisk: x })}
-            left="nunca"
-            right="sempre"
-          />
-          <Pct
-            label="Vontade de correr"
-            value={v.joinRate}
-            onChange={(x) => set({ joinRate: x })}
-            left="quase nunca entra"
-            right="entra em todas"
-          />
+          {PERSONA_FIELDS.map(([k, label, low, high]) => (
+            <RangeRow
+              key={k}
+              label={label}
+              value={Math.round(v[k] * 100)}
+              shown={pct(v[k])}
+              low={low}
+              high={high}
+              onChange={(x) => set({ [k]: x / 100 })}
+            />
+          ))}
           <div className="grid grid-cols-2 gap-3">
             <Num
               label="Joga das (h)"
@@ -326,7 +280,7 @@ export default function AdminBots() {
     >
       <div className="grid gap-4 lg:grid-cols-[1fr_360px]">
         <div className="min-w-0 space-y-4">
-          {editBot && <BotEditor bot={editBot} onClose={() => setEditing(null)} />}
+          {editBot && <BotEditor key={editBot.userId} bot={editBot} onClose={() => setEditing(null)} />}
           {s && (
             <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
               {[

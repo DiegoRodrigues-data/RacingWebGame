@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { DEFAULT_TRACK_WIDTH, MAX_CARS_PER_RACE } from './constants';
+import { DEFAULT_PRACTICE_MINUTES, DEFAULT_TRACK_WIDTH, MAX_CARS_PER_RACE } from './constants';
 import { DEFAULT_DRIVER_RULES, driverRulesSchema } from './driver';
 
 /**
@@ -145,7 +145,7 @@ export const gameSettingsSchema = z
 export type GameSettings = z.infer<typeof gameSettingsSchema>;
 
 export const DEFAULT_GAME_SETTINGS: GameSettings = {
-  phases: { practiceMin: 0, traceWindowSec: 0, setupLockSec: 30, qualifyingSec: 60 },
+  phases: { practiceMin: DEFAULT_PRACTICE_MINUTES, traceWindowSec: 0, setupLockSec: 30, qualifyingSec: 60 },
   autoRaces: {
     enabled: false,
     perDay: 24,

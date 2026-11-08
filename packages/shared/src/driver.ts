@@ -37,9 +37,12 @@ export const DRIVER_TRAITS = [
   },
 ] as const satisfies readonly { key: keyof DriverProfile; label: string; low: string; high: string }[];
 
+/** Valor de uma característica do perfil: inteiro de 0 a 100. */
+export const clampTrait = (v: number): number => Math.round(Math.max(0, Math.min(100, v)));
+
 /** Sorteio de um perfil com `u()` uniforme em [0, 1): valores mais comuns no meio, extremos possíveis. */
 export function randomDriverProfile(u: () => number): DriverProfile {
-  const v = () => Math.round(Math.max(0, Math.min(100, 50 + ((u() + u() + u()) / 3 - 0.5) * 170)));
+  const v = () => clampTrait(50 + ((u() + u() + u()) / 3 - 0.5) * 170);
   return { attack: v(), defense: v(), pace: v() };
 }
 
@@ -63,6 +66,15 @@ function hash32(s: string): number {
 export function driverProfileFor(userId: string): DriverProfile {
   let k = 0;
   return randomDriverProfile(() => hash32(`${userId}|piloto|${k++}`) / 4294967296);
+}
+
+/** Perfil que vale numa corrida: o ajuste da corrida, senão o salvo no perfil, senão o sorteado pelo id. */
+export function effectiveDriver(
+  userId: string,
+  saved: DriverProfile | null | undefined,
+  forRace?: DriverProfile | null,
+): DriverProfile {
+  return forRace ?? saved ?? driverProfileFor(userId);
 }
 
 /** Nome curto do estilo, para mostrar no perfil e no box. */

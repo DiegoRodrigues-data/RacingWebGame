@@ -21,8 +21,7 @@ import { CAR_CSS } from '../../game/assets';
 import { FrameBuffer } from '../../game/playback';
 import type { CarView, TrackScene } from '../../game/scene';
 import { WEATHER_ICON, WEATHER_LABEL } from '../../lib/format';
-import { useSession } from '../../lib/session';
-import { speedColors, type PracticeInfo } from './common';
+import { speedColors, useRaceDriver, type PracticeInfo } from './common';
 
 interface PracticeCar {
   id: string;
@@ -100,9 +99,7 @@ export function PracticeTab({
   const [, setTick] = useState(0);
   const anim = useRef<Anim>({ kind: 'idle' });
   const trace = useMemo(() => offsetsToTrace(offsets, 256), [offsets]);
-  // Perfil do piloto valendo nesta corrida: o ajuste do box ou o do jogador.
-  const profileDriver = useSession((s) => s.me?.profile.driver);
-  const driver = setup.driver ?? profileDriver ?? null;
+  const driver = useRaceDriver(setup);
   const est = useMemo(
     () => estimateLap(g, setup, trace, weather, practice.weather.temperature, practice.laps, 0, driver),
     [g, setup, trace, weather, practice, driver],

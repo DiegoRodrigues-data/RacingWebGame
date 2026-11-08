@@ -3,6 +3,7 @@ import {
   CRAZY_AWARDS,
   DEFAULT_GAME_SETTINGS,
   PHASE_LABELS,
+  SETUP_EDITABLE_PHASES,
   type AuthResponse,
   type CrazyAwardKey,
   type CrazyGroupDto,
@@ -782,7 +783,7 @@ function RaceRow({ r, member, highlight }: { r: CrazyRaceDto; member: boolean; h
         )}
         <RaceCta r={r} member={member} />
       </div>
-      {highlight && ['registration_open', 'practice', 'trace_window'].includes(r.status) && (
+      {highlight && (SETUP_EDITABLE_PHASES as readonly string[]).includes(r.status) && (
         <RaceReadyBar raceId={r.raceId} />
       )}
       {done && (

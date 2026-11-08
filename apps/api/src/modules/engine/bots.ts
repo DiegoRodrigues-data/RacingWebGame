@@ -1,5 +1,6 @@
 import {
   CAR_COLORS,
+  clampTrait,
   ENGINE_MAPS,
   MIN_PIT_STOPS,
   TERRAINS,
@@ -83,7 +84,7 @@ function personaSetup(
   driver: DriverProfile | null,
 ): CarSetup {
   const r = createRng(seed);
-  const tweak = (v: number) => Math.max(0, Math.min(100, v + r.int(-8, 8)));
+  const tweak = (v: number) => clampTrait(v + r.int(-8, 8));
   const raceDriver = driver
     ? { attack: tweak(driver.attack), defense: tweak(driver.defense), pace: tweak(driver.pace) }
     : undefined;

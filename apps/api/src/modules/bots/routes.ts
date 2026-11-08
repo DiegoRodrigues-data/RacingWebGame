@@ -1,4 +1,4 @@
-import { AppError, driverProfileFor, driverProfileSchema } from '@tracado/shared';
+import { AppError, driverProfileSchema, effectiveDriver } from '@tracado/shared';
 import { and, eq, gte, inArray, isNull, sql } from 'drizzle-orm';
 import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
@@ -101,7 +101,7 @@ export function botRoutes(app: FastifyInstance, ctx: Ctx) {
         activeToday: act.has(p.userId),
         onlineNow: act.has(p.userId) && isOnlineHour(p, now),
         skill: p.skill,
-        driver: pr?.driver ?? driverProfileFor(p.userId),
+        driver: effectiveDriver(p.userId, pr?.driver),
         aggression: p.aggression,
         pitRisk: p.pitRisk,
         joinRate: p.joinRate,

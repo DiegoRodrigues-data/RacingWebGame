@@ -1,4 +1,10 @@
-import { formatLapTime, LEVEL_LABELS, PHASE_LABELS, type QualifyingRowDto } from '@tracado/shared';
+import {
+  formatLapTime,
+  LEVEL_LABELS,
+  PHASE_LABELS,
+  SETUP_EDITABLE_PHASES,
+  type QualifyingRowDto,
+} from '@tracado/shared';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useState } from 'react';
 import { Link, useParams } from 'react-router';
@@ -14,6 +20,7 @@ import {
   Empty,
   Flag,
   PhaseBadge,
+  isEmptyPhase,
   PhaseTimeline,
   Spinner,
   toast,
@@ -50,8 +57,7 @@ export default function RaceDetail() {
   const entry = race.me?.entry;
   const active = isRegistered(race);
   const prepPhase =
-    ['registration_open', 'practice', 'trace_window'].includes(race.status) &&
-    now < Date.parse(race.timeline.setupLockAt);
+    SETUP_EDITABLE_PHASES.includes(race.status) && now < Date.parse(race.timeline.setupLockAt);
   const late = lateEntryOpen(race, now);
   async function cancel() {
     if (
@@ -130,9 +136,9 @@ export default function RaceDetail() {
           </div>
           <h1 className="mt-2 font-display text-3xl">{race.name}</h1>
           <p className="text-sm text-muted">
-            {race.timeline.traceWindowAt > race.timeline.practiceAt
-              ? `Treino ${fmtDateTime(race.timeline.practiceAt)}`
-              : `Parque fechado ${fmtDateTime(race.timeline.setupLockAt)}`}{' '}
+            {isEmptyPhase('practice', race.timeline)
+              ? `Parque fechado ${fmtDateTime(race.timeline.setupLockAt)}`
+              : `Treino ${fmtDateTime(race.timeline.practiceAt)}`}{' '}
             · Largada {fmtDateTime(race.timeline.raceAt)}
           </p>
         </div>

@@ -7,6 +7,7 @@ import type {
   Tyre,
   Weather,
 } from '@tracado/shared';
+import { NO_TRACE_PACE_PENALTY } from '@tracado/shared';
 import { CAR_HALF_WIDTH, type TrackGeometry } from '@tracado/trackgen';
 
 /**
@@ -124,9 +125,17 @@ export function driverTraits(
   };
 }
 
-/** Penalidade de ritmo de `lapProfile` para o ritmo do piloto (negativa = mais rápido). */
-export function drivePacePenalty(t: DriverTraits): number {
-  return -COEF.driver.paceSpeed * t.pace;
+/**
+ * Penalidade de ritmo de `lapProfile` para um carro: sem traçado anda mais devagar e o ritmo do piloto soma ou tira
+ * (negativa = mais rápido). Usada na corrida, na estimativa do box e na sessão de classificação.
+ */
+export function carPacePenalty(hasTrace: boolean, t: DriverTraits): number {
+  return (hasTrace ? 0 : NO_TRACE_PACE_PENALTY) - COEF.driver.paceSpeed * t.pace;
+}
+
+/** Multiplicador do desgaste de pneu pelo ritmo do piloto. */
+export function driverWearFactor(t: DriverTraits): number {
+  return 1 + COEF.driver.paceWear * t.pace;
 }
 
 export const WETNESS: Record<Weather, number> = { dry: 0, cloudy: 0, light_rain: 0.5, rain: 1 };

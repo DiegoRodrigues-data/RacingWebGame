@@ -1,6 +1,5 @@
 import {
   checkSetupLimits,
-  driverProfileFor,
   formatLapTime,
   MIN_PIT_STOPS,
   TYRE_LABELS,
@@ -29,8 +28,7 @@ import { toast } from '../../components/ui';
 import { errorMessage, put } from '../../lib/api';
 import { TERRAIN_LABEL, TYRE_COLOR, TYRE_SHORT, WEATHER_ICON, WEATHER_LABEL } from '../../lib/format';
 import { useServerNow } from '../../lib/realtime';
-import { useSession } from '../../lib/session';
-import { draftKey, isSetupEditable, saveDraft, type PracticeInfo } from './common';
+import { draftKey, isSetupEditable, saveDraft, useRaceDriver, type PracticeInfo } from './common';
 
 const TYRES: Tyre[] = ['soft', 'medium', 'hard', 'wet'];
 /** Estrelas (1–3) lidas dos coeficientes do modelo: aderência no seco. A duração vem da estimativa em voltas. */
@@ -341,10 +339,7 @@ export function SetupTab({
   const laps = practice.laps;
   const temp = practice.weather.temperature;
   const trace = useMemo(() => offsetsToTrace(offsets, 256), [offsets]);
-  // Perfil do piloto: o ajuste desta corrida, senão o do jogador (é o que a simulação usa).
-  const me = useSession((s) => s.me);
-  const baseDriver = me?.profile.driver ?? driverProfileFor(me?.id ?? '');
-  const driver = setup.driver ?? baseDriver;
+  const driver = useRaceDriver(setup);
   const update = (patch: Partial<CarSetup>) => {
     if (!editable) return;
     const next = { ...setup, ...patch };

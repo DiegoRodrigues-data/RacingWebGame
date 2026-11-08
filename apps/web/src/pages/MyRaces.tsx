@@ -1,4 +1,4 @@
-import { LIVE_PHASES, type RaceSummaryDto } from '@tracado/shared';
+import { LIVE_PHASES, SETUP_EDITABLE_PHASES, type RaceSummaryDto } from '@tracado/shared';
 import { useQuery } from '@tanstack/react-query';
 import { Link } from 'react-router';
 import { RaceCard } from '../components/RaceCard';
@@ -20,7 +20,7 @@ function Cta({ r }: { r: RaceSummaryDto }) {
       </Link>
     );
   if (r.status === 'cancelled') return null;
-  if (['registration_open', 'practice', 'trace_window'].includes(r.status))
+  if (SETUP_EDITABLE_PHASES.includes(r.status))
     return (
       <Link className="btn-primary !py-1.5" to={`/corridas/${r.id}/box`}>
         Ir para o box

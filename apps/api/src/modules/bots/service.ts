@@ -2,15 +2,17 @@ import { randomUUID } from 'node:crypto';
 import {
   AppError,
   CAR_COLORS,
+  clampTrait,
   driverProfileFor,
   LEVEL_XP,
   meetsLevel,
+  SETUP_EDITABLE_PHASES,
   type DriverProfile,
   type GameSettings,
   type Level,
 } from '@tracado/shared';
 import { createRng } from '@tracado/trackgen';
-import { and, asc, eq, gt, inArray, isNull, lte, ne, sql } from 'drizzle-orm';
+import { and, asc, eq, gt, inArray, isNull, lte, or, sql } from 'drizzle-orm';
 import type { Ctx } from '../../context';
 import { botPersonas, botPlans, entries, profiles, races, users } from '../../db/schema';
 import { hashPassword } from '../../lib/crypto';
@@ -232,16 +234,20 @@ export function levelFor(skill: number): Level {
 /** Perfil do piloto de uma persona: o estilo puxa o ataque, a habilidade puxa o ritmo, com variação pelo id. */
 export function personaDriver(userId: string, p: Pick<Persona, 'skill' | 'aggression'>): DriverProfile {
   const base = driverProfileFor(userId);
-  const c = (v: number) => Math.round(Math.max(0, Math.min(100, v)));
   return {
-    attack: c(base.attack * 0.4 + p.aggression * 100 * 0.6),
+    attack: clampTrait(base.attack * 0.4 + p.aggression * 100 * 0.6),
     defense: base.defense,
-    pace: c(base.pace * 0.6 + (30 + p.skill * 40) * 0.4),
+    pace: clampTrait(base.pace * 0.6 + (30 + p.skill * 40) * 0.4),
   };
 }
 
+/** Bancos em que as personas antigas já ganharam o perfil do piloto (a checagem roda uma vez por processo). */
+const driversBackfilled = new WeakSet<object>();
+
 /** Personas criadas antes do perfil do piloto ganham um (uma vez). */
 async function ensurePersonaDrivers(ctx: Pick<Ctx, 'db'>) {
+  if (driversBackfilled.has(ctx.db)) return;
+  driversBackfilled.add(ctx.db);
   const rows = await ctx.db
     .select({ id: botPersonas.userId, skill: botPersonas.skill, aggression: botPersonas.aggression })
     .from(botPersonas)
@@ -330,7 +336,7 @@ export async function ensureBotPool(
 
 // ---------------------------------------------------------------- Planejamento e inscrição
 
-const OPEN_PHASES = ['registration_open', 'practice', 'trace_window'] as const;
+const OPEN_PHASES = SETUP_EDITABLE_PHASES;
 
 /** Personas que podem correr numa categoria (nível e corridas mínimas), com o perfil. */
 async function eligiblePersonas(ctx: Ctx, race: RaceRow) {
@@ -349,17 +355,41 @@ async function eligiblePersonas(ctx: Ctx, race: RaceRow) {
   };
 }
 
-/** Confirmados na corrida mais os planos ainda por executar. */
-async function gridCount(ctx: Ctx, raceId: string) {
-  const [c] = await ctx.db
-    .select({ n: sql<number>`count(*)::int` })
-    .from(entries)
-    .where(and(eq(entries.raceId, raceId), eq(entries.status, 'confirmed')));
-  const [p] = await ctx.db
-    .select({ n: sql<number>`count(*)::int` })
-    .from(botPlans)
-    .where(and(eq(botPlans.raceId, raceId), isNull(botPlans.doneAt)));
-  return { confirmed: c?.n ?? 0, pending: p?.n ?? 0 };
+/**
+ * Quem já está na corrida: confirmados, planos ainda por executar e os ids de quem não pode ser planejado de novo
+ * (já tem plano ou inscrição não cancelada).
+ */
+async function raceRoster(ctx: Ctx, raceId: string) {
+  const [ents, plans] = await Promise.all([
+    ctx.db
+      .select({ u: entries.userId, status: entries.status })
+      .from(entries)
+      .where(eq(entries.raceId, raceId)),
+    ctx.db
+      .select({ u: botPlans.userId, doneAt: botPlans.doneAt })
+      .from(botPlans)
+      .where(eq(botPlans.raceId, raceId)),
+  ]);
+  const taken = new Set([
+    ...plans.map((p) => p.u),
+    ...ents.filter((e) => e.status !== 'cancelled').map((e) => e.u),
+  ]);
+  return {
+    confirmed: ents.filter((e) => e.status === 'confirmed').length,
+    pending: plans.filter((p) => !p.doneAt).length,
+    taken,
+  };
+}
+
+/** `activeOn` só muda com o dia (horário de Brasília): uma conta por dia na mesma chamada. */
+function activeOnCached(all: Persona[], s: PoolSettings) {
+  const memo = new Map<number, Set<string>>();
+  return (t: number) => {
+    const d = brtDay(t);
+    let set = memo.get(d);
+    if (!set) memo.set(d, (set = activeOn(all, s, t)));
+    return set;
+  };
 }
 
 /**
@@ -393,10 +423,11 @@ export async function planBotEntries(ctx: Ctx, race: RaceRow): Promise<number> {
     race.capacity - s.reserveSeats,
     createRng(`${race.seed}|botplan`).int(s.gridMin, s.gridMax),
   );
-  const { confirmed } = await gridCount(ctx, race.id);
+  const { confirmed } = await raceRoster(ctx, race.id);
   const want = target - confirmed;
   if (want <= 0) return 0;
-  const today = activeOn(all, s, from);
+  const activeAt = activeOnCached(all, s);
+  const today = activeAt(from);
   const candidates = eligible.map((p) => {
     const r = createRng(`${race.seed}|botplan|${p.userId}`);
     const keen = r.chance(p.joinRate);
@@ -404,7 +435,7 @@ export async function planBotEntries(ctx: Ctx, race: RaceRow): Promise<number> {
     for (let k = 0; k < 3 && joinAt === null; k++) {
       // √u: mais inscrições perto do treino, como gente que decide em cima da hora.
       const t = Math.round(from + (to - from) * Math.sqrt(r.next()));
-      if (isOnlineHour(p, t) && activeOn(all, s, t).has(p.userId)) joinAt = t;
+      if (isOnlineHour(p, t) && activeAt(t).has(p.userId)) joinAt = t;
     }
     const tier = joinAt !== null && keen ? 0 : joinAt !== null ? 1 : today.has(p.userId) ? 2 : 3;
     return {
@@ -431,27 +462,14 @@ export async function topUpBotEntries(ctx: Ctx, race: RaceRow, s: PoolSettings):
   const now = ctx.clock.now();
   const lockAt = race.setupLockAt.getTime() - 30_000;
   if (race.practiceAt.getTime() - now > TOPUP_LEAD_MS || lockAt - now < 15_000) return 0;
-  const { confirmed, pending } = await gridCount(ctx, race.id);
+  const { confirmed, pending, taken } = await raceRoster(ctx, race.id);
   const want = Math.min(s.gridMin, race.capacity - s.reserveSeats) - confirmed - pending;
   if (want <= 0) return 0;
   const { all, eligible } = await eligiblePersonas(ctx, race);
-  const planned = new Set(
-    (await ctx.db.select({ u: botPlans.userId }).from(botPlans).where(eq(botPlans.raceId, race.id))).map(
-      (r) => r.u,
-    ),
-  );
-  const inRace = new Set(
-    (
-      await ctx.db
-        .select({ u: entries.userId })
-        .from(entries)
-        .where(and(eq(entries.raceId, race.id), ne(entries.status, 'cancelled')))
-    ).map((r) => r.u),
-  );
   const today = activeOn(all, s, now);
   const r = createRng(`${race.seed}|topup|${confirmed}|${pending}`);
   const pick = eligible
-    .filter((p) => !planned.has(p.userId) && !inRace.has(p.userId))
+    .filter((p) => !taken.has(p.userId))
     .map((p) => ({ p, k: (isOnlineHour(p, now) && today.has(p.userId) ? 0 : 1) + r.next() }))
     .sort((a, b) => a.k - b.k)
     .slice(0, want);
@@ -476,7 +494,9 @@ export async function topUpBotEntries(ctx: Ctx, race: RaceRow, s: PoolSettings):
  * grid das que estão perto da largada.
  */
 export async function planOpenAutoRaces(ctx: Ctx): Promise<number> {
-  if (!(await getSettings(ctx)).botPool.enabled) return 0;
+  const s = (await getSettings(ctx)).botPool;
+  if (!s.enabled) return 0;
+  // Abertas ainda sem plano, ou perto da largada (complemento do grid).
   const open = await ctx.db
     .select()
     .from(races)
@@ -486,28 +506,17 @@ export async function planOpenAutoRaces(ctx: Ctx): Promise<number> {
         isNull(races.crazyGroupId),
         sql`${races.flags} ? 'auto'`,
         sql`not (${races.flags} ? 'autoTest')`,
-        sql`not (${races.flags} ? 'botsPlanned')`,
+        or(
+          sql`not (${races.flags} ? 'botsPlanned')`,
+          lte(races.practiceAt, new Date(ctx.clock.now() + TOPUP_LEAD_MS)),
+        ),
       ),
     );
   let n = 0;
-  for (const r of open) n += await planBotEntries(ctx, r);
+  for (const r of open) if (!r.flags.botsPlanned) n += await planBotEntries(ctx, r);
   await dropDemoBots(ctx);
-  // Complemento do grid perto da largada, nas corridas já planejadas.
-  const s = (await getSettings(ctx)).botPool;
-  const soon = await ctx.db
-    .select()
-    .from(races)
-    .where(
-      and(
-        inArray(races.status, ['registration_open', 'practice']),
-        isNull(races.crazyGroupId),
-        lte(races.practiceAt, new Date(ctx.clock.now() + TOPUP_LEAD_MS)),
-        sql`${races.flags} ? 'auto'`,
-        sql`not (${races.flags} ? 'autoTest')`,
-        sql`${races.flags} ? 'botsPlanned'`,
-      ),
-    );
-  for (const r of soon) n += await topUpBotEntries(ctx, r, s);
+  // `topUpBotEntries` confere sozinho se a corrida está perto da largada.
+  for (const r of open) n += await topUpBotEntries(ctx, r, s);
   return n;
 }
 

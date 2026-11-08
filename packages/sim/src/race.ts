@@ -9,13 +9,7 @@ import type {
   Tyre,
   Weather,
 } from '@tracado/shared';
-import {
-  CAR_FRAME_STRIDE,
-  CAR_STATUS,
-  DEFAULT_DRIVER_RULES,
-  NO_TRACE_PACE_PENALTY,
-  tyreCode,
-} from '@tracado/shared';
+import { CAR_FRAME_STRIDE, CAR_STATUS, DEFAULT_DRIVER_RULES, tyreCode } from '@tracado/shared';
 import {
   CAR_HALF_WIDTH,
   createRng,
@@ -27,9 +21,10 @@ import {
 } from '@tracado/trackgen';
 import {
   carModifiers,
+  carPacePenalty,
   COEF,
-  drivePacePenalty,
   driverTraits,
+  driverWearFactor,
   engineFailFactor,
   lapProfile,
   lateralMeters,
@@ -191,12 +186,11 @@ export function simulateRace(input: RaceSimInput): RaceSimOutput {
 
   const buildProfile = (s: CarState) => {
     const m = carModifiers(g, s.car.setup, s.tyre, s.wear, cond(), gripZones);
-    s.wearPerLap = (m.wearPerRace / laps) * (1 + D.paceWear * s.drv.pace);
+    s.wearPerLap = (m.wearPerRace / laps) * driverWearFactor(s.drv);
     s.engineWearPerLap = (m.engineWearPerRace / laps) * (1 + D.paceEngineWear * s.drv.pace);
     s.failurePerLap = m.failurePerLap;
     s.gripRatio = m.gripRatio;
-    const penalty =
-      (s.car.trace ? 0 : NO_TRACE_PACE_PENALTY) + drivePacePenalty(s.drv) + (s.damaged ? D.damagePace : 0);
+    const penalty = carPacePenalty(!!s.car.trace, s.drv) + (s.damaged ? D.damagePace : 0);
     s.profile = lapProfile(s.path, s.curvature, m, penalty);
   };
 
@@ -728,12 +722,12 @@ export function estimateLap(
   const curv = pathCurvature(path);
   const drv = driverTraits(driver, rules);
   const m = carModifiers(g, setup, setup.tyre, wear, { wetness: WETNESS[weather], temperature });
-  const p = lapProfile(path, curv, m, (trace ? 0 : NO_TRACE_PACE_PENALTY) + drivePacePenalty(drv));
+  const p = lapProfile(path, curv, m, carPacePenalty(!!trace, drv));
   const sectorMs = g.sectors.map((from, k) => {
     const to = g.sectors[k + 1] ?? g.count;
     return Math.round((p.t[to]! - p.t[from]!) * 1000);
   });
-  const wearPerLap = (m.wearPerRace / laps) * (1 + COEF.driver.paceWear * drv.pace);
+  const wearPerLap = (m.wearPerRace / laps) * driverWearFactor(drv);
   return {
     lapTimeMs: Math.round(p.lapTime * 1000),
     sectorMs,
@@ -842,8 +836,7 @@ export function qualifyingSession(
       path,
       pathCurvature(path),
       m,
-      (car.trace ? 0 : NO_TRACE_PACE_PENALTY) +
-        drivePacePenalty(driverTraits(car.driver, DEFAULT_DRIVER_RULES)),
+      carPacePenalty(!!car.trace, driverTraits(car.driver, DEFAULT_DRIVER_RULES)),
     );
     const lapTimeMs = rows.find((r) => r.id === car.id)?.lapTimeMs ?? Math.round(p.lapTime * 1000);
     const scale = lapTimeMs / (p.lapTime * 1000);

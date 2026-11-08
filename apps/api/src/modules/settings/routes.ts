@@ -97,7 +97,7 @@ export function settingsRoutes(app: FastifyInstance, ctx: Ctx, engine: PhaseEngi
       ms: Math.round(performance.now() - t0),
       perRace: r.perRace,
       avgPosition: r.avgPosition,
-      maxLift: r.maxLift,
+      profileSpread: r.profileSpread,
     };
   });
 

@@ -32,14 +32,11 @@ console.log(
 console.log(`\nMaior lift: ${r.maxLift.feature}=${r.maxLift.value} (${r.maxLift.lift})`);
 console.log(`Estratégia de pneus mais vencedora: ${(r.topStrategyWinShare * 100).toFixed(1)}% das vitórias`);
 // Nenhuma faixa do perfil pode render mais que ~1,5 posição de vantagem média sobre a pior da mesma característica.
-const spread = Math.max(
-  ...Object.values(r.avgPosition).map((b) => Math.max(...Object.values(b)) - Math.min(...Object.values(b))),
-);
-console.log(`Maior diferença de posição média entre faixas do perfil: ${spread.toFixed(2)}`);
+console.log(`Maior diferença de posição média entre faixas do perfil: ${r.profileSpread.toFixed(2)}`);
 const ok =
   r.maxLift.lift <= 3 &&
   r.topStrategyWinShare <= 0.35 &&
-  spread <= 1.5 &&
+  r.profileSpread <= 1.5 &&
   pr.collisions >= 0.5 &&
   pr.collisions <= 6 &&
   pr.collisionDnfs <= 1.2;

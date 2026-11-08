@@ -7,7 +7,7 @@ import {
   TYRES,
   WEATHER_BETS,
 } from '@tracado/shared';
-import { createRng, generateProceduralTrack, type Rng } from '@tracado/trackgen';
+import { createRng, generateProceduralTrack, q2, type Rng } from '@tracado/trackgen';
 import { simulateRace } from './race';
 
 export function randomSetup(rng: Rng, laps: number): CarSetup {
@@ -131,6 +131,8 @@ export interface BalanceReport {
   perRace: { overtakes: number; collisions: number; collisionDnfs: number; damagePits: number; dnfs: number };
   /** Posição média de chegada por faixa de cada característica do perfil (11,5 = neutro com 22 carros). */
   avgPosition: Record<string, Record<string, number>>;
+  /** Maior diferença de posição média entre as faixas de uma mesma característica do perfil. */
+  profileSpread: number;
 }
 
 export function runBalance(
@@ -178,8 +180,9 @@ export function runBalance(
         else if (i.kind === 'damage') tally[i.detail === 'dnf' ? 'collisionDnfs' : 'damagePits']++;
       }
       tally.dnfs += out.results.filter((x) => x.status === 'dnf').length;
+      const byId = new Map(cars.map((c) => [c.id, c.setup]));
       for (const res of out.results) {
-        const st = cars.find((c) => c.id === res.id)!.setup;
+        const st = byId.get(res.id)!;
         for (const f of ['attack', 'defense', 'pace'] as const) {
           const b = FEATURES[f]!(st);
           posSum[f] ??= {};
@@ -188,7 +191,6 @@ export function runBalance(
           cell[1]++;
         }
       }
-      const byId = new Map(cars.map((c) => [c.id, c.setup]));
       for (const c of cars) {
         totalCars++;
         for (const [f, fn] of Object.entries(FEATURES)) {
@@ -232,12 +234,26 @@ export function runBalance(
     }
   }
   const topStrategyWinShare = Math.max(...Object.values(stratWins)) / totalWins;
-  const r2 = (v: number) => Math.round(v * 100) / 100;
   const perRace = Object.fromEntries(
-    Object.entries(tally).map(([k, v]) => [k, r2(v / Math.max(1, races))]),
+    Object.entries(tally).map(([k, v]) => [k, q2(v / Math.max(1, races))]),
   ) as BalanceReport['perRace'];
   const avgPosition: BalanceReport['avgPosition'] = {};
   for (const [f, bands] of Object.entries(posSum))
-    avgPosition[f] = Object.fromEntries(Object.entries(bands).map(([b, [sum, n]]) => [b, r2(sum / n)]));
-  return { races, winnersByScenario, lift, maxLift, topStrategyWinShare, perRace, avgPosition };
+    avgPosition[f] = Object.fromEntries(Object.entries(bands).map(([b, [sum, n]]) => [b, q2(sum / n)]));
+  const profileSpread = q2(
+    Math.max(
+      0,
+      ...Object.values(avgPosition).map((b) => Math.max(...Object.values(b)) - Math.min(...Object.values(b))),
+    ),
+  );
+  return {
+    races,
+    winnersByScenario,
+    lift,
+    maxLift,
+    topStrategyWinShare,
+    perRace,
+    avgPosition,
+    profileSpread,
+  };
 }

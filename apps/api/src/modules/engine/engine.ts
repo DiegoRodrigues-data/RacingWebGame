@@ -5,6 +5,7 @@ import {
   nextTransition,
   PHASE_LABELS,
   ROOM,
+  SETUP_EDITABLE_PHASES,
   type RacePhase,
 } from '@tracado/shared';
 import { and, eq, gt, inArray, lte, or, sql } from 'drizzle-orm';
@@ -376,7 +377,7 @@ export class PhaseEngine {
       .from(races)
       .where(
         and(
-          inArray(races.status, ['registration_open', 'practice', 'trace_window']),
+          inArray(races.status, [...SETUP_EDITABLE_PHASES]),
           lte(races.setupLockAt, new Date(now + 60_000)),
           gt(races.setupLockAt, new Date(now)),
         ),

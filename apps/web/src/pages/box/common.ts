@@ -1,4 +1,14 @@
-import type { CategoryConfig, TracePoint, Weather } from '@tracado/shared';
+import {
+  NEUTRAL_DRIVER,
+  SETUP_EDITABLE_PHASES,
+  type CarSetup,
+  type CategoryConfig,
+  type DriverProfile,
+  type RacePhase,
+  type TracePoint,
+  type Weather,
+} from '@tracado/shared';
+import { useSession } from '../../lib/session';
 
 export interface PracticeInfo {
   laps: number;
@@ -42,5 +52,14 @@ export function speedColors(v: Float64Array): number[] {
   });
 }
 
-export const isSetupEditable = (status: string, setupLockAt: string, now: number) =>
-  ['registration_open', 'practice', 'trace_window'].includes(status) && now < Date.parse(setupLockAt);
+export const isSetupEditable = (status: RacePhase, setupLockAt: string, now: number) =>
+  SETUP_EDITABLE_PHASES.includes(status) && now < Date.parse(setupLockAt);
+
+/**
+ * Perfil do piloto valendo nesta corrida (o que a simulação usa): o ajuste do box, senão o do jogador (o servidor
+ * já manda o sorteado pelo id para quem nunca escolheu).
+ */
+export function useRaceDriver(setup: CarSetup): DriverProfile {
+  const saved = useSession((s) => s.me?.profile.driver);
+  return setup.driver ?? saved ?? NEUTRAL_DRIVER;
+}

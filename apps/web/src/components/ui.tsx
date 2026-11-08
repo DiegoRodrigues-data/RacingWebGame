@@ -104,16 +104,15 @@ const PHASE_STEPS: RacePhase[] = [
   'race',
   'finished',
 ];
+/** Treino ou janela de traçado com duração zero (o padrão): a fase passa direto e some das telas. */
+export function isEmptyPhase(p: RacePhase, t: RaceSummaryDto['timeline']): boolean {
+  if (p === 'practice') return t.traceWindowAt <= t.practiceAt;
+  if (p === 'trace_window') return t.setupLockAt <= t.traceWindowAt;
+  return false;
+}
+
 export function PhaseTimeline({ race }: { race: RaceSummaryDto }) {
-  // Sem treino ou sem janela de traçado (padrão): o passo some da linha do tempo.
-  const t = race.timeline;
-  const steps = PHASE_STEPS.filter(
-    (p) =>
-      race.status === p ||
-      (p !== 'trace_window' && p !== 'practice') ||
-      (p === 'trace_window' && t.setupLockAt > t.traceWindowAt) ||
-      (p === 'practice' && t.traceWindowAt > t.practiceAt),
-  );
+  const steps = PHASE_STEPS.filter((p) => race.status === p || !isEmptyPhase(p, race.timeline));
   const idx = steps.indexOf(race.status === 'archived' ? 'finished' : race.status);
   const times: Partial<Record<RacePhase, string | null>> = {
     registration_open: race.timeline.registrationOpensAt,

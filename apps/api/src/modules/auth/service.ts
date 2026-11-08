@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import {
   AppError,
-  driverProfileFor,
+  effectiveDriver,
   REFRESH_TOKEN_TTL_S,
   WS_TICKET_TTL_S,
   type AuthResponse,
@@ -43,7 +43,7 @@ export async function getMe(ctx: Ctx, userId: string): Promise<MeDto> {
       reducedMotion: p.reducedMotion,
       emailReminders: p.emailReminders,
       careerRaces: p.careerRaces,
-      driver: p.driver ?? driverProfileFor(p.userId),
+      driver: effectiveDriver(p.userId, p.driver),
       driverChosen: p.driver != null,
     },
     guest: row.users.isGuest,

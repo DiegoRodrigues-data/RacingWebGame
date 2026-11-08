@@ -53,8 +53,6 @@ const INCIDENT_TEXT: Partial<Record<RaceIncidentDto['kind'], string>> = {
   safety_car_end: 'Safety car recolhido',
   oil: 'Óleo na pista!',
   weather: 'O clima mudou',
-  collision: 'bateu',
-  damage: 'avariou o carro',
 };
 
 /** Texto de um acontecimento, com o nome do outro carro nos toques. */

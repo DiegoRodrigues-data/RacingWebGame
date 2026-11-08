@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { CAR_COLORS, MAX_CARS_PER_RACE } from './constants';
+import { SETUP_EDITABLE_PHASES } from './phases';
 import type { RaceSummaryDto } from './schemas';
 
 /**
@@ -20,7 +21,7 @@ export const CRAZY_MAX_INTERVAL_MIN = 7 * 24 * 60;
  * Fases de preparo que podem ser puladas (todos prontos ou o organizador mandou largar). Sem treino (padrão), o
  * preparo é com as inscrições abertas; nesse caso só vale para a próxima etapa do grupo.
  */
-export const CRAZY_SKIPPABLE_PHASES = ['registration_open', 'practice', 'trace_window'] as const;
+export const CRAZY_SKIPPABLE_PHASES = SETUP_EDITABLE_PHASES;
 /** Parque fechado depois de pular o preparo: só o tempo de a tela trocar. */
 export const CRAZY_SKIP_LOCK_MS = 10_000;
 /** "Largar agora" do organizador exige pelo menos esta fração da turma pronta. */
