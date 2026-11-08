@@ -18,25 +18,18 @@ import {
   traces,
   users,
 } from '../../db/schema';
-import { autoBiome, autoTrack, gridStep, slotCategory } from '../engine/autoRaces';
+import { autoBiome, autoTrack, brtDayStart, gridStep, slotCategory } from '../engine/autoRaces';
 import { notify } from '../notifications/service';
 import { getCategory, getRaceRow, getSummary, raceSummaries, resolveTrackVersion } from '../races/service';
 import { getSettings, saveSettings } from '../settings/service';
 
-/** Horário de Brasília (UTC−3, sem horário de verão desde 2019). */
-const BRT_OFFSET_MS = 3 * 3_600_000;
 const DAY_MS = 86_400_000;
 /** A pista só pode ser trocada até este tempo antes do parque fechado. */
 const CHANGE_LOCK_MS = 60_000;
 /** Fases em que a pista ainda pode mudar. */
 const OPEN = ['scheduled', 'registration_open'] as const;
 
-/** Início (UTC) do dia `AAAA-MM-DD` no horário de Brasília. */
-export function brtDayStart(day: string): number {
-  const [y, m, d] = day.split('-').map(Number);
-  return Date.UTC(y!, m! - 1, d!) + BRT_OFFSET_MS;
-}
-export const brtDay = (t: number) => new Date(t - BRT_OFFSET_MS).toISOString().slice(0, 10);
+export { brtDay, brtDayStart } from '../engine/autoRaces';
 
 type VersionRow = { v: typeof trackVersions.$inferSelect; t: typeof tracks.$inferSelect };
 function trackDto({ v, t }: VersionRow): TrackDayTrackDto {

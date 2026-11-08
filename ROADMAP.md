@@ -393,6 +393,13 @@ Fecha o ciclo de vida com resultados persistidos.
 - [x] Setup padrão e pilotos simulados planejam as paradas pela vida dos pneus
 - [x] Box mostra a vida de cada composto em voltas e km, e a distância da corrida
 
+## Fase 27 — Corridas de 30 em 30 minutos
+
+- [x] Conflito de horário pela bandeirada prevista (voltas × comprimento), com 2 min de folga: dá para emendar a corrida seguinte
+- [x] Pilotos simulados não são planejados em duas corridas que se sobrepõem
+- [x] Pistas do dia: cada horário repete uma das `tracksPerDay` pistas do dia (padrão 12), com o mesmo cenário
+- [ ] Pôr a grade em 48 corridas por dia e subir os pilotos simulados ativos no admin de produção
+
 ---
 
 ## Ordem recomendada (próximos passos)

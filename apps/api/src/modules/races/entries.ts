@@ -13,13 +13,49 @@ import {
 import { and, asc, desc, eq, gt, inArray, lt, ne, notInArray, sql } from 'drizzle-orm';
 import type { Ctx } from '../../context';
 import type { Tx } from '../../db/client';
-import { botPersonas, crazyMembers, entries, profiles, races, users } from '../../db/schema';
+import {
+  botPersonas,
+  categories,
+  crazyMembers,
+  entries,
+  profiles,
+  races,
+  trackVersions,
+  users,
+} from '../../db/schema';
 import type { AuthUser } from '../../lib/auth';
 import { parse } from '../../lib/validate';
 import { notify } from '../notifications/service';
 import { broadcastRace, capacityOf, getCategory, getRaceRow, type RaceRow } from './service';
 
-const RACE_WINDOW_AFTER_MS = 30 * 60_000;
+/** Folga depois da bandeirada antes de a mesma pessoa largar em outra corrida. */
+const RACE_WINDOW_AFTER_MS = 2 * 60_000;
+/**
+ * Velocidade média (m/s, no tempo da simulação) usada para estimar a bandeirada antes de a corrida ser simulada.
+ * As corridas medidas ficam entre 32 e 45 m/s: com o valor baixo, a estimativa erra para mais.
+ */
+const EST_SPEED_MPS = 32;
+
+/**
+ * Fim previsto de uma corrida (SQL): a bandeirada real depois da simulação; antes dela, a distância (voltas ×
+ * comprimento) na velocidade de estimativa, no ritmo de transmissão da categoria. Exige os joins de `overlappingRaces`.
+ */
+const raceEndSql = sql`coalesce(${races.raceEndsAt}, ${races.raceAt} + (${races.laps} * ${trackVersions.length}
+  / (${sql.raw(String(EST_SPEED_MPS))} * coalesce((${categories.config}->>'playbackSpeed')::float, 1)))
+  * interval '1 second')`;
+
+/** Fim previsto da corrida `race` (ms), pelo mesmo critério de `raceEndSql`. */
+async function raceEndEstimate(db: Pick<Tx, 'select'>, race: RaceRow): Promise<number> {
+  if (race.raceEndsAt) return race.raceEndsAt.getTime();
+  const [r] = await db
+    .select({ length: trackVersions.length, config: categories.config })
+    .from(races)
+    .innerJoin(trackVersions, eq(trackVersions.id, races.trackVersionId))
+    .innerJoin(categories, eq(categories.id, races.categoryId))
+    .where(eq(races.id, race.id));
+  const speed = r?.config.playbackSpeed ?? 1;
+  return race.raceAt.getTime() + Math.ceil(((race.laps * (r?.length ?? 0)) / (EST_SPEED_MPS * speed)) * 1000);
+}
 
 export async function assignCar(tx: Tx, raceId: string, preferred: string) {
   const used = await tx
@@ -65,23 +101,43 @@ async function checkEligibility(ctx: Ctx, tx: Tx, race: RaceRow, user: AuthUser)
   return p;
 }
 
-export async function checkScheduleConflict(tx: Tx, race: RaceRow, userId: string) {
+/** Corridas em aberto que ocupam o mesmo horário de `race`: do treino até a bandeirada prevista mais a folga. */
+export async function overlappingRaces(db: Pick<Tx, 'select'>, race: RaceRow): Promise<string[]> {
   const start = race.practiceAt;
-  const end = new Date((race.raceEndsAt ?? race.raceAt).getTime() + RACE_WINDOW_AFTER_MS);
-  const rows = await tx
+  const end = new Date((await raceEndEstimate(db, race)) + RACE_WINDOW_AFTER_MS);
+  const rows = await db
     .select({ id: races.id })
-    .from(entries)
-    .innerJoin(races, eq(races.id, entries.raceId))
+    .from(races)
+    .innerJoin(trackVersions, eq(trackVersions.id, races.trackVersionId))
+    .innerJoin(categories, eq(categories.id, races.categoryId))
     .where(
       and(
-        eq(entries.userId, userId),
-        inArray(entries.status, ['confirmed', 'waitlisted']),
         ne(races.id, race.id),
         notInArray(races.status, ['finished', 'archived', 'cancelled']),
         lt(races.practiceAt, end),
-        gt(sql`coalesce(${races.raceEndsAt}, ${races.raceAt}) + interval '30 minutes'`, start),
+        gt(sql`${raceEndSql} + ${sql.raw(`interval '${RACE_WINDOW_AFTER_MS / 1000} seconds'`)}`, start),
       ),
     );
+  return rows.map((r) => r.id);
+}
+
+/** Quem está inscrito (confirmado ou na fila) em alguma das corridas `raceIds`. */
+export async function enrolledIn(db: Pick<Tx, 'select'>, raceIds: string[], userIds?: string[]) {
+  if (!raceIds.length || (userIds && !userIds.length)) return [];
+  return db
+    .select({ raceId: entries.raceId, userId: entries.userId })
+    .from(entries)
+    .where(
+      and(
+        inArray(entries.raceId, raceIds),
+        inArray(entries.status, ['confirmed', 'waitlisted']),
+        ...(userIds ? [inArray(entries.userId, userIds)] : []),
+      ),
+    );
+}
+
+export async function checkScheduleConflict(tx: Tx, race: RaceRow, userId: string) {
+  const rows = await enrolledIn(tx, await overlappingRaces(tx, race), [userId]);
   if (rows.length >= MAX_OVERLAPPING_ENTRIES)
     throw new AppError('SCHEDULE_CONFLICT', 'Você já está inscrito em uma corrida no mesmo horário.');
 }

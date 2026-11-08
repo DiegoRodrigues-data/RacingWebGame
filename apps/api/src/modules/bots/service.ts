@@ -17,7 +17,13 @@ import type { Ctx } from '../../context';
 import { botPersonas, botPlans, entries, profiles, races, users } from '../../db/schema';
 import { hashPassword } from '../../lib/crypto';
 import { prepareBots } from '../engine/bots';
-import { assignCar, checkScheduleConflict, promoteNext } from '../races/entries';
+import {
+  assignCar,
+  checkScheduleConflict,
+  enrolledIn,
+  overlappingRaces,
+  promoteNext,
+} from '../races/entries';
 import { notify } from '../notifications/service';
 import { broadcastRace, capacityOf, getCategory, getRaceRow, type RaceRow } from '../races/service';
 import { getSettings } from '../settings/service';
@@ -356,6 +362,23 @@ async function eligiblePersonas(ctx: Ctx, race: RaceRow) {
 }
 
 /**
+ * Pilotos simulados ocupados no horário de `race`: inscritos ou com inscrição planejada (ainda por fazer) em outra
+ * corrida que se sobrepõe a ela. Com corridas a cada 30 min, sem isso o plano escolheria quem não pode entrar.
+ */
+async function busyInSlot(ctx: Ctx, race: RaceRow): Promise<Set<string>> {
+  const ids = await overlappingRaces(ctx.db, race);
+  if (!ids.length) return new Set();
+  const [ents, plans] = await Promise.all([
+    enrolledIn(ctx.db, ids),
+    ctx.db
+      .select({ userId: botPlans.userId })
+      .from(botPlans)
+      .where(and(inArray(botPlans.raceId, ids), isNull(botPlans.doneAt))),
+  ]);
+  return new Set([...ents, ...plans].map((r) => r.userId));
+}
+
+/**
  * Quem já está na corrida: confirmados, planos ainda por executar e os ids de quem não pode ser planejado de novo
  * (já tem plano ou inscrição não cancelada).
  */
@@ -428,23 +451,26 @@ export async function planBotEntries(ctx: Ctx, race: RaceRow): Promise<number> {
   if (want <= 0) return 0;
   const activeAt = activeOnCached(all, s);
   const today = activeAt(from);
-  const candidates = eligible.map((p) => {
-    const r = createRng(`${race.seed}|botplan|${p.userId}`);
-    const keen = r.chance(p.joinRate);
-    let joinAt: number | null = null;
-    for (let k = 0; k < 3 && joinAt === null; k++) {
-      // √u: mais inscrições perto do treino, como gente que decide em cima da hora.
-      const t = Math.round(from + (to - from) * Math.sqrt(r.next()));
-      if (isOnlineHour(p, t) && activeAt(t).has(p.userId)) joinAt = t;
-    }
-    const tier = joinAt !== null && keen ? 0 : joinAt !== null ? 1 : today.has(p.userId) ? 2 : 3;
-    return {
-      userId: p.userId,
-      joinAt: joinAt ?? Math.round(from + (to - from) * Math.sqrt(r.next())),
-      tier,
-      k: createRng(`${race.seed}|botpick|${p.userId}`).next(),
-    };
-  });
+  const busy = await busyInSlot(ctx, race);
+  const candidates = eligible
+    .filter((p) => !busy.has(p.userId))
+    .map((p) => {
+      const r = createRng(`${race.seed}|botplan|${p.userId}`);
+      const keen = r.chance(p.joinRate);
+      let joinAt: number | null = null;
+      for (let k = 0; k < 3 && joinAt === null; k++) {
+        // √u: mais inscrições perto do treino, como gente que decide em cima da hora.
+        const t = Math.round(from + (to - from) * Math.sqrt(r.next()));
+        if (isOnlineHour(p, t) && activeAt(t).has(p.userId)) joinAt = t;
+      }
+      const tier = joinAt !== null && keen ? 0 : joinAt !== null ? 1 : today.has(p.userId) ? 2 : 3;
+      return {
+        userId: p.userId,
+        joinAt: joinAt ?? Math.round(from + (to - from) * Math.sqrt(r.next())),
+        tier,
+        k: createRng(`${race.seed}|botpick|${p.userId}`).next(),
+      };
+    });
   const chosen = candidates.sort((a, b) => a.tier - b.tier || a.k - b.k).slice(0, want);
   if (!chosen.length) return 0;
   await ctx.db
@@ -468,8 +494,9 @@ export async function topUpBotEntries(ctx: Ctx, race: RaceRow, s: PoolSettings):
   const { all, eligible } = await eligiblePersonas(ctx, race);
   const today = activeOn(all, s, now);
   const r = createRng(`${race.seed}|topup|${confirmed}|${pending}`);
+  const busy = await busyInSlot(ctx, race);
   const pick = eligible
-    .filter((p) => !taken.has(p.userId))
+    .filter((p) => !taken.has(p.userId) && !busy.has(p.userId))
     .map((p) => ({ p, k: (isOnlineHour(p, now) && today.has(p.userId) ? 0 : 1) + r.next() }))
     .sort((a, b) => a.k - b.k)
     .slice(0, want);

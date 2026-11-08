@@ -8,7 +8,7 @@ import {
   type TrackTerrain,
 } from '@tracado/shared';
 import { createRng } from '@tracado/trackgen';
-import { and, desc, eq, gte, inArray, lte, sql } from 'drizzle-orm';
+import { and, asc, desc, eq, gte, inArray, lt, lte, sql } from 'drizzle-orm';
 import type { Ctx } from '../../context';
 import { categories, notifications, races, trackPlans, tracks, trackVersions } from '../../db/schema';
 import { createRace } from '../races/service';
@@ -92,6 +92,15 @@ async function categoryBySlug(ctx: Pick<Ctx, 'db'>, slug: string) {
   return c && c.active ? c : null;
 }
 
+/** Horário de Brasília (UTC−3, sem horário de verão desde 2019). */
+const BRT_OFFSET_MS = 3 * 3_600_000;
+/** Início (UTC) do dia `AAAA-MM-DD` no horário de Brasília. */
+export function brtDayStart(day: string): number {
+  const [y, m, d] = day.split('-').map(Number);
+  return Date.UTC(y!, m! - 1, d!) + BRT_OFFSET_MS;
+}
+export const brtDay = (t: number) => new Date(t - BRT_OFFSET_MS).toISOString().slice(0, 10);
+
 /** Intervalo entre os horários da grade automática (ms; os horários são múltiplos dele em UTC). */
 export const gridStep = (s: GameSettings) => Math.round(86_400_000 / s.autoRaces.perDay);
 
@@ -111,6 +120,42 @@ export function slotCategory<C extends { slug: string; active: boolean }>(
     if (c?.active) return c;
   }
   return null;
+}
+
+/**
+ * Pistas do dia: o horário `at` repete a pista (e o cenário) do primeiro horário do mesmo dia de Brasília e da mesma
+ * categoria que caiu na mesma posição do rodízio (`posição no dia % tracksPerDay`). Assim quem correu de manhã
+ * reencontra a pista à tarde, com o que aprendeu. Ficam de fora as corridas com pista escolhida pelo admin e as
+ * pistas que deixaram de ser publicadas. Sem horário anterior (ou com `tracksPerDay` = 0), devolve null: pista nova.
+ */
+export async function dayPoolTrack(
+  ctx: Pick<Ctx, 'db'>,
+  s: GameSettings,
+  categoryId: string,
+  at: number,
+): Promise<{ track: RaceCreate['track']; biome: Biome } | null> {
+  const n = s.autoRaces.tracksPerDay;
+  if (!n) return null;
+  const step = gridStep(s);
+  const from = brtDayStart(brtDay(at));
+  const pos = (t: number) => Math.floor((t - from) / step) % n;
+  const rows = await ctx.db
+    .select({ at: races.practiceAt, versionId: races.trackVersionId, biome: races.biome, flags: races.flags })
+    .from(races)
+    .innerJoin(trackVersions, eq(trackVersions.id, races.trackVersionId))
+    .where(
+      and(
+        gte(races.practiceAt, new Date(from)),
+        lt(races.practiceAt, new Date(at)),
+        eq(races.categoryId, categoryId),
+        eq(trackVersions.status, 'published'),
+        sql`${races.flags} ? 'auto'`,
+        sql`not (${races.flags} ? 'trackPicked')`,
+      ),
+    )
+    .orderBy(asc(races.practiceAt));
+  const ref = rows.find((r) => pos(r.at.getTime()) === pos(at));
+  return ref ? { track: { type: 'version', trackVersionId: ref.versionId }, biome: ref.biome } : null;
 }
 
 /** Corridas automáticas não são criadas para começar em menos que isto (dá tempo de alguém se inscrever). */
@@ -175,9 +220,10 @@ export async function ensureAutoRaces(ctx: Ctx): Promise<number> {
     const cat = slotCategory(st, cats, at);
     if (!cat) break;
     const planned = plans.get(at);
+    const again = planned ? null : await dayPoolTrack(ctx, st, cat.id, at);
     const track: RaceCreate['track'] = planned
       ? { type: 'version', trackVersionId: planned }
-      : await autoTrack(ctx, st, cat);
+      : (again?.track ?? (await autoTrack(ctx, st, cat)));
     const row = await createRace(
       ctx,
       {
@@ -192,7 +238,7 @@ export async function ensureAutoRaces(ctx: Ctx): Promise<number> {
         waitlistMax: 10,
         ...(a.laps ? { laps: a.laps } : {}),
         track,
-        biome: await autoBiome(ctx, st, track),
+        biome: again?.biome ?? (await autoBiome(ctx, st, track)),
       },
       null,
     );

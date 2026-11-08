@@ -46,6 +46,11 @@ export const gameSettingsSchema = z
         .int()
         .min(0)
         .max(MAX_CARS_PER_RACE - 1),
+      /**
+       * Pistas diferentes por dia (horário de Brasília) e categoria: os horários repetem as pistas em rodízio, cada
+       * uma voltando a cada `tracksPerDay` horários. 0 = pista nova em todo horário.
+       */
+      tracksPerDay: z.number().int().min(0).max(96),
     }),
     /** Corridas teste em ciclo (curtas, com bots): uma por vez; `gapMin` = da bandeirada ao treino da próxima. */
     testRaces: z.object({
@@ -154,6 +159,7 @@ export const DEFAULT_GAME_SETTINGS: GameSettings = {
     laps: null,
     categories: ['copa-novatos'],
     bots: 0,
+    tracksPerDay: 12,
   },
   testRaces: {
     enabled: false,

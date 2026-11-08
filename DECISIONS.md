@@ -364,6 +364,29 @@ usavam passam para uma pista gerada (com o aviso aos inscritos). Corridas em and
 Corridas da Corrida Maluca e corridas teste ficam de fora. A categoria de cada horário segue o rodízio da grade
 (`slotCategory`, o mesmo cálculo da criação).
 
+### Corridas de 30 em 30 minutos e pistas que se repetem no dia
+
+Pedido de 08/11/2026: uma corrida a cada 30 min e reaproveitar as pistas geradas no dia.
+
+- **Duração medida** (simulação de 16 carros, tempo real com a transmissão acelerada da categoria): Copa Novatos de
+  10 a 13 min, as de 40 a 50 voltas de 12 a 20 min, a de 60 voltas em 5 km cerca de 25 min. Com a classificação, tudo
+  cabe em 30 min; basta `autoRaces.perDay = 48` (configuração do admin, sem deploy).
+- **Conflito de horário pela bandeirada prevista**: antes, a corrida ocupava o horário até 30 min depois da largada
+  (a bandeirada real só existe depois da simulação), e quem estava numa corrida não conseguia entrar na seguinte.
+  Agora a previsão usa voltas × comprimento a 32 m/s no tempo da simulação (as corridas medidas ficam entre 32 e
+  45 m/s, então erra para mais), dividido pelo ritmo de transmissão da categoria, e a folga depois da bandeirada
+  caiu para 2 min (`overlappingRaces` em `races/entries.ts`). Uma corrida longa ainda bloqueia a seguinte.
+- **Pilotos simulados**: o plano e o complemento do grid deixam de fora quem já está inscrito, ou tem inscrição
+  planejada, numa corrida que se sobrepõe (`busyInSlot`). Antes, o plano escolhia o piloto e a inscrição falhava
+  em silêncio na hora.
+- **Pistas do dia** (`autoRaces.tracksPerDay`, padrão 12; 0 = pista nova em todo horário): o horário na posição `k`
+  do dia de Brasília repete a pista e o cenário do primeiro horário do mesmo dia e da mesma categoria com a mesma
+  posição `k % tracksPerDay` (`dayPoolTrack`). Com 48 corridas e 12 pistas, cada pista volta a cada 6 h, nunca em
+  horários seguidos, e o dia seguinte começa com pistas novas. Quem correu de manhã reencontra a pista com o que
+  aprendeu, e o banco guarda 12 procedurais por dia em vez de 48. Não há coluna nova: a posição sai do horário.
+  Reservas do admin têm prioridade e corridas com pista escolhida (`trackPicked`) ou descontinuada não servem de
+  referência. Trocar a pista de uma corrida pelas pistas do dia muda a referência dos horários ainda não criados.
+
 ### Velocímetro
 
 Na corrida ao vivo, no replay e no teste do box, canto superior direito da pista. Mostra o carro em foco (o seguido, o

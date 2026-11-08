@@ -141,7 +141,7 @@ describe('configurações do jogo (admin)', () => {
       '/admin/settings',
       {
         ...base,
-        autoRaces: { ...base.autoRaces, enabled: true, lookaheadHours: 8 },
+        autoRaces: { ...base.autoRaces, enabled: true, lookaheadHours: 8, tracksPerDay: 0 },
         tracks: {
           ...base.tracks,
           terrains: { asphalt: 100, dirt: 0, sand: 0, mixed: 0 },

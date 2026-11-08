@@ -128,6 +128,8 @@ const minutes = (ms: number) => {
   const s = Math.round(ms / 1000);
   return s >= 60 ? `${Math.floor(s / 60)} min${s % 60 ? ` ${s % 60} s` : ''}` : `${s} s`;
 };
+const hoursOrMinutes = (ms: number) =>
+  ms >= 3_600_000 ? `${Number((ms / 3_600_000).toFixed(1)).toLocaleString('pt-BR')} h` : minutes(ms);
 
 /** Configurações do jogo: fases, grade automática, corridas teste, bots, geração de pistas e Corrida Maluca. */
 export default function AdminSettings() {
@@ -265,6 +267,18 @@ export default function AdminSettings() {
               max={168}
               suffix="h"
               onChange={(v) => set('autoRaces', { lookaheadHours: v ?? 24 })}
+            />
+            <Num
+              label="Pistas diferentes por dia (0 = nova a cada corrida)"
+              value={s.autoRaces.tracksPerDay}
+              min={0}
+              max={96}
+              suffix={
+                s.autoRaces.tracksPerDay > 0 && s.autoRaces.tracksPerDay < s.autoRaces.perDay
+                  ? `cada uma volta a cada ${hoursOrMinutes((86_400_000 / Math.max(1, s.autoRaces.perDay)) * s.autoRaces.tracksPerDay)}`
+                  : 'sem repetir'
+              }
+              onChange={(v) => set('autoRaces', { tracksPerDay: v ?? 0 })}
             />
             <Num
               label="Voltas"

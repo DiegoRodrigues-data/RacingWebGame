@@ -83,6 +83,25 @@ describe('inscrições com limite de 22 carros', () => {
     );
   });
 
+  it('corridas de 30 em 30 min: emenda a seguinte; uma corrida longa ainda ocupa o horário seguinte', async () => {
+    const HOUR = 3600_000;
+    const [u] = await users(1, 'emenda');
+    const post = async (race: string) => t.json('POST', `/races/${race}/entries`, {}, u!.token);
+    // 30 voltas de até 1,8 km, transmitidas a 4×: a bandeirada prevista fica bem antes da corrida seguinte.
+    const a = await t.createRace({}, 20 * HOUR);
+    const b = await t.createRace({}, 20 * HOUR + 30 * 60_000);
+    expect((await post(a)).status).toBe(201);
+    expect((await post(b)).status).toBe(201);
+    // 60 voltas de 6 km: a estimativa passa de 40 min, então a corrida das 30 min seguintes conflita.
+    const longa = await t.createRace(
+      { laps: 60, track: { type: 'procedural', seed: 'longa', params: { length: 6000 } } },
+      30 * HOUR,
+    );
+    const depois = await t.createRace({}, 30 * HOUR + 30 * 60_000);
+    expect((await post(longa)).status).toBe(201);
+    expect((await post(depois)).body.error.code).toBe('SCHEDULE_CONFLICT');
+  });
+
   it('respeita o nível exigido pela categoria', async () => {
     const cat = await t.json(
       'POST',
