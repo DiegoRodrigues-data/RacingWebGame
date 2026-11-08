@@ -1,11 +1,17 @@
-import { BIOME_LABEL, BIOMES, type GameSettings, type TerrainWeights } from '@tracado/shared';
+import {
+  BIOME_LABEL,
+  BIOMES,
+  type DriverRules,
+  type GameSettings,
+  type TerrainWeights,
+} from '@tracado/shared';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import clsx from 'clsx';
 import { useEffect, useState, type ReactNode } from 'react';
 import { Link } from 'react-router';
 import { BIOME_CSS } from '../../components/TrackCanvas';
 import { Spinner, toast } from '../../components/ui';
-import { errorMessage, get, put } from '../../lib/api';
+import { errorMessage, get, post, put } from '../../lib/api';
 import { fmtKm, TERRAIN_LABEL } from '../../lib/format';
 import { AdminPage } from './AdminNav';
 
@@ -195,20 +201,21 @@ export default function AdminSettings() {
           hint={
             <>
               Vale para a grade automática, as corridas teste e a Corrida Maluca, e é o padrão das corridas
-              criadas aqui no admin. Do início do treino à largada:{' '}
+              criadas aqui no admin. Sem treino (padrão), traçado e setup ficam abertos desde a inscrição até
+              o parque fechado. Do horário da corrida à largada:{' '}
               <b className="text-ink">{minutes(prelude)}</b>.
             </>
           }
         >
           <div className="grid grid-cols-2 gap-3">
             <Num
-              label="Treino"
+              label="Treino (0 = sem treino)"
               value={p.practiceMin}
-              min={0.5}
+              min={0}
               max={120}
               step={0.5}
               suffix="min"
-              onChange={(v) => set('phases', { practiceMin: v ?? 2 })}
+              onChange={(v) => set('phases', { practiceMin: v ?? 0 })}
             />
             <Num
               label="Parque fechado"
@@ -230,6 +237,8 @@ export default function AdminSettings() {
             />
           </div>
         </Section>
+
+        <DriverRulesSection value={s.drivers} onChange={(v) => set('drivers', v)} />
 
         <Section title="Grade automática" hint="Corridas abertas criadas sozinhas em horários fixos.">
           <Toggle
@@ -541,5 +550,171 @@ export default function AdminSettings() {
         </div>
       )}
     </AdminPage>
+  );
+}
+
+interface BalanceResult {
+  races: number;
+  ms: number;
+  perRace: { overtakes: number; collisions: number; collisionDnfs: number; damagePits: number; dnfs: number };
+  avgPosition: Record<string, Record<string, number>>;
+}
+
+const TRAIT_LABEL: Record<string, string> = { attack: 'Ataque', defense: 'Defesa', pace: 'Ritmo' };
+
+/**
+ * Perfil do piloto e colisões: liga os toques, regula a frequência e o dano e o peso de cada característica do
+ * perfil. O teste simula algumas corridas com as regras do formulário (ainda sem salvar) para ver o efeito.
+ */
+function DriverRulesSection({
+  value,
+  onChange,
+}: {
+  value: DriverRules;
+  onChange: (v: Partial<DriverRules>) => void;
+}) {
+  const [test, setTest] = useState<BalanceResult | null>(null);
+  const [running, setRunning] = useState(false);
+  async function runTest() {
+    setRunning(true);
+    try {
+      setTest(await post<BalanceResult>('/admin/settings/drivers/test', { rules: value, races: 2 }));
+    } catch (x) {
+      toast('Não deu para testar', errorMessage(x), 'error');
+    } finally {
+      setRunning(false);
+    }
+  }
+  const spread = test
+    ? Math.max(
+        ...Object.values(test.avgPosition).map(
+          (b) => Math.max(...Object.values(b)) - Math.min(...Object.values(b)),
+        ),
+      )
+    : 0;
+  return (
+    <Section
+      title="Pilotos e colisões"
+      hint="Como o perfil do piloto (ataque, defesa, ritmo) pesa na corrida e quanto os carros se tocam nas disputas. Vale para as corridas simuladas daqui em diante; cada corrida guarda as regras com que rodou."
+    >
+      <Toggle
+        label="Colisões nas disputas de posição"
+        checked={value.collisions}
+        onChange={(v) => onChange({ collisions: v })}
+      />
+      <div className="grid grid-cols-2 gap-3">
+        <Num
+          label="Frequência dos toques"
+          value={value.collisionRate}
+          min={0}
+          max={3}
+          step={0.1}
+          suffix="×"
+          onChange={(v) => onChange({ collisionRate: v ?? 1 })}
+        />
+        <Num
+          label="Chance de avaria no toque"
+          value={Math.round(value.damageRate * 100)}
+          min={0}
+          max={100}
+          step={5}
+          suffix="%"
+          onChange={(v) => onChange({ damageRate: (v ?? 30) / 100 })}
+        />
+        <Num
+          label="Peso do ataque"
+          value={value.attackEffect}
+          min={0}
+          max={2}
+          step={0.1}
+          suffix="×"
+          onChange={(v) => onChange({ attackEffect: v ?? 1 })}
+        />
+        <Num
+          label="Peso da defesa"
+          value={value.defenseEffect}
+          min={0}
+          max={2}
+          step={0.1}
+          suffix="×"
+          onChange={(v) => onChange({ defenseEffect: v ?? 1 })}
+        />
+        <Num
+          label="Peso do ritmo"
+          value={value.paceEffect}
+          min={0}
+          max={2}
+          step={0.1}
+          suffix="×"
+          onChange={(v) => onChange({ paceEffect: v ?? 1 })}
+        />
+      </div>
+      <p className="text-xs text-muted">
+        1× é o padrão balanceado; 0× desliga o efeito. Uma avaria leva o carro aos boxes no fim da volta
+        (cerca de um terço das vezes, abandono).
+      </p>
+      <div className="space-y-2 rounded-2xl border border-line p-3">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <span className="text-sm font-bold">Teste de equilíbrio</span>
+          <button className="btn-ghost !py-1.5 text-sm" disabled={running} onClick={runTest}>
+            {running ? 'Simulando…' : 'Simular com estas regras'}
+          </button>
+        </div>
+        {test ? (
+          <div className="space-y-2 text-sm">
+            <p className="text-xs text-muted">
+              {test.races} corridas de 22 carros, setups e perfis sorteados ({(test.ms / 1000).toFixed(1)} s).
+              Por corrida:
+            </p>
+            <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+              {[
+                ['Ultrapassagens', test.perRace.overtakes],
+                ['Toques', test.perRace.collisions],
+                ['Avarias (boxes)', test.perRace.damagePits],
+                ['Abandonos por toque', test.perRace.collisionDnfs],
+              ].map(([k, v]) => (
+                <div key={k} className="rounded-xl bg-night-2 p-2">
+                  <div className="text-[11px] text-muted">{k}</div>
+                  <div className="font-display text-lg">{Number(v).toFixed(1)}</div>
+                </div>
+              ))}
+            </div>
+            <table className="w-full text-xs">
+              <thead className="text-left text-muted">
+                <tr>
+                  <th className="py-1">Posição média (11,5 = neutro)</th>
+                  <th className="text-right">baixo</th>
+                  <th className="text-right">médio</th>
+                  <th className="text-right">alto</th>
+                </tr>
+              </thead>
+              <tbody>
+                {Object.entries(test.avgPosition).map(([k, b]) => (
+                  <tr key={k} className="border-t border-line">
+                    <td className="py-1">{TRAIT_LABEL[k] ?? k}</td>
+                    {['low', 'mid', 'high'].map((x) => (
+                      <td key={x} className="text-right font-mono">
+                        {b[x]?.toFixed(1) ?? '–'}
+                      </td>
+                    ))}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+            <p className={clsx('text-xs', spread > 2 ? 'text-hot' : 'text-go')}>
+              {spread > 2
+                ? `Atenção: uma faixa do perfil chega ${spread.toFixed(1)} posições à frente da outra. Pode estar desequilibrado.`
+                : `Equilibrado: no máximo ${spread.toFixed(1)} posição de diferença entre as faixas do perfil.`}{' '}
+              Com poucas corridas o resultado varia; rode de novo para confirmar.
+            </p>
+          </div>
+        ) : (
+          <p className="text-xs text-muted">
+            Simula 14 corridas no servidor com as regras acima, sem salvar, e mostra toques, abandonos e se
+            algum perfil ficou forte demais.
+          </p>
+        )}
+      </div>
+    </Section>
   );
 }

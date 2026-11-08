@@ -58,7 +58,11 @@ export interface RaceIncidentDto {
     | 'pit'
     | 'weather'
     | 'overtake'
-    | 'fastest_lap';
+    | 'fastest_lap'
+    /** Toque numa disputa: `userId` atacou, `detail` = id de quem foi tocado. */
+    | 'collision'
+    /** Avaria depois de um toque: `detail` = 'pit' (conserto obrigatório) ou 'dnf' (abandono). */
+    | 'damage';
   lap: number;
   detail?: string;
 }

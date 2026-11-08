@@ -105,10 +105,14 @@ const PHASE_STEPS: RacePhase[] = [
   'finished',
 ];
 export function PhaseTimeline({ race }: { race: RaceSummaryDto }) {
-  // Sem janela de traçado (padrão): o passo some da linha do tempo.
+  // Sem treino ou sem janela de traçado (padrão): o passo some da linha do tempo.
+  const t = race.timeline;
   const steps = PHASE_STEPS.filter(
     (p) =>
-      p !== 'trace_window' || race.timeline.setupLockAt > race.timeline.traceWindowAt || race.status === p,
+      race.status === p ||
+      (p !== 'trace_window' && p !== 'practice') ||
+      (p === 'trace_window' && t.setupLockAt > t.traceWindowAt) ||
+      (p === 'practice' && t.traceWindowAt > t.practiceAt),
   );
   const idx = steps.indexOf(race.status === 'archived' ? 'finished' : race.status);
   const times: Partial<Record<RacePhase, string | null>> = {

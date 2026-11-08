@@ -5,6 +5,7 @@ import {
   ROOM,
   type CapacityDto,
   type CategoryConfig,
+  DEFAULT_TRACK_WIDTH,
   type EntryDto,
   type RaceCreate,
   type RaceDetailDto,
@@ -88,7 +89,7 @@ export async function createRace(
     const params = {
       length: p.length ?? Math.round(r.range(cfg.trackLength.min, cfg.trackLength.max) / 50) * 50,
       complexity: p.complexity ?? cfg.trackComplexity,
-      width: p.width ?? 12,
+      width: p.width ?? DEFAULT_TRACK_WIDTH,
       terrain: p.terrain ?? r.pick(cfg.terrains),
     };
     trackVersionId = (await createProceduralVersion(db, tseed, params, actorId)).id;

@@ -18,6 +18,7 @@ import type {
   CategoryConfig,
   EditorTrack,
   Biome,
+  DriverProfile,
   EntryStatus,
   GameSettings,
   Level,
@@ -82,6 +83,8 @@ export const profiles = pgTable(
     careerRaces: integer('career_races').notNull().default(0),
     reducedMotion: boolean('reduced_motion').notNull().default(false),
     emailReminders: boolean('email_reminders').notNull().default(false),
+    /** Perfil do piloto (ataque, defesa, ritmo); null = o sorteado pelo id (`driverProfileFor`). */
+    driver: jsonb('driver').$type<DriverProfile>(),
     updatedAt: ts('updated_at').notNull().defaultNow(),
   },
   (t) => [uniqueIndex('profiles_nickname_uq').on(sql`lower(${t.nickname})`)],

@@ -279,7 +279,7 @@ function CreateGroup() {
         />
       </div>
       <div>
-        <span className="label">Começa (treino da primeira corrida)</span>
+        <span className="label">Começa (parque fechado da primeira corrida)</span>
         <Segmented label="Começa" value={startIn} onChange={setStartIn} options={START_OPTIONS} />
         {startIn < 0 && (
           <input
@@ -292,8 +292,9 @@ function CreateGroup() {
           />
         )}
         <p className="mt-1 text-xs text-muted">
-          Cada corrida tem treino ({dur(Math.round(ph.practiceMin * 60))}), classificação ao vivo (
-          {dur(ph.qualifyingSec)}) e a corrida. O traçado e o setup valem até o fim do treino.
+          {ph.practiceMin > 0
+            ? `Cada corrida tem treino (${dur(Math.round(ph.practiceMin * 60))}), classificação ao vivo (${dur(ph.qualifyingSec)}) e a corrida. O traçado e o setup valem até o fim do treino.`
+            : `Traçado e setup ficam abertos no box até o parque fechado; depois vêm a classificação ao vivo (${dur(ph.qualifyingSec)}) e a corrida. Com todos prontos, larga antes.`}
         </p>
       </div>
       {races > 1 && (
@@ -762,14 +763,14 @@ function RaceRow({ r, member, highlight }: { r: CrazyRaceDto; member: boolean; h
             {r.trackName}
           </Link>
           <div className="text-xs text-muted">
-            {r.laps} voltas · treino {fmtDateTime(r.practiceAt)}
+            {r.laps} voltas · começa {fmtDateTime(r.practiceAt)}
           </div>
         </div>
         {!done && r.status !== 'cancelled' && (
           <span className="text-sm text-muted">
             {['scheduled', 'registration_open'].includes(r.status) ? (
               <>
-                treino em <Countdown to={r.practiceAt} className="text-ink" />
+                começa em <Countdown to={r.practiceAt} className="text-ink" />
               </>
             ) : (
               <PhaseBadge phase={r.status as RacePhase} />
@@ -781,7 +782,9 @@ function RaceRow({ r, member, highlight }: { r: CrazyRaceDto; member: boolean; h
         )}
         <RaceCta r={r} member={member} />
       </div>
-      {highlight && ['practice', 'trace_window'].includes(r.status) && <RaceReadyBar raceId={r.raceId} />}
+      {highlight && ['registration_open', 'practice', 'trace_window'].includes(r.status) && (
+        <RaceReadyBar raceId={r.raceId} />
+      )}
       {done && (
         <>
           <div className="flex flex-wrap items-center gap-2 text-sm">

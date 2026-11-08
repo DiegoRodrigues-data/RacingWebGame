@@ -235,15 +235,14 @@ describe('Corrida Maluca', () => {
     for (const p of [a, b]) await t.json('POST', `/crazy/invite/${g.inviteCode}/join`, {}, p.token);
     await t.engine.tick();
 
-    // Antes do treino não dá; corrida aberta também não.
-    expect((await t.json('PUT', `/races/${r1}/ready`, { ready: true }, a.token)).body.error.code).toBe(
+    // Sem treino, o preparo é com as inscrições abertas, mas só da próxima etapa: a 2 espera a 1 acabar.
+    expect((await t.json('PUT', `/races/${r2}/ready`, { ready: true }, a.token)).body.error.code).toBe(
       'INVALID_TRANSITION',
     );
     let race = await t.race(r1);
+    expect(race.status).toBe('registration_open');
     const raceAtBefore = Date.parse(race.timeline.raceAt);
     const qualiMs = raceAtBefore - Date.parse(race.timeline.qualifyingAt);
-    await t.advanceTo(Date.parse(race.timeline.practiceAt) + 10_000);
-    expect((await t.race(r1)).status).toBe('practice');
 
     // Organizador sem ninguém pronto: espera. Quem não é organizador: proibido.
     expect((await t.json('POST', `/races/${r1}/start-now`, {}, org.token)).body.error.code).toBe('CONFLICT');
@@ -255,7 +254,7 @@ describe('Corrida Maluca', () => {
     r = (await t.json('PUT', `/races/${r1}/ready`, { ready: true }, b.token)).body;
     expect(r).toMatchObject({ ready: 2, skipped: false });
     race = await t.race(r1);
-    expect(race.status).toBe('practice');
+    expect(race.status).toBe('registration_open');
     expect(race.entries.filter((e: { ready: boolean }) => e.ready)).toHaveLength(2);
     const now = t.clock.now();
     r = (await t.json('POST', `/races/${r1}/start-now`, {}, org.token)).body;
@@ -275,11 +274,12 @@ describe('Corrida Maluca', () => {
     await t.advanceTo(Date.parse(race.timeline.raceAt));
     expect((await t.race(r1)).status).toBe('race');
 
-    // Etapa 2 sem mudança de horário; todos prontos pulam sozinhos.
+    // Etapa 2 sem mudança de horário; depois da bandeirada da 1, todos prontos pulam sozinhos.
     let race2 = await t.race(r2);
     expect(Date.parse(race2.timeline.practiceAt)).toBe(Date.parse(startAt) + 30 * 60_000);
-    await t.advanceTo(Date.parse(race2.timeline.practiceAt) + 1000);
-    expect((await t.race(r2)).status).toBe('practice');
+    await t.advanceTo(Date.parse((await t.race(r1)).timeline.raceEndsAt) + 1000);
+    expect((await t.race(r1)).status).toBe('finished');
+    expect((await t.race(r2)).status).toBe('registration_open');
     for (const p of [a, b]) await t.json('PUT', `/races/${r2}/ready`, { ready: true }, p.token);
     r = (await t.json('PUT', `/races/${r2}/ready`, { ready: true }, org.token)).body;
     expect(r).toMatchObject({ humans: 3, ready: 3, skipped: true });

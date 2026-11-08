@@ -5,6 +5,7 @@ import {
   TERRAINS,
   type CarSetup,
   type CategoryConfig,
+  type DriverProfile,
   type Tyre,
 } from '@tracado/shared';
 import { createRng, offsetsToTrace, suggestedLine, enforceLateralRate } from '@tracado/trackgen';
@@ -69,9 +70,23 @@ export async function fillBots(ctx: Ctx, raceId: string, count: number) {
 
 type Persona = Pick<typeof botPersonas.$inferSelect, 'skill' | 'aggression' | 'pitRisk'>;
 
-/** Setup de um piloto simulado: o estilo da persona puxa motor, pneus, asa e o risco de parar mais. */
-function personaSetup(seed: string, cfg: CategoryConfig, laps: number, wet: boolean, p: Persona): CarSetup {
+/**
+ * Setup de um piloto simulado: o estilo da persona puxa motor, pneus, asa e o risco de parar mais. O perfil do
+ * piloto vem do dele, com um ajuste pequeno por corrida, como quem mexe um pouco a cada prova.
+ */
+function personaSetup(
+  seed: string,
+  cfg: CategoryConfig,
+  laps: number,
+  wet: boolean,
+  p: Persona,
+  driver: DriverProfile | null,
+): CarSetup {
   const r = createRng(seed);
+  const tweak = (v: number) => Math.max(0, Math.min(100, v + r.int(-8, 8)));
+  const raceDriver = driver
+    ? { attack: tweak(driver.attack), defense: tweak(driver.defense), pace: tweak(driver.pace) }
+    : undefined;
   const allowed = cfg.setupLimits.allowedTyres;
   const dry = allowed.filter((t) => t !== 'wet');
   const pool = dry.length ? dry : allowed;
@@ -108,6 +123,7 @@ function personaSetup(seed: string, cfg: CategoryConfig, laps: number, wet: bool
     gearing: Math.max(1, Math.min(10, Math.round(5.5 + r.range(-2.5, 2.5) * (1 - p.skill * 0.6)))),
     terrainPrep: r.chance(0.5 + p.skill * 0.5) ? 'asphalt' : r.pick(TERRAINS),
     weatherBet: wet ? (r.chance(0.5 + p.skill * 0.5) ? 'wet' : 'mixed') : r.pick(['dry', 'mixed'] as const),
+    ...(raceDriver ? { driver: raceDriver } : {}),
   };
 }
 
@@ -159,9 +175,10 @@ export async function fillCrazyBots(ctx: Ctx, race: { id: string; crazyGroupId: 
 export async function prepareBots(ctx: Ctx, raceId: string) {
   const race = await getRaceRow(ctx.db, raceId);
   const bots = await ctx.db
-    .select({ id: users.id, persona: botPersonas })
+    .select({ id: users.id, persona: botPersonas, driver: profiles.driver })
     .from(entries)
     .innerJoin(users, eq(users.id, entries.userId))
+    .innerJoin(profiles, eq(profiles.userId, users.id))
     .leftJoin(botPersonas, eq(botPersonas.userId, users.id))
     .where(and(eq(entries.raceId, raceId), eq(entries.status, 'confirmed'), eq(users.isBot, true)));
   if (!bots.length) return;
@@ -192,7 +209,7 @@ export async function prepareBots(ctx: Ctx, raceId: string) {
         raceId,
         userId: b.id,
         setup: p
-          ? personaSetup(`${race.seed}|setup|${b.id}`, cat.config, race.laps, wet, p)
+          ? personaSetup(`${race.seed}|setup|${b.id}`, cat.config, race.laps, wet, p, b.driver)
           : botSetup(`${race.seed}|setup|${b.id}`, cat.config, race.laps, wet),
         updatedAt: now,
       })

@@ -1,11 +1,14 @@
 import { gunzipSync, gzipSync } from 'node:zlib';
 import {
+  DEFAULT_DRIVER_RULES,
   DEFAULT_SETUP,
   checkSetupLimits,
+  driverProfileFor,
   defaultPitStops,
   xpForRace,
   type CarSetup,
   type CategoryConfig,
+  type DriverRules,
   type LiveCarDto,
   type QualifyingRowDto,
   type RaceIncidentDto,
@@ -116,6 +119,8 @@ export async function runSimulation(
   ctx: Ctx,
   tx: Tx,
   race: RaceRow,
+  /** Perfil do piloto e colisões (configurações do jogo), gravadas na entrada da simulação. */
+  rules: DriverRules = DEFAULT_DRIVER_RULES,
 ): Promise<{ rows: QualifyingRowDto[]; raceEndsAt: Date } | null> {
   const t0 = performance.now();
   // Dentro da transação: a consulta precisa usar o tx (no PGlite, ctx.db aqui travaria esperando o próprio tx).
@@ -132,15 +137,17 @@ export async function runSimulation(
   const traceRows = await tx.select().from(traces).where(eq(traces.raceId, race.id));
   const fallback = defaultSetupFor(cat.config, race.laps);
   const flags = new Map<string, { defSetup: boolean; defTrace: boolean }>();
-  const cars: SimCar[] = confirmed.map(({ e }) => {
+  const cars: SimCar[] = confirmed.map(({ e, p }) => {
     let setup = setupRows.find((s) => s.userId === e.userId)?.setup;
     if (setup && checkSetupLimits(setup, cat.config, race.laps).length) setup = undefined;
     let trace = traceRows.find((t) => t.userId === e.userId)?.points ?? null;
     if (trace && !validateTrace(g, trace).ok) trace = null; // revalidação defensiva
     flags.set(e.userId, { defSetup: !setup, defTrace: !trace });
-    return { id: e.userId, setup: setup ?? fallback, trace };
+    // Perfil do piloto: o ajuste desta corrida (no setup), senão o do jogador, senão o sorteado pelo id.
+    const driver = setup?.driver ?? p.driver ?? driverProfileFor(e.userId);
+    return { id: e.userId, setup: setup ?? fallback, trace, driver };
   });
-  const quali = simulateQualifying(g, cars, race.seed, race.weather, race.laps);
+  const quali = simulateQualifying(g, cars, race.seed, race.weather, race.laps, rules);
   const byId = new Map(cars.map((c) => [c.id, c]));
   const gridCars = quali.map((q) => byId.get(q.id)!);
   // Modo caos da Corrida Maluca: óleo, safety car e quebras ligados, qualquer que seja a categoria.
@@ -154,6 +161,7 @@ export async function runSimulation(
     seed: race.seed,
     weather: race.weather,
     randomEvents,
+    rules,
   };
   const out = simulateRace(input);
   ctx.metrics.simDuration.observe((performance.now() - t0) / 1000);
@@ -220,6 +228,7 @@ export async function runSimulation(
         seed: race.seed,
         weather: race.weather,
         randomEvents,
+        rules,
         trackVersionId: race.trackVersionId,
       },
     });

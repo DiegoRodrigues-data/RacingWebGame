@@ -357,6 +357,19 @@ Fecha o ciclo de vida com resultados persistidos.
 - [x] Ligados por padrão (`SIMULATED_DRIVERS=true`) e em produção desde 05/11/2026; bots de demonstração saem da grade automática
 - [ ] Acompanhar o preenchimento à noite e ajustar horários e vontade de correr se os grids ficarem vazios à tarde
 
+## Fase 23 — Perfil do piloto, colisões e grid cheio
+
+- [x] Grid alvo dos pilotos simulados (10 a 16 por padrão): entram outros simulados quando falta gente online, e o grid é completado nos 10 min antes do parque fechado
+- [x] Perfil do piloto (ataque, defesa, ritmo) no perfil do jogador, sorteado de forma estável e com botão de sortear outro
+- [x] Ajuste do perfil só para a corrida, no box (seção Piloto do setup), com as estimativas de volta e desgaste levando o ritmo em conta
+- [x] Ultrapassagem e defesa guiadas pelo perfil; colisões nas disputas com avaria (boxes ou abandono); carros lado a lado nos frames
+- [x] Pista padrão de 12 m para 14 m
+- [x] Admin: seção "Pilotos e colisões" nas configurações, com teste de equilíbrio no servidor
+- [x] Admin: edição completa de cada piloto simulado (persona e perfil) e criação de mais pilotos
+- [x] Balanceamento conferido (`pnpm balance` mede perfil e colisões); `SIM_VERSION` 3
+- [x] Sem etapa de treino: 0 min por padrão, preparação da inscrição ao parque fechado; Corrida Maluca com "Estou pronto" nas inscrições abertas
+- [ ] Acompanhar em produção: carros por corrida, toques e abandonos por toque, e ajustar no admin se precisar
+
 ---
 
 ## Ordem recomendada (próximos passos)

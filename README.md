@@ -1,7 +1,7 @@
 # Roda Presa — corrida estratégica multiplayer (web, 2D top-down)
 
 Jogo web em que até **22 pilotos** disputam corridas agendadas pelo servidor. Ninguém dirige em tempo real:
-cada jogador **desenha o traçado** sobre a pista até o fim do treino, **acerta o carro** (pneus, paradas,
+cada jogador **desenha o traçado** sobre a pista até o parque fechado, **acerta o carro** (pneus, paradas,
 calibragem, asa, motor, câmbio, terreno e aposta de clima) e o **servidor simula** classificação e corrida de forma
 determinística, transmitindo tudo ao vivo por WebSocket. Resultados alimentam rankings **local, regional, nacional e mundial**.
 
@@ -73,9 +73,10 @@ O andamento está em [ROADMAP.md](ROADMAP.md).
 
 ## Regras do jogo (resumo)
 
-- **Fases** controladas pelo servidor: agendada → inscrições → treino (2 min por padrão, ajustável no admin) → parque fechado → classificação ao vivo → corrida → encerrada → arquivada (ou cancelada).
+- **Fases** controladas pelo servidor: agendada → inscrições → parque fechado → classificação ao vivo → corrida → encerrada → arquivada (ou cancelada). O treino existe como fase, mas tem 0 min por padrão (ajustável no admin): a preparação vai da inscrição ao parque fechado.
+- **Perfil do piloto**: ataque, defesa e ritmo (0–100) no perfil do jogador, ajustáveis por corrida no box; definem como ele ultrapassa, defende e arrisca, e as colisões nas disputas.
 - **Inscrição**: até 22 confirmados; depois, fila de espera (tamanho configurável); com a fila cheia, `RACE_FULL`. Cancelar antes do treino promove o primeiro da fila. A disputa pela última vaga é serializada (lock de linha + mutex), então duas tentativas simultâneas resultam em uma confirmada e uma na fila.
-- **Traçado**: lista de pontos `(s, d)` — `s` é a fração da volta (0–1) e `d` o deslocamento lateral (−1 a 1). O servidor recusa pontos fora da pista (`TRACE_OUT_OF_BOUNDS`), traçado incompleto, em sentido contrário ou com mudança lateral brusca (`TRACE_INVALID`), e envios depois do parque fechado (`TRACE_WINDOW_CLOSED`). O traçado pode ser salvo desde a inscrição e ajustado até o fim do treino (não há mais janela de traçado separada). Sem traçado válido o carro corre na linha central com penalidade de 1,5% de ritmo.
+- **Traçado**: lista de pontos `(s, d)` — `s` é a fração da volta (0–1) e `d` o deslocamento lateral (−1 a 1). O servidor recusa pontos fora da pista (`TRACE_OUT_OF_BOUNDS`), traçado incompleto, em sentido contrário ou com mudança lateral brusca (`TRACE_INVALID`), e envios depois do parque fechado (`TRACE_WINDOW_CLOSED`). O traçado pode ser salvo desde a inscrição e ajustado até o parque fechado (não há mais treino nem janela de traçado separados). Sem traçado válido o carro corre na linha central com penalidade de 1,5% de ritmo.
 - **Grade automática**: o servidor mantém uma corrida a cada hora cheia nas próximas 24 h (`AUTO_RACES_PER_DAY=24`), amistosa e na Copa Novatos, com inscrições abertas para qualquer piloto. Corridas ranqueadas e competições são criadas pelo admin.
 - **Corridas teste**: uma corrida teste de 10 voltas com bots fica sempre em ciclo, uma por vez: a próxima nasce na bandeirada da anterior e começa 2 minutos depois (ajustável em Admin → Configurações; `AUTO_TEST_RACES_GAP_MIN` só liga o ciclo), com inscrições abertas desde a bandeirada da anterior. É amistosa, aparece em "Acontecendo agora", fica fora do calendário e é apagada 3 h depois de terminar.
 - **Setup**: editável até o parque fechado; limites por categoria. Sem setup, o servidor usa o padrão.

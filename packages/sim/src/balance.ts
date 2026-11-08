@@ -1,5 +1,12 @@
-import type { CarSetup, RaceWeather, TrackTerrain, Tyre } from '@tracado/shared';
-import { ENGINE_MAPS, TERRAINS, TYRES, WEATHER_BETS } from '@tracado/shared';
+import type { CarSetup, DriverRules, RaceWeather, TrackTerrain, Tyre } from '@tracado/shared';
+import {
+  DEFAULT_DRIVER_RULES,
+  DEFAULT_TRACK_WIDTH,
+  ENGINE_MAPS,
+  TERRAINS,
+  TYRES,
+  WEATHER_BETS,
+} from '@tracado/shared';
 import { createRng, generateProceduralTrack, type Rng } from '@tracado/trackgen';
 import { simulateRace } from './race';
 
@@ -22,8 +29,12 @@ export function randomSetup(rng: Rng, laps: number): CarSetup {
     gearing: rng.int(1, 10),
     terrainPrep: rng.pick(TERRAINS),
     weatherBet: rng.pick(WEATHER_BETS),
+    // Perfil do piloto uniforme em 0..100, para medir os extremos também.
+    driver: { attack: rng.int(0, 100), defense: rng.int(0, 100), pace: rng.int(0, 100) },
   };
 }
+
+const band = (v: number | undefined) => ((v ?? 50) < 34 ? 'low' : (v ?? 50) > 66 ? 'high' : 'mid');
 
 export type Feature = (s: CarSetup) => string;
 export const FEATURES: Record<string, Feature> = {
@@ -35,6 +46,9 @@ export const FEATURES: Record<string, Feature> = {
   terrainPrep: (s) => s.terrainPrep,
   weatherBet: (s) => s.weatherBet,
   strategy: (s) => [s.tyre, ...s.pitStops.map((p) => p.tyre)].join('>'),
+  attack: (s) => band(s.driver?.attack),
+  defense: (s) => band(s.driver?.defense),
+  pace: (s) => band(s.driver?.pace),
 };
 
 export interface Scenario {
@@ -113,9 +127,20 @@ export interface BalanceReport {
   lift: Record<string, Record<string, number>>;
   maxLift: { feature: string; value: string; lift: number };
   topStrategyWinShare: number;
+  /** Médias por corrida (22 carros). */
+  perRace: { overtakes: number; collisions: number; collisionDnfs: number; damagePits: number; dnfs: number };
+  /** Posição média de chegada por faixa de cada característica do perfil (11,5 = neutro com 22 carros). */
+  avgPosition: Record<string, Record<string, number>>;
 }
 
-export function runBalance(racesPerScenario = 25, seed = 'balance'): BalanceReport {
+export function runBalance(
+  racesPerScenario = 25,
+  seed = 'balance',
+  rules: DriverRules = DEFAULT_DRIVER_RULES,
+  scenarios: Scenario[] = SCENARIOS,
+): BalanceReport {
+  const tally = { overtakes: 0, collisions: 0, collisionDnfs: 0, damagePits: 0, dnfs: 0 };
+  const posSum: Record<string, Record<string, [number, number]>> = {};
   const wins: Record<string, Record<string, number>> = {};
   const picks: Record<string, Record<string, number>> = {};
   const podium: Record<string, Record<string, Record<string, number>>> = {};
@@ -123,21 +148,20 @@ export function runBalance(racesPerScenario = 25, seed = 'balance'): BalanceRepo
     totalCars = 0,
     races = 0;
   const stratWins: Record<string, number> = {};
-  for (const sc of SCENARIOS) {
+  for (const sc of scenarios) {
     podium[sc.name] = {};
     for (let r = 0; r < racesPerScenario; r++) {
       const rng = createRng(`${seed}|${sc.name}|${r}`);
       const g = generateProceduralTrack(`${seed}-${sc.name}-${r}`, {
         length: sc.length,
         complexity: sc.complexity,
-        width: 12,
+        width: DEFAULT_TRACK_WIDTH,
         terrain: sc.terrain,
       });
-      const cars = Array.from({ length: 22 }, (_, i) => ({
-        id: `c${i}`,
-        setup: randomSetup(rng, sc.laps),
-        trace: null,
-      }));
+      const cars = Array.from({ length: 22 }, (_, i) => {
+        const setup = randomSetup(rng, sc.laps);
+        return { id: `c${i}`, setup, trace: null, driver: setup.driver };
+      });
       const out = simulateRace({
         geometry: g,
         cars,
@@ -145,8 +169,25 @@ export function runBalance(racesPerScenario = 25, seed = 'balance'): BalanceRepo
         seed: `${seed}|${r}`,
         weather: sc.weather,
         randomEvents: { safetyCar: true, oil: true, mechanical: true },
+        rules,
       });
       races++;
+      for (const i of out.incidents) {
+        if (i.kind === 'overtake') tally.overtakes++;
+        else if (i.kind === 'collision') tally.collisions++;
+        else if (i.kind === 'damage') tally[i.detail === 'dnf' ? 'collisionDnfs' : 'damagePits']++;
+      }
+      tally.dnfs += out.results.filter((x) => x.status === 'dnf').length;
+      for (const res of out.results) {
+        const st = cars.find((c) => c.id === res.id)!.setup;
+        for (const f of ['attack', 'defense', 'pace'] as const) {
+          const b = FEATURES[f]!(st);
+          posSum[f] ??= {};
+          const cell = (posSum[f][b] ??= [0, 0]);
+          cell[0] += res.position;
+          cell[1]++;
+        }
+      }
       const byId = new Map(cars.map((c) => [c.id, c.setup]));
       for (const c of cars) {
         totalCars++;
@@ -191,5 +232,12 @@ export function runBalance(racesPerScenario = 25, seed = 'balance'): BalanceRepo
     }
   }
   const topStrategyWinShare = Math.max(...Object.values(stratWins)) / totalWins;
-  return { races, winnersByScenario, lift, maxLift, topStrategyWinShare };
+  const r2 = (v: number) => Math.round(v * 100) / 100;
+  const perRace = Object.fromEntries(
+    Object.entries(tally).map(([k, v]) => [k, r2(v / Math.max(1, races))]),
+  ) as BalanceReport['perRace'];
+  const avgPosition: BalanceReport['avgPosition'] = {};
+  for (const [f, bands] of Object.entries(posSum))
+    avgPosition[f] = Object.fromEntries(Object.entries(bands).map(([b, [sum, n]]) => [b, r2(sum / n)]));
+  return { races, winnersByScenario, lift, maxLift, topStrategyWinShare, perRace, avgPosition };
 }

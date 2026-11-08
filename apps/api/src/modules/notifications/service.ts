@@ -21,7 +21,7 @@ const TEMPLATES: Record<NotificationType, (p: P) => { title: string; body: strin
   }),
   trace_window_closing: (p) => ({
     title: 'Falta 1 minuto',
-    body: `A janela de traçado de ${p.raceName} fecha em 1 minuto.`,
+    body: `O parque fechado de ${p.raceName} começa em 1 minuto: confira traçado e setup.`,
   }),
   qualifying_ready: (p) => ({
     title: 'Classificação definida',

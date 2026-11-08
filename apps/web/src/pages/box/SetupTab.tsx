@@ -1,5 +1,6 @@
 import {
   checkSetupLimits,
+  driverProfileFor,
   formatLapTime,
   MIN_PIT_STOPS,
   TYRE_LABELS,
@@ -23,10 +24,12 @@ import clsx from 'clsx';
 import { Lock, Minus, Plus, Save, Trash2 } from 'lucide-react';
 import { useMemo, useState, type ReactNode } from 'react';
 import { CarPicker, CarShowcase } from '../../components/CarPicker';
+import { DriverSliders, DriverStyleBadge } from '../../components/DriverProfile';
 import { toast } from '../../components/ui';
 import { errorMessage, put } from '../../lib/api';
 import { TERRAIN_LABEL, TYRE_COLOR, TYRE_SHORT, WEATHER_ICON, WEATHER_LABEL } from '../../lib/format';
 import { useServerNow } from '../../lib/realtime';
+import { useSession } from '../../lib/session';
 import { draftKey, isSetupEditable, saveDraft, type PracticeInfo } from './common';
 
 const TYRES: Tyre[] = ['soft', 'medium', 'hard', 'wet'];
@@ -338,6 +341,10 @@ export function SetupTab({
   const laps = practice.laps;
   const temp = practice.weather.temperature;
   const trace = useMemo(() => offsetsToTrace(offsets, 256), [offsets]);
+  // Perfil do piloto: o ajuste desta corrida, senão o do jogador (é o que a simulação usa).
+  const me = useSession((s) => s.me);
+  const baseDriver = me?.profile.driver ?? driverProfileFor(me?.id ?? '');
+  const driver = setup.driver ?? baseDriver;
   const update = (patch: Partial<CarSetup>) => {
     if (!editable) return;
     const next = { ...setup, ...patch };
@@ -346,8 +353,14 @@ export function SetupTab({
     saveDraft(draftKey(race.id, 'setup'), next);
   };
   const problems = checkSetupLimits(setup, { setupLimits: lim } as CategoryConfig, laps);
-  const dry = useMemo(() => estimateLap(g, setup, trace, 'dry', temp, laps), [g, setup, trace, temp, laps]);
-  const wet = useMemo(() => estimateLap(g, setup, trace, 'rain', temp, laps), [g, setup, trace, temp, laps]);
+  const dry = useMemo(
+    () => estimateLap(g, setup, trace, 'dry', temp, laps, 0, driver),
+    [g, setup, trace, temp, laps, driver],
+  );
+  const wet = useMemo(
+    () => estimateLap(g, setup, trace, 'rain', temp, laps, 0, driver),
+    [g, setup, trace, temp, laps, driver],
+  );
 
   // Extremos possíveis nesta pista para normalizar as barras da ficha técnica.
   const range = useMemo(() => {
@@ -406,9 +419,18 @@ export function SetupTab({
   const wearPerLap = useMemo(() => {
     const out = {} as Record<Tyre, number>;
     for (const t of TYRES)
-      out[t] = estimateLap(g, { ...setup, tyre: t }, trace, practice.weather.base, temp, laps).wearPerLap;
+      out[t] = estimateLap(
+        g,
+        { ...setup, tyre: t },
+        trace,
+        practice.weather.base,
+        temp,
+        laps,
+        0,
+        driver,
+      ).wearPerLap;
     return out;
-  }, [g, setup, trace, practice.weather.base, temp, laps]);
+  }, [g, setup, trace, practice.weather.base, temp, laps, driver]);
   const life = useMemo(() => {
     const out = {} as Record<Tyre, TyreLife>;
     for (const t of TYRES) out[t] = tyreLife(wearPerLap[t], practice.weather);
@@ -844,6 +866,28 @@ export function SetupTab({
                 ]}
               />
             </div>
+          </Section>
+
+          <Section title="Piloto" icon="🧑‍🚀">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <p className="text-sm text-muted">
+                {setup.driver
+                  ? 'Ajustado só para esta corrida.'
+                  : 'Seu perfil de sempre. Mexa para ajustar só nesta corrida.'}
+              </p>
+              <DriverStyleBadge value={driver} />
+            </div>
+            <DriverSliders value={driver} disabled={!editable} onChange={(d) => update({ driver: d })} />
+            {setup.driver && (
+              <button
+                type="button"
+                className="btn-ghost !py-1.5 text-sm"
+                disabled={!editable}
+                onClick={() => update({ driver: undefined })}
+              >
+                Voltar ao meu perfil
+              </button>
+            )}
           </Section>
 
           <Section title="Pista e clima" icon="🌦️">

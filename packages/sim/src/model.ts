@@ -1,4 +1,12 @@
-import type { CarSetup, RaceWeather, Terrain, Tyre, Weather } from '@tracado/shared';
+import type {
+  CarSetup,
+  DriverProfile,
+  DriverRules,
+  RaceWeather,
+  Terrain,
+  Tyre,
+  Weather,
+} from '@tracado/shared';
 import { CAR_HALF_WIDTH, type TrackGeometry } from '@tracado/trackgen';
 
 /**
@@ -61,7 +69,65 @@ export const COEF = {
   pitLossScaled: 10,
   spinBase: 0.003,
   spinLowGrip: 0.06,
+  /**
+   * Perfil do piloto (ataque, defesa e ritmo, cada um de −1 a 1 depois do peso das configurações) e colisões.
+   * - Ritmo: ±`paceSpeed` de velocidade, ±`paceWear` de desgaste de pneu; com ritmo alto, mais rodadas e mais erro na
+   *   volta de classificação; com ritmo baixo, menos rodadas.
+   * - Ataque: intervalo entre tentativas de ultrapassagem `2 s × (1 − attackCooldown × ataque)`, chance de passar
+   *   ±`attackPass`, desgaste de pneu por tentativa. O paciente espera a reta.
+   * - Defesa: tira até `defensePass` da chance de quem ataca e custa `defenseCost` da velocidade a cada ataque segurado.
+   * - Toque numa tentativa: `collisionBase × (1 + collisionAttack × ataque) × (1 + collisionDefense × defesa)`, mais
+   *   na curva e na chuva. Dano (chance das configurações): abandono (`damageDnfShare`) ou parada obrigatória.
+   */
+  driver: {
+    paceSpeed: 0.0035,
+    paceWear: 0.25,
+    paceEngineWear: 0.3,
+    paceSpin: 0.045,
+    paceSpinSave: 0.5,
+    qualiMistake: 0.04,
+    qualiMistakePace: 0.2,
+    attackCooldown: 0.5,
+    attackPass: 0.14,
+    attackWear: 0.0025,
+    attackPatience: 0.7,
+    defensePass: 0.16,
+    defenseCost: 0.04,
+    collisionBase: 0.02,
+    collisionAttack: 0.9,
+    collisionDefense: 0.7,
+    collisionCorner: 1.5,
+    collisionStraight: 0.6,
+    collisionWet: 0.8,
+    damageDnfShare: 0.35,
+    damagePace: 0.025,
+    damagePitLoss: 6,
+  },
 } as const;
+
+export interface DriverTraits {
+  attack: number;
+  defense: number;
+  pace: number;
+}
+
+/** Perfil do piloto (0..100) em fatores de −1 a 1, já com o peso de cada característica nas configurações. */
+export function driverTraits(
+  p: DriverProfile | null | undefined,
+  rules: Pick<DriverRules, 'attackEffect' | 'defenseEffect' | 'paceEffect'>,
+): DriverTraits {
+  const f = (v: number | undefined, w: number) => Math.max(-1, Math.min(1, (((v ?? 50) - 50) / 50) * w));
+  return {
+    attack: f(p?.attack, rules.attackEffect),
+    defense: f(p?.defense, rules.defenseEffect),
+    pace: f(p?.pace, rules.paceEffect),
+  };
+}
+
+/** Penalidade de ritmo de `lapProfile` para o ritmo do piloto (negativa = mais rápido). */
+export function drivePacePenalty(t: DriverTraits): number {
+  return -COEF.driver.paceSpeed * t.pace;
+}
 
 export const WETNESS: Record<Weather, number> = { dry: 0, cloudy: 0, light_rain: 0.5, rain: 1 };
 

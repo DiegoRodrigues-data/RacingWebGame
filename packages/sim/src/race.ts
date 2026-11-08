@@ -1,5 +1,7 @@
 import type {
   CarSetup,
+  DriverProfile,
+  DriverRules,
   RaceIncidentDto,
   RaceWeather,
   ReplayFrame,
@@ -7,8 +9,15 @@ import type {
   Tyre,
   Weather,
 } from '@tracado/shared';
-import { CAR_FRAME_STRIDE, CAR_STATUS, NO_TRACE_PACE_PENALTY, tyreCode } from '@tracado/shared';
 import {
+  CAR_FRAME_STRIDE,
+  CAR_STATUS,
+  DEFAULT_DRIVER_RULES,
+  NO_TRACE_PACE_PENALTY,
+  tyreCode,
+} from '@tracado/shared';
+import {
+  CAR_HALF_WIDTH,
   createRng,
   racingLine,
   stableHash,
@@ -19,6 +28,8 @@ import {
 import {
   carModifiers,
   COEF,
+  drivePacePenalty,
+  driverTraits,
   engineFailFactor,
   lapProfile,
   lateralMeters,
@@ -26,11 +37,15 @@ import {
   WETNESS,
   wearSpread,
   type Conditions,
+  type DriverTraits,
   type LapProfile,
 } from './model';
 
-/** 2: desgaste de pneu com variação sorteada por stint, desgaste do motor e os dois nos frames. */
-export const SIM_VERSION = 2;
+/**
+ * 2: desgaste de pneu com variação sorteada por stint, desgaste do motor e os dois nos frames.
+ * 3: perfil do piloto (ataque, defesa, ritmo), colisões e carros lado a lado nas disputas.
+ */
+export const SIM_VERSION = 3;
 export const FRAME_HZ = 4;
 const DT = 0.25;
 
@@ -38,6 +53,8 @@ export interface SimCar {
   id: string;
   setup: CarSetup;
   trace: TracePoint[] | null;
+  /** Perfil do piloto nesta corrida (sem ele, neutro). */
+  driver?: DriverProfile | null;
 }
 
 export interface RandomEventsConfig {
@@ -54,6 +71,8 @@ export interface RaceSimInput {
   seed: string;
   weather: RaceWeather;
   randomEvents: RandomEventsConfig;
+  /** Perfil do piloto e colisões (configurações do jogo); sem elas, os padrões. */
+  rules?: DriverRules;
 }
 
 export interface CarResult {
@@ -129,6 +148,9 @@ interface CarState {
   failAtFrac: number | null;
   gridLat: number;
   lastAttempt: number;
+  drv: DriverTraits;
+  /** Carro avariado num toque: mais lento até a parada obrigatória no fim da volta. */
+  damaged: boolean;
 }
 
 function pitLoss(laps: number): number {
@@ -144,7 +166,8 @@ export function hashInput(input: RaceSimInput): string {
       seed: input.seed,
       weather: input.weather,
       ev: input.randomEvents,
-      cars: input.cars.map((c) => [c.id, c.setup, c.trace]),
+      rules: input.rules ?? DEFAULT_DRIVER_RULES,
+      cars: input.cars.map((c) => [c.id, c.setup, c.trace, c.driver ?? null]),
     }),
   );
 }
@@ -154,6 +177,8 @@ export function simulateRace(input: RaceSimInput): RaceSimOutput {
   const n = g.count;
   const laps = input.laps;
   const rng = createRng(`${input.seed}|race`);
+  const rules = input.rules ?? DEFAULT_DRIVER_RULES;
+  const D = COEF.driver;
   const weather = weatherByLap(input.seed, input.weather, laps + 1);
   const incidents: RaceIncidentDto[] = [];
   const frames: ReplayFrame[] = [];
@@ -166,11 +191,13 @@ export function simulateRace(input: RaceSimInput): RaceSimOutput {
 
   const buildProfile = (s: CarState) => {
     const m = carModifiers(g, s.car.setup, s.tyre, s.wear, cond(), gripZones);
-    s.wearPerLap = m.wearPerRace / laps;
-    s.engineWearPerLap = m.engineWearPerRace / laps;
+    s.wearPerLap = (m.wearPerRace / laps) * (1 + D.paceWear * s.drv.pace);
+    s.engineWearPerLap = (m.engineWearPerRace / laps) * (1 + D.paceEngineWear * s.drv.pace);
     s.failurePerLap = m.failurePerLap;
     s.gripRatio = m.gripRatio;
-    s.profile = lapProfile(s.path, s.curvature, m, s.car.trace ? 0 : NO_TRACE_PACE_PENALTY);
+    const penalty =
+      (s.car.trace ? 0 : NO_TRACE_PACE_PENALTY) + drivePacePenalty(s.drv) + (s.damaged ? D.damagePace : 0);
+    s.profile = lapProfile(s.path, s.curvature, m, penalty);
   };
 
   const cars: CarState[] = input.cars.map((car, idx) => {
@@ -207,6 +234,8 @@ export function simulateRace(input: RaceSimInput): RaceSimOutput {
       failAtFrac: null,
       gridLat: (idx % 2 === 0 ? 1 : -1) * (g.widths[n - 1]! / 4),
       lastAttempt: -10,
+      drv: driverTraits(car.driver, rules),
+      damaged: false,
     };
     void slot;
     buildProfile(s);
@@ -215,8 +244,11 @@ export function simulateRace(input: RaceSimInput): RaceSimOutput {
 
   const planLapEvents = (s: CarState, lap: number) => {
     const r = createRng(`${input.seed}|car|${s.car.id}|${lap}`);
+    const pace = s.drv.pace;
     const spinP =
-      COEF.spinBase + COEF.spinLowGrip * Math.max(0, 0.92 - s.gripRatio) + (s.wear > 1 ? 0.05 : 0);
+      (COEF.spinBase + COEF.spinLowGrip * Math.max(0, 0.92 - s.gripRatio) + (s.wear > 1 ? 0.05 : 0)) *
+        (pace < 0 ? 1 + D.paceSpinSave * pace : 1) +
+      D.paceSpin * Math.max(0, pace);
     s.spinAtFrac = r.chance(spinP) ? r.range(0.1, 0.9) : null;
     const failP = s.failurePerLap * engineFailFactor(s.engineWear);
     s.failAtFrac = input.randomEvents.mechanical && r.chance(failP) ? r.range(0.05, 0.95) : null;
@@ -244,14 +276,17 @@ export function simulateRace(input: RaceSimInput): RaceSimOutput {
       return fb - fa || a.idx - b.idx;
     });
 
+  /** Separação lateral mínima entre dois carros lado a lado (m) e alcance longitudinal da disputa (m). */
+  const SIDE_GAP = CAR_HALF_WIDTH * 2 + 0.5;
+  const SIDE_REACH = 8;
   const recordFrame = () => {
     const c: number[] = [];
-    for (const s of cars) {
+    // Posição de cada carro na própria linha (amostra, fração e deslocamento lateral em metros).
+    const pos = cars.map((s) => {
       const f = ((s.total % n) + n) % n;
       const i = Math.floor(f),
         j = (i + 1) % n,
         t = f - i;
-      const lerp = (arr: number[], k: number) => arr[i * 2 + k]! + (arr[j * 2 + k]! - arr[i * 2 + k]!) * t;
       const traceLat = lateralMeters(g, i, s.offsets[i]! + (s.offsets[j]! - s.offsets[i]!) * t);
       let lat = traceLat;
       if (s.total < 12) {
@@ -259,6 +294,34 @@ export function simulateRace(input: RaceSimInput): RaceSimOutput {
         const a = Math.max(0, Math.min(1, (s.total + back) / (back + 12)));
         lat = s.gridLat * (1 - a) + traceLat * a;
       }
+      return { f, i, j, t, lat };
+    });
+    // Lado a lado: quem chega por trás sai da linha do carro da frente para o lado com mais espaço. Só desenho; a
+    // ordem, os tempos e as ultrapassagens já foram decididos.
+    const onTrack = cars
+      .map((s, k) => k)
+      .filter((k) => cars[k]!.status === 'running' && cars[k]!.total > 0)
+      .sort((a, b) => pos[b]!.f - pos[a]!.f);
+    for (let x = 0; x < onTrack.length; x++)
+      for (let y = 1; y <= 3 && y < onTrack.length; y++) {
+        const ka = onTrack[x]!,
+          kb = onTrack[(x + y) % onTrack.length]!;
+        if (ka === kb) continue;
+        const A = pos[ka]!,
+          B = pos[kb]!;
+        const dist = ((((A.f - B.f) % n) + n) % n) * g.ds;
+        if (dist > SIDE_REACH) continue;
+        if (Math.abs(A.lat - B.lat) >= SIDE_GAP) continue;
+        const usable = Math.max(0.5, g.widths[B.i]! / 2 - CAR_HALF_WIDTH);
+        let side = A.lat > 0 ? -1 : 1;
+        if (Math.abs(A.lat + side * SIDE_GAP) > usable) side = -side;
+        const target = Math.max(-usable, Math.min(usable, A.lat + side * SIDE_GAP));
+        const w = Math.max(0, Math.min(1, (SIDE_REACH - dist) / 4));
+        B.lat += (target - B.lat) * w;
+      }
+    cars.forEach((s, k) => {
+      const { i, j, t, lat } = pos[k]!;
+      const lerp = (arr: number[], q: number) => arr[i * 2 + q]! + (arr[j * 2 + q]! - arr[i * 2 + q]!) * t;
       let x = lerp(g.points, 0) + lerp(g.normals, 0) * lat;
       let y = lerp(g.points, 1) + lerp(g.normals, 1) * lat;
       let heading = Math.atan2(
@@ -267,9 +330,9 @@ export function simulateRace(input: RaceSimInput): RaceSimOutput {
       );
       if (s.status === 'pit') {
         // Parado no box, ao lado da linha de largada.
-        const k = Math.round((n - g.pit.entryIndex) % n) * 2;
-        x = g.pit.lane[k] ?? x;
-        y = g.pit.lane[k + 1] ?? y;
+        const q = Math.round((n - g.pit.entryIndex) % n) * 2;
+        x = g.pit.lane[q] ?? x;
+        y = g.pit.lane[q + 1] ?? y;
         heading = Math.atan2(g.points[3]! - g.points[1]!, g.points[2]! - g.points[0]!);
       }
       const status = CAR_STATUS[s.status];
@@ -283,13 +346,39 @@ export function simulateRace(input: RaceSimInput): RaceSimOutput {
         Math.round(s.wear * 100),
         Math.round(s.engineWear * 100),
       );
-    }
+    });
     frames.push({ t: Math.round(time * 1000), c });
   };
 
   const finishCar = (s: CarState, at: number) => {
     s.status = 'finished';
     s.finishTime = at;
+  };
+
+  /** Toque numa tentativa de ultrapassagem: os dois perdem tempo e um deles pode ficar avariado. */
+  const collide = (a: CarState, b: CarState, lap: number) => {
+    const t = Math.round(time * 1000);
+    a.stoppedUntil = time + rng.range(1.5, 4);
+    a.v = 0;
+    b.v *= 0.4;
+    b.stoppedUntil = Math.max(b.stoppedUntil, time + rng.range(0, 1.2));
+    incidents.push({ t, userId: a.car.id, kind: 'collision', lap, detail: b.car.id });
+    if (!rng.chance(rules.damageRate)) return;
+    // Quem ataca leva a pior mais vezes.
+    const victim = rng.chance(0.65) ? a : b;
+    if (victim.status !== 'running') return;
+    if (rng.chance(D.damageDnfShare)) {
+      victim.status = 'dnf';
+      victim.dnfReason = 'collision';
+      victim.dnfAt = time;
+      victim.spinAtFrac = null;
+      victim.failAtFrac = null;
+      incidents.push({ t, userId: victim.car.id, kind: 'damage', lap, detail: 'dnf' });
+    } else if (!victim.damaged) {
+      victim.damaged = true;
+      buildProfile(victim);
+      incidents.push({ t, userId: victim.car.id, kind: 'damage', lap, detail: 'pit' });
+    }
   };
 
   const onLapComplete = (s: CarState, completed: number, crossTime: number) => {
@@ -364,9 +453,17 @@ export function simulateRace(input: RaceSimInput): RaceSimOutput {
       forced = true;
       incidents.push({ t: Math.round(time * 1000), userId: s.car.id, kind: 'puncture', lap: completed });
     }
+    // Avariado num toque: conserto obrigatório nesta passagem.
+    const repair = s.damaged;
     const planned = s.pendingStops[0]?.lap === completed ? s.pendingStops.shift()! : null;
-    if (planned || forced) {
-      const loss = pitLoss(laps) + r.range(-1.2, 1.2) + (r.chance(0.08) ? 4 : 0) + (forced ? 8 : 0);
+    if (planned || forced || repair) {
+      const loss =
+        pitLoss(laps) +
+        r.range(-1.2, 1.2) +
+        (r.chance(0.08) ? 4 : 0) +
+        (forced ? 8 : 0) +
+        (repair ? D.damagePitLoss : 0);
+      s.damaged = false;
       s.status = 'pit';
       s.pitUntil = time + loss;
       s.pitStops++;
@@ -424,28 +521,58 @@ export function simulateRace(input: RaceSimInput): RaceSimOutput {
           const lapped =
             ahead.total < s.total - n * 0.5 || Math.floor(ahead.total / n) < Math.floor(s.total / n);
           let pass = lapped;
-          if (!pass && scUntilLap === null && time - s.lastAttempt > 2 && s.total > 0) {
+          // Quem ataca mais tenta mais vezes.
+          const cooldown = 2 * (1 - D.attackCooldown * s.drv.attack);
+          if (!pass && scUntilLap === null && time - s.lastAttempt > cooldown && s.total > 0) {
             s.lastAttempt = time;
             const fi = Math.floor(f);
             const straight = Math.abs(s.curvature[fi]!) < 1 / 150 ? 1 : 0;
-            const lateralSep = Math.abs(s.offsets[fi]! - ahead.offsets[fi]!);
-            const dv = (s.v - ahead.v) / Math.max(10, ahead.v);
-            const p = Math.max(
-              0.04,
-              Math.min(
-                0.85,
-                0.08 + dv * 2.5 + lateralSep * 0.25 + straight * 0.2 + (ahead.wear - s.wear) * 0.3,
-              ),
-            );
-            pass = rng.chance(p);
-            if (pass)
-              incidents.push({
-                t: Math.round(time * 1000),
-                userId: s.car.id,
-                kind: 'overtake',
-                lap: Math.max(1, Math.floor(s.total / n) + 1),
-                detail: ahead.car.id,
-              });
+            // O paciente prefere esperar a reta.
+            const waits = !straight && s.drv.attack < 0 && rng.next() < -s.drv.attack * D.attackPatience;
+            if (!waits) {
+              const lap = Math.max(1, Math.floor(s.total / n) + 1);
+              const lateralSep = Math.abs(s.offsets[fi]! - ahead.offsets[fi]!);
+              const dv = (s.v - ahead.v) / Math.max(10, ahead.v);
+              const p = Math.max(
+                0.04,
+                Math.min(
+                  0.85,
+                  0.08 +
+                    dv * 2.5 +
+                    lateralSep * 0.25 +
+                    straight * 0.2 +
+                    (ahead.wear - s.wear) * 0.3 +
+                    D.attackPass * s.drv.attack -
+                    D.defensePass * ahead.drv.defense,
+                ),
+              );
+              s.wear += D.attackWear * (1 + s.drv.attack);
+              const collisionP = rules.collisions
+                ? Math.min(
+                    0.5,
+                    D.collisionBase *
+                      rules.collisionRate *
+                      Math.max(0.1, 1 + D.collisionAttack * s.drv.attack) *
+                      Math.max(0.1, 1 + D.collisionDefense * ahead.drv.defense) *
+                      (straight ? D.collisionStraight : D.collisionCorner) *
+                      (1 + D.collisionWet * wetness),
+                  )
+                : 0;
+              if (collisionP > 0 && rng.chance(collisionP)) collide(s, ahead, lap);
+              else {
+                pass = rng.chance(p);
+                if (pass)
+                  incidents.push({
+                    t: Math.round(time * 1000),
+                    userId: s.car.id,
+                    kind: 'overtake',
+                    lap,
+                    detail: ahead.car.id,
+                  });
+                // Fechar a porta custa tempo a quem defende.
+                else if (ahead.drv.defense > 0) ahead.v *= 1 - D.defenseCost * ahead.drv.defense;
+              }
+            }
           }
           if (!pass) {
             adv = Math.max(0, gap + (ahead.v * DT) / g.ds - minGap);
@@ -592,17 +719,21 @@ export function estimateLap(
   temperature: number,
   laps: number,
   wear = 0,
+  /** Perfil do piloto (ritmo mexe no tempo e no desgaste); sem ele, neutro. */
+  driver?: DriverProfile | null,
+  rules: DriverRules = DEFAULT_DRIVER_RULES,
 ): LapEstimate {
   const offsets = traceToOffsets(g, trace);
   const path = racingLine(g, offsets);
   const curv = pathCurvature(path);
+  const drv = driverTraits(driver, rules);
   const m = carModifiers(g, setup, setup.tyre, wear, { wetness: WETNESS[weather], temperature });
-  const p = lapProfile(path, curv, m, trace ? 0 : NO_TRACE_PACE_PENALTY);
+  const p = lapProfile(path, curv, m, (trace ? 0 : NO_TRACE_PACE_PENALTY) + drivePacePenalty(drv));
   const sectorMs = g.sectors.map((from, k) => {
     const to = g.sectors[k + 1] ?? g.count;
     return Math.round((p.t[to]! - p.t[from]!) * 1000);
   });
-  const wearPerLap = m.wearPerRace / laps;
+  const wearPerLap = (m.wearPerRace / laps) * (1 + COEF.driver.paceWear * drv.pace);
   return {
     lapTimeMs: Math.round(p.lapTime * 1000),
     sectorMs,
@@ -620,19 +751,26 @@ export interface QualifyingRow {
   lapTimeMs: number;
 }
 
-/** Uma volta lançada por carro, pneus novos do composto de largada, com ruído semeado pequeno (±0,3%). */
+/**
+ * Uma volta lançada por carro, pneus novos do composto de largada, com ruído semeado pequeno (±0,3%). Quem anda no
+ * limite (ritmo alto) é mais rápido, mas erra mais: um erro custa de 1,5% a 4% da volta.
+ */
 export function simulateQualifying(
   g: TrackGeometry,
   cars: SimCar[],
   seed: string,
   weather: RaceWeather,
   laps: number,
+  rules: DriverRules = DEFAULT_DRIVER_RULES,
 ): QualifyingRow[] {
   const w = weatherByLap(seed, weather, 1)[0]!;
+  const D = COEF.driver;
   const rows = cars.map((c, order) => {
-    const est = estimateLap(g, c.setup, c.trace, w, weather.temperature, laps);
+    const est = estimateLap(g, c.setup, c.trace, w, weather.temperature, laps, 0, c.driver, rules);
     const r: Rng = createRng(`${seed}|quali|${c.id}`);
-    const noise = 1 + r.normal() * 0.0015;
+    const pace = driverTraits(c.driver, rules).pace;
+    const mistakeP = Math.max(0.01, D.qualiMistake + D.qualiMistakePace * pace);
+    const noise = 1 + r.normal() * 0.0015 + (r.chance(mistakeP) ? r.range(0.015, 0.04) : 0);
     return { id: c.id, order, lapTimeMs: Math.round(est.lapTimeMs * noise) };
   });
   // Empate: quem confirmou a inscrição antes (ordem de entrada) fica à frente.
@@ -700,7 +838,13 @@ export function qualifyingSession(
     const offsets = traceToOffsets(g, car.trace);
     const path = racingLine(g, offsets);
     const m = carModifiers(g, car.setup, car.setup.tyre, 0, cond);
-    const p = lapProfile(path, pathCurvature(path), m, car.trace ? 0 : NO_TRACE_PACE_PENALTY);
+    const p = lapProfile(
+      path,
+      pathCurvature(path),
+      m,
+      (car.trace ? 0 : NO_TRACE_PACE_PENALTY) +
+        drivePacePenalty(driverTraits(car.driver, DEFAULT_DRIVER_RULES)),
+    );
     const lapTimeMs = rows.find((r) => r.id === car.id)?.lapTimeMs ?? Math.round(p.lapTime * 1000);
     const scale = lapTimeMs / (p.lapTime * 1000);
     const t = new Float64Array(n + 1);

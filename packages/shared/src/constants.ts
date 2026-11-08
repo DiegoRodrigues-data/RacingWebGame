@@ -1,4 +1,6 @@
 /** Regras globais do jogo. O servidor é a autoridade; o cliente usa os mesmos valores apenas para UX. */
+/** Largura padrão das pistas geradas (m). 14 m dá para dois carros lado a lado nas disputas de posição. */
+export const DEFAULT_TRACK_WIDTH = 14;
 export const MAX_CARS_PER_RACE = 22;
 export const DEFAULT_WAITLIST_MAX = 10;
 /**
@@ -6,8 +8,8 @@ export const DEFAULT_WAITLIST_MAX = 10;
  * então a janela só fazia todo mundo esperar. Corridas antigas guardam a delas nos horários e continuam funcionando.
  */
 export const TRACE_WINDOW_MS = 0;
-/** Duração padrão do treino. */
-export const DEFAULT_PRACTICE_MINUTES = 2;
+/** Duração padrão do treino: sem treino (pedido de 07/11/2026). A preparação vai da inscrição ao parque fechado. */
+export const DEFAULT_PRACTICE_MINUTES = 0;
 export const DEFAULT_SETUP_LOCK_MS = 30 * 1000;
 export const DEFAULT_QUALIFYING_MS = 60 * 1000;
 export const DEFAULT_PRACTICE_MS = 10 * 60 * 1000;

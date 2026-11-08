@@ -1,6 +1,8 @@
-import type { MeDto } from '@tracado/shared';
+import { randomDriverProfile, type DriverProfile, type MeDto } from '@tracado/shared';
+import { Dices } from 'lucide-react';
 import { useState, type FormEvent } from 'react';
 import { useSearchParams } from 'react-router';
+import { DriverSliders, DriverStyleBadge } from '../components/DriverProfile';
 import { CarIcon, Segmented, toast } from '../components/ui';
 import { errorMessage, patch, post } from '../lib/api';
 import { useSession } from '../lib/session';
@@ -54,6 +56,66 @@ function GuestUpgrade() {
         Criar minha conta
       </button>
     </form>
+  );
+}
+
+/**
+ * Perfil do piloto: o jeito de correr em todas as corridas (ataque, defesa e ritmo). Quem nunca escolheu corre com
+ * um perfil sorteado; dá para sortear outro e ajustar. No box, cada corrida aceita um ajuste só para ela.
+ */
+function DriverCard({ me }: { me: MeDto }) {
+  const setMe = useSession((s) => s.setMe);
+  const [value, setValue] = useState<DriverProfile>(me.profile.driver);
+  const [busy, setBusy] = useState(false);
+  const saved = me.profile.driver;
+  const dirty =
+    !me.profile.driverChosen ||
+    value.attack !== saved.attack ||
+    value.defense !== saved.defense ||
+    value.pace !== saved.pace;
+  async function save() {
+    setBusy(true);
+    try {
+      setMe(await patch<MeDto>('/me/profile', { driver: value }));
+      toast('Perfil do piloto salvo', 'Vale a partir das próximas corridas.', 'ok');
+    } catch (x) {
+      toast('Erro', errorMessage(x), 'error');
+    } finally {
+      setBusy(false);
+    }
+  }
+  return (
+    <section className="card space-y-4" aria-labelledby="driver-title">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <h2 id="driver-title" className="font-display text-lg">
+          Perfil do piloto
+        </h2>
+        <DriverStyleBadge value={value} />
+      </div>
+      <p className="text-sm text-muted">
+        Seu piloto corre do mesmo jeito em todas as corridas: quanto ataca, quanto defende a posição e em que
+        ritmo anda. Nenhum extremo é melhor em tudo: quem ataca muito passa mais, mas bate mais; quem fecha a
+        porta segura a posição, mas perde tempo; ritmo alto é mais rápido, mas gasta pneu e erra mais.
+        {!me.profile.driverChosen &&
+          ' Este perfil foi sorteado para você; ajuste e salve para ficar com ele.'}
+      </p>
+      <DriverSliders value={value} onChange={setValue} />
+      <div className="flex flex-wrap gap-2">
+        <button type="button" className="btn-primary" disabled={busy || !dirty} onClick={save}>
+          Salvar perfil
+        </button>
+        <button
+          type="button"
+          className="btn-ghost inline-flex items-center gap-1.5"
+          onClick={() => setValue(randomDriverProfile(Math.random))}
+        >
+          <Dices size={16} aria-hidden /> Sortear outro
+        </button>
+      </div>
+      <p className="text-xs text-muted">
+        No box de cada corrida dá para ajustar o perfil só para aquela prova.
+      </p>
+    </section>
   );
 }
 
@@ -239,6 +301,7 @@ export default function Account() {
           Salvar
         </button>
       </form>
+      <DriverCard me={me} />
       {!me.guest && <ChangePassword />}
     </div>
   );

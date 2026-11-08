@@ -1,4 +1,4 @@
-import { AppError } from '@tracado/shared';
+import { AppError, driverProfileFor, driverProfileSchema } from '@tracado/shared';
 import { and, eq, gte, inArray, isNull, sql } from 'drizzle-orm';
 import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
@@ -9,20 +9,36 @@ import { parse } from '../../lib/validate';
 import { audit } from '../admin/routes';
 import { currentSeason } from '../rankings/service';
 import { getSettings } from '../settings/service';
-import { activeOn, forgetOnlineBotCache, isOnlineHour, loadPersonas, withdrawPersona } from './service';
+import {
+  activeOn,
+  ensureBotPool,
+  forgetOnlineBotCache,
+  isOnlineHour,
+  levelFor,
+  loadPersonas,
+  poolSize,
+  withdrawPersona,
+} from './service';
 
 const patchSchema = z
   .object({
     active: z.boolean(),
     skill: z.number().min(0).max(1),
+    aggression: z.number().min(0).max(1),
+    pitRisk: z.number().min(0).max(1),
     joinRate: z.number().min(0).max(1),
     hourFrom: z.number().int().min(0).max(23),
     hourTo: z.number().int().min(0).max(23),
+    /** Perfil do piloto (ataque, defesa, ritmo), o mesmo que o jogador edita no perfil dele. */
+    driver: driverProfileSchema,
   })
   .partial()
   .refine((b) => Object.keys(b).length > 0, 'Nada para alterar.');
 
-/** Administração dos pilotos simulados: lista com estado de hoje e ranking, e ligar/desligar cada um. */
+/**
+ * Administração dos pilotos simulados: lista com estado de hoje e ranking, edição de cada um (persona e perfil do
+ * piloto) e criação de mais personas.
+ */
 export function botRoutes(app: FastifyInstance, ctx: Ctx) {
   app.get('/admin/bots', async (req) => {
     requireRole(req, 'admin');
@@ -85,6 +101,7 @@ export function botRoutes(app: FastifyInstance, ctx: Ctx) {
         activeToday: act.has(p.userId),
         onlineNow: act.has(p.userId) && isOnlineHour(p, now),
         skill: p.skill,
+        driver: pr?.driver ?? driverProfileFor(p.userId),
         aggression: p.aggression,
         pitRisk: p.pitRisk,
         joinRate: p.joinRate,
@@ -105,6 +122,7 @@ export function botRoutes(app: FastifyInstance, ctx: Ctx) {
         activeToday: act.size,
         onlineNow: rows.filter((r) => r.onlineNow).length,
         pendingPlans: pending[0]?.n ?? 0,
+        poolSize: poolSize(s),
       },
       bots: rows.sort((a, b) => b.seasonPoints - a.seasonPoints || b.skill - a.skill),
     };
@@ -113,13 +131,31 @@ export function botRoutes(app: FastifyInstance, ctx: Ctx) {
   app.patch('/admin/bots/:id', async (req) => {
     const u = requireRole(req, 'admin');
     const { id } = parse(z.object({ id: z.string().uuid() }), req.params);
-    const b = parse(patchSchema, req.body);
+    const { driver, ...b } = parse(patchSchema, req.body);
     const [before] = await ctx.db.select().from(botPersonas).where(eq(botPersonas.userId, id));
     if (!before) throw new AppError('NOT_FOUND', 'Piloto simulado não encontrado.');
-    const [after] = await ctx.db.update(botPersonas).set(b).where(eq(botPersonas.userId, id)).returning();
+    const [after] = Object.keys(b).length
+      ? await ctx.db.update(botPersonas).set(b).where(eq(botPersonas.userId, id)).returning()
+      : [before];
+    // O nível exibido acompanha a habilidade; o perfil do piloto vale a partir das próximas corridas.
+    const prof = {
+      ...(b.skill !== undefined ? { level: levelFor(b.skill) } : {}),
+      ...(driver ? { driver } : {}),
+    };
+    if (Object.keys(prof).length) await ctx.db.update(profiles).set(prof).where(eq(profiles.userId, id));
     const left = before.active && b.active === false ? await withdrawPersona(ctx, id) : 0;
     forgetOnlineBotCache();
-    await audit(ctx, u, 'bot.update', 'user', id, { before, after, leftRaces: left });
+    await audit(ctx, u, 'bot.update', 'user', id, { before, after, driver, leftRaces: left });
     return { ok: true, leftRaces: left };
+  });
+
+  /** Mais personas além do rodízio (gente nova "chegando"). */
+  app.post('/admin/bots', async (req) => {
+    const u = requireRole(req, 'admin');
+    const { count } = parse(z.object({ count: z.number().int().min(1).max(30) }), req.body);
+    const created = await ensureBotPool(ctx, (await getSettings(ctx)).botPool, count);
+    forgetOnlineBotCache();
+    await audit(ctx, u, 'bot.create', 'user', null, { count, created });
+    return { created };
   });
 }

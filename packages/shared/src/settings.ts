@@ -1,5 +1,6 @@
 import { z } from 'zod';
-import { MAX_CARS_PER_RACE } from './constants';
+import { DEFAULT_TRACK_WIDTH, MAX_CARS_PER_RACE } from './constants';
+import { DEFAULT_DRIVER_RULES, driverRulesSchema } from './driver';
 
 /**
  * Configurações do jogo editáveis pelo admin, com efeito na hora (sem deploy). Ficam numa linha do banco;
@@ -15,8 +16,8 @@ const terrainWeights = z.object({
 export type TerrainWeights = z.infer<typeof terrainWeights>;
 
 export const phaseTimesSchema = z.object({
-  /** Treino (min). */
-  practiceMin: z.number().min(0.5).max(120),
+  /** Treino (min); 0 = sem treino (padrão): a preparação acontece com as inscrições abertas, até o parque fechado. */
+  practiceMin: z.number().min(0).max(120),
   /** Janela de traçado depois do treino (s); 0 = sem janela (padrão). */
   traceWindowSec: z.number().int().min(0).max(900),
   /** Parque fechado antes da classificação (s). */
@@ -104,12 +105,13 @@ export const gameSettingsSchema = z
       /** Quantos ficam ativos em cada dia (sorteado entre os dois, por dia). */
       activeMin: z.number().int().min(0).max(60),
       activeMax: z.number().int().min(0).max(60),
-      /** No máximo quantos entram numa mesma corrida. */
-      perRaceMax: z
-        .number()
-        .int()
-        .min(1)
-        .max(MAX_CARS_PER_RACE - 1),
+      /**
+       * Grid alvo de cada corrida da grade (gente + pilotos simulados), sorteado entre os dois por corrida. Eles
+       * entram até o grid chegar lá; se faltar gente no horário, entram outros pilotos simulados, e durante o treino
+       * o motor completa o que faltar até o mínimo.
+       */
+      gridMin: z.number().int().min(0).max(MAX_CARS_PER_RACE),
+      gridMax: z.number().int().min(0).max(MAX_CARS_PER_RACE),
       /** Vagas que nunca ficam com eles (sobram para gente); com o grid cheio, um piloto simulado cede a vaga. */
       reserveSeats: z.number().int().min(0).max(10),
       /** Aparecem no ranking (desligado: o ranking mostra só gente). */
@@ -117,6 +119,8 @@ export const gameSettingsSchema = z
       /** Os que estão "online" no horário somam na contagem de online da página inicial. */
       countOnline: z.boolean(),
     }),
+    /** Perfil do piloto e colisões na simulação (vale para corridas simuladas daqui em diante). */
+    drivers: driverRulesSchema,
     crazy: z.object({
       maxRaces: z.number().int().min(1).max(20),
       maxMembers: z.number().int().min(2).max(MAX_CARS_PER_RACE),
@@ -131,6 +135,7 @@ export const gameSettingsSchema = z
     'Libere pelo menos um terreno (peso maior que zero).',
   )
   .refine((s) => s.botPool.activeMin <= s.botPool.activeMax, 'Pilotos simulados: o mínimo passa do máximo.')
+  .refine((s) => s.botPool.gridMin <= s.botPool.gridMax, 'Grid alvo: o mínimo passa do máximo.')
   .refine((s) => Object.values(s.tracks.biomes).some((w) => w > 0), 'Libere pelo menos um cenário.')
   .refine(
     (s) =>
@@ -140,7 +145,7 @@ export const gameSettingsSchema = z
 export type GameSettings = z.infer<typeof gameSettingsSchema>;
 
 export const DEFAULT_GAME_SETTINGS: GameSettings = {
-  phases: { practiceMin: 2, traceWindowSec: 0, setupLockSec: 30, qualifyingSec: 60 },
+  phases: { practiceMin: 0, traceWindowSec: 0, setupLockSec: 30, qualifyingSec: 60 },
   autoRaces: {
     enabled: false,
     perDay: 24,
@@ -165,7 +170,7 @@ export const DEFAULT_GAME_SETTINGS: GameSettings = {
     lengthMin: null,
     lengthMax: null,
     complexity: null,
-    width: 12,
+    width: DEFAULT_TRACK_WIDTH,
     seedPrefix: '',
     pool: [],
     poolChance: 0,
@@ -174,11 +179,13 @@ export const DEFAULT_GAME_SETTINGS: GameSettings = {
     enabled: true,
     activeMin: 14,
     activeMax: 30,
-    perRaceMax: 10,
+    gridMin: 10,
+    gridMax: 16,
     reserveSeats: 2,
     inRanking: true,
     countOnline: true,
   },
+  drivers: DEFAULT_DRIVER_RULES,
   crazy: { maxRaces: 10, maxMembers: 20, lapsDefault: 8, chaosDefault: true, botFillDefault: 0 },
 };
 

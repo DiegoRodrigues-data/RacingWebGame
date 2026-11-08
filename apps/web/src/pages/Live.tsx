@@ -53,7 +53,20 @@ const INCIDENT_TEXT: Partial<Record<RaceIncidentDto['kind'], string>> = {
   safety_car_end: 'Safety car recolhido',
   oil: 'Óleo na pista!',
   weather: 'O clima mudou',
+  collision: 'bateu',
+  damage: 'avariou o carro',
 };
+
+/** Texto de um acontecimento, com o nome do outro carro nos toques. */
+function incidentText(i: RaceIncidentDto, nick: (id: string | undefined) => string | undefined): string {
+  if (i.kind === 'collision') {
+    const other = nick(i.detail);
+    return other ? `tocou em ${other}` : 'se envolveu num toque';
+  }
+  if (i.kind === 'damage')
+    return i.detail === 'dnf' ? 'abandonou depois do toque' : 'avariou o carro e vai aos boxes';
+  return INCIDENT_TEXT[i.kind] ?? i.kind;
+}
 
 export default function Live({ mode }: { mode: 'live' | 'replay' }) {
   const { id } = useParams();
@@ -137,6 +150,14 @@ export default function Live({ mode }: { mode: 'live' | 'replay' }) {
           )
         )
           audio.pit();
+        // Toque envolvendo o carro em foco (quem bateu ou quem foi tocado).
+        if (
+          (env.payload as ServerEvents['race.incident']).incidents.some(
+            (i) =>
+              i.kind === 'collision' && (i.userId === soundFocus.current || i.detail === soundFocus.current),
+          )
+        )
+          audio.crash();
         setIncidents((list) =>
           [...list, ...(env.payload as ServerEvents['race.incident']).incidents].slice(-30),
         );
@@ -480,7 +501,7 @@ export default function Live({ mode }: { mode: 'live' | 'replay' }) {
                       <span className="font-mono text-xs text-muted">V{i.lap}</span>
                       <span>
                         {who && <b>{who} </b>}
-                        {INCIDENT_TEXT[i.kind] ?? i.kind}
+                        {incidentText(i, (id) => cars.find((c) => c.userId === id)?.nickname)}
                         {i.kind === 'fastest_lap' && i.detail ? ` (${formatLapTime(Number(i.detail))})` : ''}
                       </span>
                     </li>

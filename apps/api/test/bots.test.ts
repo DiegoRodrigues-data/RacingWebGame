@@ -1,6 +1,6 @@
 import { and, eq, inArray, isNull } from 'drizzle-orm';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import { botPersonas, botPlans, entries, profiles, rankingEntries, users } from '../src/db/schema';
+import { botPersonas, botPlans, entries, profiles, rankingEntries, setups, users } from '../src/db/schema';
 import { forgetOnlineBotCache } from '../src/modules/bots/service';
 import { ensureActiveSeason } from '../src/modules/rankings/service';
 import { setupApp, T0, type TestApp } from './helpers';
@@ -41,7 +41,14 @@ afterAll(() => t.close());
 
 describe('pilotos simulados', () => {
   it('ao ligar, cria as personas (máximo ativo + folga) com perfil de gente', async () => {
-    await saveBotPool({ enabled: true, activeMin: 20, activeMax: 20, perRaceMax: 10, reserveSeats: 2 });
+    await saveBotPool({
+      enabled: true,
+      activeMin: 20,
+      activeMax: 20,
+      gridMin: 6,
+      gridMax: 10,
+      reserveSeats: 2,
+    });
     const r = await t.json('GET', '/admin/bots', undefined, t.admin);
     expect(r.status).toBe(200);
     expect(r.body.summary.total).toBe(30);
@@ -57,7 +64,8 @@ describe('pilotos simulados', () => {
     const first = races.find((r) => Date.parse(r.timeline.practiceAt) === T0 + HOUR)!;
     firstRace = first.id;
     const plans = await t.ctx.db.select().from(botPlans).where(eq(botPlans.raceId, first.id));
-    expect(plans.length).toBeGreaterThanOrEqual(4);
+    // Grid alvo entre 6 e 10 carros.
+    expect(plans.length).toBeGreaterThanOrEqual(6);
     expect(plans.length).toBeLessThanOrEqual(10);
 
     const counts: number[] = [];
@@ -77,6 +85,17 @@ describe('pilotos simulados', () => {
     const shown = list.filter((e) => bots.has(e.userId));
     expect(shown.length).toBe(final);
     expect(shown.every((e) => e.bot === false && e.hasTrace && e.hasSetup)).toBe(true);
+    // Cada um com o próprio perfil de piloto, levemente ajustado para a corrida.
+    const withDriver = await t.ctx.db
+      .select({ setup: setups.setup, driver: profiles.driver })
+      .from(setups)
+      .innerJoin(profiles, eq(profiles.userId, setups.userId))
+      .where(and(eq(setups.raceId, first.id), inArray(setups.userId, [...bots])));
+    expect(withDriver.length).toBe(final);
+    for (const w of withDriver) {
+      expect(w.driver).not.toBeNull();
+      expect(Math.abs(w.setup.driver!.attack - w.driver!.attack)).toBeLessThanOrEqual(8);
+    }
 
     // A corrida rodou com eles: resultado publicado e nenhum erro no motor.
     expect((await t.race(first.id)).status).toBe('finished');
@@ -229,7 +248,59 @@ describe('pilotos simulados ligados com a grade já aberta', () => {
       const again = await u.ctx.db.select().from(botPlans);
       const perRace = new Map<string, number>();
       for (const p of again) perRace.set(p.raceId, (perRace.get(p.raceId) ?? 0) + 1);
-      expect(Math.max(...perRace.values())).toBeLessThanOrEqual(10);
+      // Grid alvo padrão: até 16 carros.
+      expect(Math.max(...perRace.values())).toBeLessThanOrEqual(16);
+    } finally {
+      await u.close();
+    }
+  });
+});
+
+describe('grid alvo dos pilotos simulados', () => {
+  it('sem gente online no horário, o grid ainda chega ao mínimo e é completado perto da largada', async () => {
+    const u = await setupApp({ AUTO_RACES_PER_DAY: 24, AUTO_RACES_CATEGORY: 'teste' });
+    try {
+      const cur = (await u.json('GET', '/admin/settings', undefined, u.admin)).body.settings;
+      const put = (botPool: Record<string, unknown>) =>
+        u.json('PUT', '/admin/settings', { ...cur, botPool: { ...cur.botPool, ...botPool } }, u.admin, {
+          'x-tracado-csrf': '1',
+        });
+      expect((await put({ enabled: false })).status).toBe(200);
+      await u.engine.tick(); // grade criada sem pilotos simulados
+      expect(
+        (await put({ enabled: true, activeMin: 20, activeMax: 20, gridMin: 8, gridMax: 8 })).status,
+      ).toBe(200);
+      // Ninguém joga nesse horário e quase ninguém quer correr: antes, a corrida ficava vazia.
+      const offHour = (new Date(u.clock.now() - 3 * HOUR).getUTCHours() + 12) % 24;
+      await u.ctx.db
+        .update(botPersonas)
+        .set({ hourFrom: offHour, hourTo: (offHour + 1) % 24, joinRate: 0.05 });
+      await u.engine.tick();
+      const plans = await u.ctx.db.select().from(botPlans);
+      const perRace = new Map<string, number>();
+      for (const p of plans) perRace.set(p.raceId, (perRace.get(p.raceId) ?? 0) + 1);
+      expect(perRace.size).toBeGreaterThan(1);
+      expect([...perRace.values()].every((n) => n === 8)).toBe(true);
+
+      // Um piloto simulado desiste; perto da largada, o motor completa o grid de novo até o mínimo.
+      const races = (await u.json('GET', `/races?from=${T0}&to=${T0 + 2 * HOUR}&limit=5`)).body as any[];
+      const first = races.find((r) => Date.parse(r.timeline.practiceAt) === T0 + HOUR)!;
+      await u.advanceTo(Date.parse(first.timeline.setupLockAt) - 9 * MIN);
+      const [one] = await u.ctx.db
+        .select()
+        .from(entries)
+        .where(and(eq(entries.raceId, first.id), eq(entries.status, 'confirmed')));
+      expect(one).toBeDefined();
+      await u.ctx.db.update(entries).set({ status: 'cancelled' }).where(eq(entries.id, one!.id));
+      await u.advance(MIN); // checagem por minuto: replaneja a vaga
+      // Pouco antes do parque fechado (sem treino, ele começa no horário da corrida).
+      await u.advanceTo(Date.parse(first.timeline.setupLockAt) - 20_000);
+      const confirmed = await u.ctx.db
+        .select()
+        .from(entries)
+        .where(and(eq(entries.raceId, first.id), eq(entries.status, 'confirmed')));
+      expect(confirmed.length).toBe(8);
+      expect(u.ctx.engineErrors).toEqual([]);
     } finally {
       await u.close();
     }

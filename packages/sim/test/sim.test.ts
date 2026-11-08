@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { DEFAULT_SETUP, type CarSetup } from '@tracado/shared';
+import { DEFAULT_DRIVER_RULES, DEFAULT_SETUP, type CarSetup } from '@tracado/shared';
 import { generateProceduralTrack, offsetsToTrace } from '@tracado/trackgen';
 import {
   decodeFrame,
@@ -85,6 +85,80 @@ describe('simulação de corrida', () => {
     );
     expect(out.results).toHaveLength(2);
     expect(out.results.every((r) => r.status === 'finished')).toBe(true);
+  });
+});
+
+describe('perfil do piloto e colisões', () => {
+  const brawl = (attack: number, defense: number) =>
+    input({
+      laps: 8,
+      cars: mk(22, (i) => ({ tyre: (['soft', 'medium', 'hard'] as const)[i % 3], aero: 1 + (i % 10) })).map(
+        (c) => ({ ...c, driver: { attack, defense, pace: 50 } }),
+      ),
+    });
+  const count = (out: ReturnType<typeof simulateRace>, kind: string) =>
+    out.incidents.filter((i) => i.kind === kind).length;
+
+  it('o perfil entra no hash de entrada e a simulação segue determinística', () => {
+    const a = simulateRace(brawl(90, 90));
+    expect(simulateRace(brawl(90, 90)).resultHash).toBe(a.resultHash);
+    expect(simulateRace(brawl(10, 10)).inputHash).not.toBe(a.inputHash);
+    expect(
+      simulateRace({ ...brawl(90, 90), rules: { ...DEFAULT_DRIVER_RULES, collisionRate: 2 } }).inputHash,
+    ).not.toBe(a.inputHash);
+  });
+
+  it('pilotos agressivos batem mais; com as colisões desligadas, ninguém bate', () => {
+    let wild = 0,
+      calm = 0;
+    for (const seed of ['c1', 'c2', 'c3']) {
+      wild += count(simulateRace({ ...brawl(100, 100), seed }), 'collision');
+      calm += count(simulateRace({ ...brawl(0, 0), seed }), 'collision');
+    }
+    expect(wild).toBeGreaterThan(calm);
+    const off = simulateRace({ ...brawl(100, 100), rules: { ...DEFAULT_DRIVER_RULES, collisions: false } });
+    expect(count(off, 'collision')).toBe(0);
+    expect(count(off, 'damage')).toBe(0);
+  });
+
+  it('avaria por toque: conserto nos boxes ou abandono com motivo "collision"', () => {
+    const out = simulateRace({
+      ...brawl(100, 100),
+      rules: { ...DEFAULT_DRIVER_RULES, collisionRate: 3, damageRate: 1 },
+    });
+    const dmg = out.incidents.filter((i) => i.kind === 'damage');
+    expect(dmg.length).toBeGreaterThan(0);
+    for (const d of dmg.filter((i) => i.detail === 'dnf'))
+      expect(out.results.find((r) => r.id === d.userId)!.dnfReason).toBe('collision');
+    for (const d of dmg.filter((i) => i.detail === 'pit')) {
+      const r = out.results.find((x) => x.id === d.userId)!;
+      if (r.status === 'finished') expect(r.pitStops).toBeGreaterThan(0);
+    }
+  });
+
+  it('ritmo alto: volta mais rápida e mais desgaste de pneu', () => {
+    const w = 'dry' as const;
+    const slow = estimateLap(g, DEFAULT_SETUP, null, w, 25, 10, 0, { attack: 50, defense: 50, pace: 0 });
+    const fast = estimateLap(g, DEFAULT_SETUP, null, w, 25, 10, 0, { attack: 50, defense: 50, pace: 100 });
+    expect(fast.lapTimeMs).toBeLessThan(slow.lapTimeMs);
+    expect(fast.wearPerLap).toBeGreaterThan(slow.wearPerLap);
+  });
+
+  it('carros lado a lado não se sobrepõem nos frames quando disputam posição', () => {
+    const out = simulateRace(brawl(100, 50));
+    let close = 0,
+      overlapped = 0;
+    for (const f of out.frames.slice(40)) {
+      const cs = decodeFrame(f).filter((c) => c.status === 0);
+      for (let a = 0; a < cs.length; a++)
+        for (let b = a + 1; b < cs.length; b++) {
+          const d = Math.hypot(cs[a]!.x - cs[b]!.x, cs[a]!.y - cs[b]!.y);
+          if (d < 6) close++;
+          if (d < 1.2) overlapped++;
+        }
+    }
+    expect(close).toBeGreaterThan(0);
+    expect(overlapped / close).toBeLessThan(0.05);
   });
 });
 

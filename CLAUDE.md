@@ -66,6 +66,7 @@ Os pacotes são consumidos direto como TypeScript: o `exports` aponta para `src/
   - `model.ts`: coeficientes de pneu, aero, motor e pit em `COEF`.
   - `race.ts`: `simulateRace` e `simulateQualifying`.
   - Os frames saem a 4 Hz.
+  - Perfil do piloto (`DriverProfile` em `shared/driver.ts`: ataque, defesa, ritmo) e colisões: `COEF.driver`. As regras do admin (`GameSettings.drivers`) entram como `RaceSimInput.rules` e ficam em `simInput`. A simulação usa `setup.driver ?? profiles.driver ?? driverProfileFor(id)`.
   - Ela roda no servidor e no navegador (`probe.ts` e a página `/determinism`). Por isso, nada de `Math.random` nem `Date.now`: toda aleatoriedade vem do PRNG com seed.
   - Cada frame tem 8 números por carro (`CAR_FRAME_STRIDE`: x, y, direção, progresso, pneu, status, desgaste do pneu %, desgaste do motor %); replays antigos têm 6 e o cliente decodifica os dois.
   - Mudou o resultado da simulação? Incremente `SIM_VERSION`: o reprocessamento do admin passa a marcar as corridas antigas como `outdated` em vez de divergentes.
@@ -78,7 +79,7 @@ Os pacotes são consumidos direto como TypeScript: o `exports` aponta para `src/
 - **Motor de fases** (`modules/engine/engine.ts`): substitui o BullMQ.
   - Um `tick` periódico lê do banco as corridas com transição vencida e avança cada uma com um UPDATE condicional na fase atual. Isso deixa o avanço idempotente e retoma sozinho depois de uma queda.
   - Só uma instância executa: há eleição de líder pela chave `engine:leader` no `Store`, com TTL.
-  - As fases são `scheduled` → `registration_open` → `practice` → `trace_window` (duração zero por padrão: o motor passa por ela no mesmo tick) → `setup_lock` → `qualifying` → `race` → `finished` → `archived` (ou `cancelled`). O traçado e o setup são editáveis da inscrição até o parque fechado.
+  - As fases são `scheduled` → `registration_open` → `practice` → `trace_window` → `setup_lock` → `qualifying` → `race` → `finished` → `archived` (ou `cancelled`). Treino e janela de traçado têm duração zero por padrão: o motor passa pelas duas no mesmo tick. O traçado, o setup e o perfil do piloto são editáveis da inscrição até o parque fechado.
   - Na entrada da classificação, `runner.ts` já simula classificação e corrida inteiras e grava o replay em gzip em `race_replays`. A classificação é transmitida aos poucos como sessão de volta lançada (`qualiLive.ts`, `GET /races/:id/qualifying/live`) sem revelar o futuro; o grid só é publicado na largada. Na corrida, o motor transmite os frames pelo hub; em `finished`, publica resultados e rankings.
   - Grade automática e corridas teste (`autoRaces.ts`): corridas criadas sozinhas a partir das configurações do jogo. Corrida teste é uma só por vez: a próxima nasce na bandeirada da anterior, com terrenos em rodízio.
 - **Vagas**: as inscrições (`races/entries.ts`) usam `SELECT … FOR UPDATE` mais um `KeyedMutex` por corrida, no lugar de Lua no Redis. Excedeu 22 carros, a inscrição vai para a lista de espera.

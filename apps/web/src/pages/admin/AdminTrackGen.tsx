@@ -2,6 +2,7 @@ import {
   DEFAULT_SETUP,
   formatLapTime,
   BIOME_LABEL,
+  DEFAULT_TRACK_WIDTH,
   BIOMES,
   biomeFits,
   pickBiome,
@@ -66,7 +67,7 @@ export default function AdminTrackGen() {
   const [params, setParams] = useState<TrackParams>({
     length: 1600,
     complexity: 0.4,
-    width: 12,
+    width: DEFAULT_TRACK_WIDTH,
     terrain: 'asphalt',
   });
   const [batch, setBatch] = useState(0);

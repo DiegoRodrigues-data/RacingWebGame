@@ -1,4 +1,5 @@
-import { AppError, gameSettingsSchema, trackParamsSchema } from '@tracado/shared';
+import { AppError, driverRulesSchema, gameSettingsSchema, trackParamsSchema } from '@tracado/shared';
+import { runBalance } from '@tracado/sim';
 import { TrackGenerationError } from '@tracado/trackgen';
 import { and, eq, inArray } from 'drizzle-orm';
 import type { FastifyInstance } from 'fastify';
@@ -77,6 +78,27 @@ export function settingsRoutes(app: FastifyInstance, ctx: Ctx, engine: PhaseEngi
     if (saved.botPool.enabled) await ensureBotPool(ctx, saved.botPool);
     forgetOnlineBotCache();
     return { settings: saved, pool: await poolTracks(ctx, saved.tracks.pool) };
+  });
+
+  /**
+   * Teste de equilíbrio das regras de perfil do piloto e colisões (ainda não salvas): simula algumas corridas de 22
+   * carros com setups e perfis sorteados em cada cenário do balanceamento. Curto de propósito (roda no servidor).
+   */
+  app.post('/admin/settings/drivers/test', async (req) => {
+    requireRole(req, 'admin');
+    const { rules, races } = parse(
+      z.object({ rules: driverRulesSchema, races: z.number().int().min(1).max(4).default(2) }),
+      req.body,
+    );
+    const t0 = performance.now();
+    const r = runBalance(races, `admin-${ctx.clock.now()}`, rules);
+    return {
+      races: r.races,
+      ms: Math.round(performance.now() - t0),
+      perRace: r.perRace,
+      avgPosition: r.avgPosition,
+      maxLift: r.maxLift,
+    };
   });
 
   /** Gerador de pistas: salva a pista de uma seed como oficial e (opcional) põe no rodízio. */

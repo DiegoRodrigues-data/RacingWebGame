@@ -215,7 +215,7 @@ function CreateRace({ batch }: { batch: boolean }) {
           key={`p${ph.practiceMin}`}
           name="practice"
           type="number"
-          min={0.5}
+          min={0}
           step={0.5}
           defaultValue={ph.practiceMin}
           className="input"

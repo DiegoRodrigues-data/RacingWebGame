@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { driverProfileSchema, type DriverProfile } from './driver';
 import {
   CAR_COLORS,
   CAR_MODELS,
@@ -115,6 +116,8 @@ export const updateProfileSchema = z.object({
   carColor: z.enum(['red', 'blue', 'green', 'yellow', 'black']).optional(),
   reducedMotion: z.boolean().optional(),
   emailReminders: z.boolean().optional(),
+  /** Perfil do piloto (ataque, defesa, ritmo) usado em todas as corridas. */
+  driver: driverProfileSchema.optional(),
 });
 export type UpdateProfileInput = z.infer<typeof updateProfileSchema>;
 
@@ -146,6 +149,10 @@ export interface ProfileDto {
   reducedMotion: boolean;
   emailReminders: boolean;
   careerRaces: number;
+  /** Perfil do piloto; sem escolha salva, o sorteado pelo id (`driverProfileFor`). */
+  driver: DriverProfile;
+  /** O jogador já salvou o perfil (senão `driver` é o sorteado). */
+  driverChosen: boolean;
 }
 export interface AuthResponse {
   accessToken: string;
@@ -193,6 +200,8 @@ export const carSetupSchema = z.object({
   terrainPrep: terrainSchema,
   /** Aposta de clima: ajusta arrefecimento e acerto para seco ou chuva. */
   weatherBet: weatherBetSchema,
+  /** Ajuste do perfil do piloto só para esta corrida (sem ele, vale o perfil do jogador). */
+  driver: driverProfileSchema.optional(),
 });
 export type CarSetup = z.infer<typeof carSetupSchema>;
 
@@ -334,7 +343,7 @@ export const raceCreateSchema = z.object({
     .min(1)
     .max(60 * 24 * 14)
     .default(60),
-  practiceMinutes: z.number().min(0.5).max(120).default(DEFAULT_PRACTICE_MINUTES),
+  practiceMinutes: z.number().min(0).max(120).default(DEFAULT_PRACTICE_MINUTES),
   setupLockSeconds: z.number().int().min(5).max(600).default(30),
   /** Janela de traçado depois do treino (s); ausente = padrão das configurações do jogo (0 = sem janela). */
   traceWindowSeconds: z.number().int().min(0).max(900).optional(),

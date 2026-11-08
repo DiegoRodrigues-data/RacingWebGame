@@ -496,6 +496,15 @@ class AudioEngine {
     for (let i = 0; i < 4; i++) this.noiseHit(t + i * 0.13, 0.09, 'bandpass', 3200, 0.35, this.sfxBus);
   }
 
+  /** Toque entre carros: pancada grave seguida de lataria raspando. */
+  crash() {
+    const ctx = this.ctx;
+    if (!ctx) return;
+    const t = ctx.currentTime;
+    this.noiseHit(t, 0.18, 'lowpass', 600, 0.5, this.sfxBus);
+    this.noiseHit(t + 0.06, 0.25, 'bandpass', 2400, 0.22, this.sfxBus);
+  }
+
   /** Bandeirada: vinheta curta (arpejo maior subindo). */
   finish() {
     const ctx = this.ctx;

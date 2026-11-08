@@ -119,7 +119,7 @@ export default function Box() {
         items={[
           { value: 'tracado', label: '✍️ Traçado' },
           { value: 'setup', label: '🔧 Setup' },
-          { value: 'treino', label: '⏱️ Treino' },
+          { value: 'treino', label: '⏱️ Teste' },
         ]}
       />
       {!geo.data || !offsets || !setup || !practice.data ? (

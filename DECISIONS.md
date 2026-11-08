@@ -244,6 +244,58 @@ A migração `0001_corridas_longas` atualiza categorias, corridas que ainda acei
 Balanceamento (`pnpm balance`, 210 corridas, 7 cenários): estratégia de pneus mais vencedora com 22% das vitórias e maior
 "lift" por característica de 1,72. A melhor combinação muda por cenário (seco rápido, seco travado, chuva, clima instável, terra, areia, misto).
 
+### Perfil do piloto, colisões e pista mais larga (simulação v3)
+
+Pedido de 07/11/2026: perfil do piloto por usuário, colisões, pista mais larga e controle no admin.
+
+- **Perfil do piloto** (`packages/shared/src/driver.ts`): Ataque, Defesa e Ritmo, de 0 a 100. Fica em `profiles.driver`;
+  sem escolha salva, vale um perfil sorteado de forma estável pelo id (`driverProfileFor`), então o piloto é o mesmo em
+  todas as corridas desde o primeiro dia. No box, o perfil pode ser ajustado só para a corrida (`setup.driver`). A
+  simulação usa `setup.driver ?? profiles.driver ?? sorteado`.
+- **Sem orçamento de pontos**: cada característica tem custo próprio, no mesmo espírito do setup.
+  - Ataque: tenta ultrapassar mais vezes, passa mais e gasta pneu nas tentativas, mas bate muito mais; quem ataca
+    pouco espera a reta.
+  - Defesa: segura a posição, mas perde velocidade a cada ataque segurado e leva mais toques.
+  - Ritmo: até 0,35% de velocidade e erro mais frequente na volta de classificação; com ritmo alto, +25% de desgaste
+    de pneu, +30% de desgaste de motor e mais rodadas.
+- **Colisões**: o toque só acontece numa tentativa de ultrapassagem. A chance cresce com o ataque de quem tenta e a
+  defesa de quem é atacado, é maior na curva e na chuva. Os dois perdem tempo, e com a chance de avaria (padrão 30%) um
+  deles (quem ataca, em 65% das vezes) abandona (35%) ou vai aos boxes no fim da volta com +6 s e ritmo pior até lá.
+  Incidentes novos: `collision` (com o outro carro em `detail`) e `damage` (`pit` ou `dnf`); abandono com `dnfReason`
+  `collision`.
+- **Lado a lado**: nos frames, quem chega por trás sai da linha do carro da frente para o lado com mais espaço. É só
+  desenho: ordem e tempos já foram decididos.
+- **Pista de 14 m** (`DEFAULT_TRACK_WIDTH`, antes 12 m) para caber dois carros; a migração 0012 sobe a largura salva nas
+  configurações. Pistas já geradas não mudam.
+- **Admin**: as regras ficam em `GameSettings.drivers` (liga as colisões, frequência, chance de avaria e o peso de
+  cada característica) e são gravadas na entrada de cada corrida (`simInput.rules`), então o reprocessamento usa as
+  mesmas. O botão "Simular com estas regras" roda 14 corridas no servidor (`runBalance`) antes de salvar.
+- `SIM_VERSION` = 3. Balanceamento: com setups e perfis sorteados, nenhuma faixa de perfil fica mais de 1,5 posição à
+  frente da outra (ritmo baixo × alto: 10,9 × 12,4, porque stints longos punem o ritmo alto); com setups iguais, ritmo
+  alto fica um pouco à frente. Ataque alto passa quase o dobro de carros e causa oito vezes mais toques que ataque baixo.
+  Cerca de 4,5 toques, 0,7 ida aos boxes por avaria e 0,6 abandono por toque em corridas de 22 carros. O `pnpm balance`
+  passou a checar perfil e colisões.
+
+### Grid alvo dos pilotos simulados
+
+As corridas da grade largavam com 3 a 5 carros em produção: o planejamento só escolhia quem estava "online" nas 3 h
+antes da corrida e queria correr, até `perRaceMax`. Agora cada corrida sorteia um grid alvo entre `gridMin` e `gridMax`
+(padrão de 10 a 16; gente + simulados). Se faltar gente online, entram outros ativos do dia e depois os demais. Nos 10 min
+antes do parque fechado, a checagem por minuto completa o grid até o mínimo (gente que cancelou, inscrição que falhou).
+O admin edita cada persona (habilidade, estilo, horário, vontade de correr e perfil do piloto) e cria mais personas.
+
+### Sem etapa de treino
+
+Pedido de 07/11/2026. O treino passa a ter 0 min por padrão (configurações e corridas do admin), como já tinha sido feito
+com a janela de traçado. A preparação (traçado, setup e perfil do piloto) vai da inscrição ao parque fechado, e o motor
+passa por `practice` e `trace_window` no mesmo tick. A fase continua existindo, então corridas antigas e quem quiser treino
+pelo admin seguem funcionando. A migração 0012 zera o treino salvo nas configurações; corridas já criadas mantêm os
+horários. Outros ajustes:
+
+- O aviso de 1 minuto para o parque fechado também sai com as inscrições abertas.
+- Na Corrida Maluca, "Estou pronto" e "Largar agora" valem com as inscrições abertas, só para a próxima etapa do grupo.
+- A aba "Treino" do box virou "Teste": o teste de volta e de corrida contra fantasmas, que roda no aparelho, continua lá.
+
 ## Riscos técnicos
 
 - **Determinismo de ponto flutuante entre motores JS**: `Math.sin/cos/atan2` podem divergir no último bit entre V8, SpiderMonkey e JavaScriptCore. Mitigação: o servidor é a única autoridade sobre resultados; o cliente recebe a geometria pronta do servidor (não a regenera); hashes usam valores quantizados. Verificado: Chromium = Node (teste E2E). Firefox e Safari não foram testados.

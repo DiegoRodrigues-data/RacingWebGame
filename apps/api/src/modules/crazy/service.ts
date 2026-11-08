@@ -19,7 +19,7 @@ import {
   type RaceCreate,
   type RaceSummaryDto,
 } from '@tracado/shared';
-import { and, asc, eq, gt, inArray, sql } from 'drizzle-orm';
+import { and, asc, eq, gt, inArray, lt, notInArray, sql } from 'drizzle-orm';
 import type { Ctx } from '../../context';
 import {
   categories,
@@ -627,6 +627,21 @@ async function crazyPrepRace(ctx: Pick<Ctx, 'db' | 'clock'>, raceId: string) {
     ctx.clock.now() >= race.setupLockAt.getTime() - CRAZY_SKIP_LOCK_MS
   )
     throw new AppError('INVALID_TRANSITION', 'O preparo desta corrida já acabou.');
+  // Sem treino, o preparo é com as inscrições abertas: só a próxima etapa do grupo pode largar antes da hora.
+  if (race.status === 'registration_open') {
+    const [earlier] = await ctx.db
+      .select({ id: races.id })
+      .from(races)
+      .where(
+        and(
+          eq(races.crazyGroupId, race.crazyGroupId),
+          lt(races.crazyRound, race.crazyRound ?? 0),
+          notInArray(races.status, ['finished', 'archived', 'cancelled']),
+        ),
+      )
+      .limit(1);
+    if (earlier) throw new AppError('INVALID_TRANSITION', 'A etapa anterior do grupo ainda não terminou.');
+  }
   return race;
 }
 
@@ -642,6 +657,7 @@ async function skipPrep(ctx: Ctx, race: RaceRow, reason: string) {
   const upd = await ctx.db
     .update(races)
     .set({
+      practiceAt: new Date(Math.min(race.practiceAt.getTime(), now)),
       traceWindowAt: new Date(Math.min(race.traceWindowAt.getTime(), now)),
       setupLockAt: new Date(now),
       qualifyingAt: new Date(qualifyingAt),

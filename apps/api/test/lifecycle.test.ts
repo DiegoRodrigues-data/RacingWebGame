@@ -1,6 +1,8 @@
-import { DEFAULT_SETUP } from '@tracado/shared';
+import { DEFAULT_DRIVER_RULES, DEFAULT_SETUP, driverProfileFor } from '@tracado/shared';
 import { offsetsToTrace, suggestedLine, type TrackGeometry } from '@tracado/trackgen';
+import { eq } from 'drizzle-orm';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { raceReplays } from '../src/db/schema';
 import { clearGeometryCache } from '../src/modules/tracks/service';
 import { setupApp, type TestApp } from './helpers';
 
@@ -29,11 +31,29 @@ describe('ciclo de vida completo de uma corrida (fluxo crítico)', () => {
         await t.json(
           'PUT',
           `/races/${raceId}/setup`,
-          { ...DEFAULT_SETUP, tyre: 'soft', pitStops: oneStop },
+          // Ana ajusta o perfil do piloto só nesta corrida.
+          {
+            ...DEFAULT_SETUP,
+            tyre: 'soft',
+            pitStops: oneStop,
+            driver: { attack: 95, defense: 20, pace: 70 },
+          },
           ana.token,
         )
       ).status,
     ).toBe(200);
+    // Bruno salva o perfil de piloto dele (vale em todas as corridas); Caio fica com o sorteado.
+    const meB = await t.json('GET', '/me', undefined, bruno.token);
+    expect(meB.body.profile.driverChosen).toBe(false);
+    expect(meB.body.profile.driver).toEqual(driverProfileFor(bruno.userId));
+    const brunoDriver = { attack: 30, defense: 85, pace: 40 };
+    const pb = await t.json('PATCH', '/me/profile', { driver: brunoDriver }, bruno.token);
+    expect(pb.body.profile.driver).toEqual(brunoDriver);
+    expect(pb.body.profile.driverChosen).toBe(true);
+    expect(
+      (await t.json('PATCH', '/me/profile', { driver: { attack: 120, defense: 0, pace: 0 } }, bruno.token))
+        .status,
+    ).toBe(400);
     // Parada nos boxes é obrigatória.
     const noStop = await t.json(
       'PUT',
@@ -195,6 +215,15 @@ describe('ciclo de vida completo de uma corrida (fluxo crítico)', () => {
     const replay = (await t.json('GET', `/races/${raceId}/replay`)).body;
     expect(replay.complete).toBe(true);
     expect(replay.frames[replay.frames.length - 1].t).toBe(replay.durationMs);
+
+    // Cada piloto correu com o perfil certo, e as regras de colisão ficaram gravadas na entrada da simulação.
+    const [rep] = await t.ctx.db.select().from(raceReplays).where(eq(raceReplays.raceId, raceId));
+    const si = rep!.simInput as { cars: { id: string; driver: unknown }[]; rules: unknown };
+    const drv = (id: string) => si.cars.find((c) => c.id === id)!.driver;
+    expect(drv(ana.userId)).toEqual({ attack: 95, defense: 20, pace: 70 });
+    expect(drv(bruno.userId)).toEqual(brunoDriver);
+    expect(drv(caio.userId)).toEqual(driverProfileFor(caio.userId));
+    expect(si.rules).toEqual(DEFAULT_DRIVER_RULES);
 
     // Auditoria: reprocessar reproduz exatamente o mesmo resultado.
     const re = await t.json('POST', `/admin/races/${raceId}/reprocess`, {}, t.admin);

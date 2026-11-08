@@ -7,7 +7,7 @@ import {
   ROOM,
   type RacePhase,
 } from '@tracado/shared';
-import { and, eq, inArray, lte, or, sql } from 'drizzle-orm';
+import { and, eq, gt, inArray, lte, or, sql } from 'drizzle-orm';
 import type { Ctx } from '../../context';
 import { entries, qualifyingResults, races } from '../../db/schema';
 import { notify } from '../notifications/service';
@@ -145,6 +145,8 @@ export class PhaseEngine {
       results?: Awaited<ReturnType<typeof publishResults>>;
       cancelReason?: string;
     } = {};
+    // Configurações lidas fora da transação (no PGlite, ler dentro dela travaria esperando o próprio tx).
+    const rules = to === 'qualifying' ? (await getSettings(this.ctx)).drivers : undefined;
     try {
       const changed = await this.ctx.db.transaction(async (tx) => {
         const cur = await getRaceRow(tx, race.id, true);
@@ -160,7 +162,7 @@ export class PhaseEngine {
           }
         }
         if (to === 'qualifying') {
-          const q = await runSimulation(this.ctx, tx, cur);
+          const q = await runSimulation(this.ctx, tx, cur, rules);
           if (!q) {
             to = 'cancelled';
             extra.cancelReason = 'Sem pilotos confirmados.';
@@ -363,13 +365,22 @@ export class PhaseEngine {
     }
   }
 
-  /** Aviso de 1 minuto restante na janela de traçado (uma vez por corrida, registrado em flags). */
+  /**
+   * Aviso de 1 minuto para o parque fechado (uma vez por corrida, registrado em flags). Sem treino e sem janela de
+   * traçado (padrão), a preparação é com as inscrições abertas e o aviso sai nelas.
+   */
   private async traceWarnings() {
     const now = this.ctx.clock.now();
     const rows = await this.ctx.db
       .select()
       .from(races)
-      .where(and(eq(races.status, 'trace_window'), lte(races.setupLockAt, new Date(now + 60_000))));
+      .where(
+        and(
+          inArray(races.status, ['registration_open', 'practice', 'trace_window']),
+          lte(races.setupLockAt, new Date(now + 60_000)),
+          gt(races.setupLockAt, new Date(now)),
+        ),
+      );
     for (const r of rows) {
       if (r.flags.traceWarned) continue;
       const upd = await this.ctx.db

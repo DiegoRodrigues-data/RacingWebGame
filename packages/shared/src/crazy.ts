@@ -16,8 +16,11 @@ export const CRAZY_DEFAULT_LAPS = 8;
 export const CRAZY_MIN_INTERVAL_MIN = 15;
 export const CRAZY_MAX_INTERVAL_MIN = 7 * 24 * 60;
 /** Pontos do campeonato pela posição entre os amigos (bots não contam). Todo mundo que larga ganha ao menos 1. */
-/** Fases de preparo que podem ser puladas (todos prontos ou o organizador mandou largar). */
-export const CRAZY_SKIPPABLE_PHASES = ['practice', 'trace_window'] as const;
+/**
+ * Fases de preparo que podem ser puladas (todos prontos ou o organizador mandou largar). Sem treino (padrão), o
+ * preparo é com as inscrições abertas; nesse caso só vale para a próxima etapa do grupo.
+ */
+export const CRAZY_SKIPPABLE_PHASES = ['registration_open', 'practice', 'trace_window'] as const;
 /** Parque fechado depois de pular o preparo: só o tempo de a tela trocar. */
 export const CRAZY_SKIP_LOCK_MS = 10_000;
 /** "Largar agora" do organizador exige pelo menos esta fração da turma pronta. */

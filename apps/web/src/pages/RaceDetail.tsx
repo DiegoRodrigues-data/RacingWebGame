@@ -130,7 +130,10 @@ export default function RaceDetail() {
           </div>
           <h1 className="mt-2 font-display text-3xl">{race.name}</h1>
           <p className="text-sm text-muted">
-            Treino {fmtDateTime(race.timeline.practiceAt)} · Largada {fmtDateTime(race.timeline.raceAt)}
+            {race.timeline.traceWindowAt > race.timeline.practiceAt
+              ? `Treino ${fmtDateTime(race.timeline.practiceAt)}`
+              : `Parque fechado ${fmtDateTime(race.timeline.setupLockAt)}`}{' '}
+            · Largada {fmtDateTime(race.timeline.raceAt)}
           </p>
         </div>
         <div className="flex flex-wrap items-start gap-3">
