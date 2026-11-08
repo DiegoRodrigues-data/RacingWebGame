@@ -47,12 +47,15 @@ export default function Box() {
   const [offsets, setOffsets] = useState<Float64Array | null>(null);
   const [setup, setSetup] = useState<CarSetup | null>(null);
 
-  // Estado inicial: servidor > rascunho local > padrão.
+  // O admin trocou a pista: o traçado era da outra, recomeça.
+  const versionId = race?.track.versionId;
+  useEffect(() => setOffsets(null), [versionId]);
+  // Estado inicial: servidor > rascunho local (desta pista) > padrão.
   useEffect(() => {
-    if (!geo.data || offsets || serverTrace.isLoading) return;
-    const pts = serverTrace.data?.points ?? loadDraft<TracePoint[]>(draftKey(id!, 'trace'));
+    if (!geo.data || offsets || serverTrace.isLoading || !versionId) return;
+    const pts = serverTrace.data?.points ?? loadDraft<TracePoint[]>(draftKey(`${id}:${versionId}`, 'trace'));
     setOffsets(pts ? traceToOffsets(geo.data, pts) : new Float64Array(geo.data.count));
-  }, [geo.data, serverTrace.isLoading, serverTrace.data, offsets, id]);
+  }, [geo.data, serverTrace.isLoading, serverTrace.data, offsets, id, versionId]);
   useEffect(() => {
     if (setup || serverSetup.isLoading || !practice.data) return;
     const lim = practice.data.limits;

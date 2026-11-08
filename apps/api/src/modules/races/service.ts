@@ -63,6 +63,32 @@ export function defaultWeather(seed: string, cfg: CategoryConfig): RaceWeather {
   return { base: r.pick(cfg.weathers), rainChance: cfg.rainChance, temperature: r.int(14, 34) };
 }
 
+/** Versão de pista de uma corrida: a especial publicada indicada ou uma procedural nova (seed e parâmetros). */
+export async function resolveTrackVersion(
+  db: Db | Tx,
+  track: RaceCreate['track'],
+  cfg: CategoryConfig,
+  actorId: string | null,
+): Promise<string> {
+  if (track.type === 'version') {
+    const [v] = await db.select().from(trackVersions).where(eq(trackVersions.id, track.trackVersionId));
+    if (!v) throw new AppError('NOT_FOUND', 'Versão de pista não encontrada.');
+    if (v.status !== 'published')
+      throw new AppError('TRACK_NOT_PUBLISHED', 'Apenas pistas publicadas podem ser usadas em corridas.');
+    return v.id;
+  }
+  const tseed = track.seed ?? newSeed();
+  const r = createRng(`${tseed}|params`);
+  const p = track.params ?? {};
+  const params = {
+    length: p.length ?? Math.round(r.range(cfg.trackLength.min, cfg.trackLength.max) / 50) * 50,
+    complexity: p.complexity ?? cfg.trackComplexity,
+    width: p.width ?? DEFAULT_TRACK_WIDTH,
+    terrain: p.terrain ?? r.pick(cfg.terrains),
+  };
+  return (await createProceduralVersion(db, tseed, params, actorId)).id;
+}
+
 export async function createRace(
   ctx: Ctx,
   input: RaceCreate,
@@ -75,25 +101,12 @@ export async function createRace(
   const startAt = Date.parse(input.startAt);
   if (startAt <= now) throw new AppError('VALIDATION_ERROR', 'O início do treino precisa estar no futuro.');
   const seed = `${newSeed()}`;
-  let trackVersionId: string;
-  if (input.track.type === 'version') {
-    const [v] = await db.select().from(trackVersions).where(eq(trackVersions.id, input.track.trackVersionId));
-    if (!v) throw new AppError('NOT_FOUND', 'Versão de pista não encontrada.');
-    if (v.status !== 'published')
-      throw new AppError('TRACK_NOT_PUBLISHED', 'Apenas pistas publicadas podem ser usadas em corridas.');
-    trackVersionId = v.id;
-  } else {
-    const tseed = input.track.seed ?? seed;
-    const r = createRng(`${tseed}|params`);
-    const p = input.track.params ?? {};
-    const params = {
-      length: p.length ?? Math.round(r.range(cfg.trackLength.min, cfg.trackLength.max) / 50) * 50,
-      complexity: p.complexity ?? cfg.trackComplexity,
-      width: p.width ?? DEFAULT_TRACK_WIDTH,
-      terrain: p.terrain ?? r.pick(cfg.terrains),
-    };
-    trackVersionId = (await createProceduralVersion(db, tseed, params, actorId)).id;
-  }
+  const trackVersionId = await resolveTrackVersion(
+    db,
+    input.track.type === 'procedural' ? { ...input.track, seed: input.track.seed ?? seed } : input.track,
+    cfg,
+    actorId,
+  );
   const tl = buildTimeline({
     startAt,
     registrationLeadMs: input.registrationLeadMinutes * 60_000,

@@ -378,6 +378,13 @@ Fecha o ciclo de vida com resultados persistidos.
 - [x] Rebalanceamento (`pnpm balance`) e `SIM_VERSION` 4
 - [x] Velocímetro digital na corrida ao vivo, no replay e no teste do box
 
+## Fase 25 — Pistas do dia
+
+- [x] Página do admin com cada horário do dia (Brasília), pista, miniatura e origem (gerada, rodízio, escolhida)
+- [x] Troca da pista de uma corrida aberta (especial ou outra gerada), com aviso aos inscritos e traçados apagados
+- [x] Reserva de especial para horários ainda não criados (`track_plans`), consumida pela grade
+- [x] Especiais listadas no dia, com quantas vezes entram e o botão do rodízio
+
 ---
 
 ## Ordem recomendada (próximos passos)

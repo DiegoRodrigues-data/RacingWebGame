@@ -82,15 +82,19 @@ Toda ação administrativa grava em `admin_audit_log`.
 
 Configurações e painel (admin):
 
-| Método e rota                                 | Descrição                                                                                                                                                                  |
-| --------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `GET /admin/settings` · `PUT /admin/settings` | configurações do jogo (`GameSettings`), categorias disponíveis e pistas do rodízio; o PUT valida categorias e pistas publicadas e vai para a auditoria                     |
-| `POST /admin/tracks/from-seed`                | `{name?, seed, params, addToPool}`: salva a pista da seed como oficial (e no rodízio)                                                                                      |
-| `GET /admin/stats`                            | jogadores, corridas por dia (14 dias), terrenos, grupos ativos e próximas corridas                                                                                         |
-| `GET /admin/bots`                             | pilotos simulados: configuração (`botPool`), resumo (ligados, ativos hoje, online agora, inscrições na fila) e lista com persona, corridas e pontos                        |
-| `PATCH /admin/bots/:id`                       | `{active?, skill?, aggression?, pitRisk?, joinRate?, hourFrom?, hourTo?, driver?}`; desligar tira o piloto das corridas ainda abertas (`leftRaces`) e vai para a auditoria |
-| `POST /admin/bots`                            | `{count}` (1–30): cria mais personas além do rodízio                                                                                                                       |
-| `POST /admin/settings/drivers/test`           | `{rules, races?}`: simula corridas com as regras de perfil e colisões (sem salvar) e devolve toques, abandonos e posição média por faixa do perfil                         |
+| Método e rota                                 | Descrição                                                                                                                                                                                                                         |
+| --------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `GET /admin/settings` · `PUT /admin/settings` | configurações do jogo (`GameSettings`), categorias disponíveis e pistas do rodízio; o PUT valida categorias e pistas publicadas e vai para a auditoria                                                                            |
+| `POST /admin/tracks/from-seed`                | `{name?, seed, params, addToPool}`: salva a pista da seed como oficial (e no rodízio)                                                                                                                                             |
+| `GET /admin/stats`                            | jogadores, corridas por dia (14 dias), terrenos, grupos ativos e próximas corridas                                                                                                                                                |
+| `GET /admin/bots`                             | pilotos simulados: configuração (`botPool`), resumo (ligados, ativos hoje, online agora, inscrições na fila) e lista com persona, corridas e pontos                                                                               |
+| `PATCH /admin/bots/:id`                       | `{active?, skill?, aggression?, pitRisk?, joinRate?, hourFrom?, hourTo?, driver?}`; desligar tira o piloto das corridas ainda abertas (`leftRaces`) e vai para a auditoria                                                        |
+| `POST /admin/bots`                            | `{count}` (1–30): cria mais personas além do rodízio                                                                                                                                                                              |
+| `POST /admin/settings/drivers/test`           | `{rules, races?}`: simula corridas com as regras de perfil e colisões (sem salvar) e devolve toques, abandonos e posição média por faixa do perfil                                                                                |
+| `GET /admin/track-day?day=AAAA-MM-DD`         | pistas do dia (horário de Brasília; padrão hoje): cada horário da grade e as corridas avulsas com pista, origem (`auto`, `pool`, `admin`), reserva e se dá para trocar; e as especiais publicadas com quantas vezes entram no dia |
+| `PUT /admin/track-day/slots/:at`              | `{trackVersionId \| null}`: reserva uma especial para um horário da grade que ainda não virou corrida (null tira a reserva); usada quando a corrida é criada                                                                      |
+| `PUT /admin/races/:id/track`                  | `{trackVersionId \| null}`: troca a pista de uma corrida aberta até 1 min antes do parque fechado (null gera outra); apaga os traçados salvos e avisa os inscritos (`track_changed`)                                              |
+| `PUT /admin/track-day/pool`                   | `{trackVersionId, inPool}`: põe ou tira uma especial do rodízio da grade                                                                                                                                                          |
 
 ### Exemplos
 

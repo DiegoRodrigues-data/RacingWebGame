@@ -41,6 +41,10 @@ const TEMPLATES: Record<NotificationType, (p: P) => { title: string; body: strin
     body: `O resultado de ${p.raceName} foi anulado. ${p.reason ?? ''}`.trim(),
   }),
   level_changed: (p) => ({ title: 'Novo nível', body: `Seu nível agora é ${p.level}.` }),
+  track_changed: (p) => ({
+    title: 'Pista trocada',
+    body: `${p.raceName} agora corre em ${p.trackName}. Desenhe o traçado de novo e confira o setup.`,
+  }),
 };
 const EMAIL_TYPES: NotificationType[] = ['trace_window_open', 'race_started', 'entry_promoted'];
 

@@ -26,6 +26,7 @@ const Terms = lazy(() => import('./pages/Legal').then((m) => ({ default: m.Terms
 const About = lazy(() => import('./pages/About'));
 const Determinism = lazy(() => import('./pages/Determinism'));
 const AdminHome = lazy(() => import('./pages/admin/AdminHome'));
+const AdminTrackDay = lazy(() => import('./pages/admin/AdminTrackDay'));
 const AdminRaces = lazy(() => import('./pages/admin/AdminRaces'));
 const AdminCategories = lazy(() => import('./pages/admin/AdminCategories'));
 const AdminEvents = lazy(() => import('./pages/admin/AdminEvents'));
@@ -181,6 +182,14 @@ export function App() {
             element={
               <RequireAuth role="admin">
                 <AdminEvents />
+              </RequireAuth>
+            }
+          />
+          <Route
+            path="/admin/pistas-do-dia"
+            element={
+              <RequireAuth role="admin">
+                <AdminTrackDay />
               </RequireAuth>
             }
           />

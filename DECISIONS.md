@@ -320,6 +320,26 @@ Pedido de 07/11/2026 ("ainda vejo um carro passando por cima de outro"). Medido 
   ~4,7 toques por corrida, diferença de 1,1 posição entre faixas do perfil. As ultrapassagens contadas subiram (antes
   boa parte das trocas de posição acontecia "por dentro" do outro carro, sem registro).
 
+### Pistas do dia
+
+Pedido de 07/11/2026: saber que pista entra em cada horário do dia e ajustar. A página `/admin/pistas-do-dia` mostra o
+dia no horário de Brasília (ontem até 6 dias à frente):
+
+- **Cada horário da grade**, já criado ou não, e as corridas avulsas do admin, com miniatura, terreno, comprimento,
+  cenário e a origem da pista: gerada, sorteada do rodízio de especiais ou escolhida pelo admin.
+- **Corrida já criada**: troca por uma especial publicada ou por outra gerada, até 1 minuto antes do parque fechado. O
+  cenário é sorteado de novo (compatível com o terreno), os traçados salvos são apagados (eram da outra pista), a
+  procedural antiga sai do banco e os jogadores inscritos recebem `track_changed`, que também recarrega o box. O
+  rascunho local do traçado agora é por pista (`raceId:versionId`).
+- **Horário ainda sem corrida** (além da janela de criação): reserva de uma especial em `track_plans`. Ao criar a
+  corrida daquele horário, a grade usa a reserva, marca `flags.trackPicked` e apaga a reserva. Sem reserva, vale a
+  geração automática (com a chance do rodízio).
+- **Especiais**: as publicadas, com quantas vezes entram no dia e um botão para pôr ou tirar do rodízio (a chance do
+  rodízio continua nas configurações).
+
+Corridas da Corrida Maluca e corridas teste ficam de fora. A categoria de cada horário segue o rodízio da grade
+(`slotCategory`, o mesmo cálculo da criação).
+
 ### Velocímetro
 
 Na corrida ao vivo, no replay e no teste do box, canto superior direito da pista. Mostra o carro em foco (o seguido, o

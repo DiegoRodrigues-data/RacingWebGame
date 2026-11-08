@@ -234,13 +234,13 @@ export function TraceTab({
       setHist((h) => ({ past: [...h.past.slice(-40), offsetsRef.current], future: [] }));
       setOffsets(next);
       const pts = offsetsToTrace(next, 256);
-      saveDraft(draftKey(race.id, 'trace'), pts);
+      saveDraft(draftKey(`${race.id}:${race.track.versionId}`, 'trace'), pts);
       if (canSend && validateTrace(g, pts).ok) {
         if (submitTimer.current) clearTimeout(submitTimer.current);
         submitTimer.current = window.setTimeout(() => void submit(pts), 600);
       }
     },
-    [setOffsets, race.id, canSend, g, submit],
+    [setOffsets, race.id, race.track.versionId, canSend, g, submit],
   );
   const fromHandles = useCallback(
     (vals: number[]) => enforceLateralRate(g, handlesToOffsets(g, idx, vals)),

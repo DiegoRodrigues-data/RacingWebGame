@@ -10,7 +10,7 @@ import {
 import { createRng } from '@tracado/trackgen';
 import { and, desc, eq, gte, inArray, lte, sql } from 'drizzle-orm';
 import type { Ctx } from '../../context';
-import { categories, notifications, races, tracks, trackVersions } from '../../db/schema';
+import { categories, notifications, races, trackPlans, tracks, trackVersions } from '../../db/schema';
 import { createRace } from '../races/service';
 import { newSeed } from '../tracks/service';
 import { getSettings } from '../settings/service';
@@ -40,11 +40,13 @@ export async function autoTrack(
   cat: Pick<CategoryRow, 'config'>,
   /** Terreno obrigatório (corridas teste em rodízio): ignora os pesos e o rodízio de pistas salvas. */
   terrain?: TrackTerrain,
+  /** false = sempre gera (o admin pediu "outra gerada" nas pistas do dia). */
+  usePool = true,
 ): Promise<RaceCreate['track']> {
   const t = s.tracks;
   const seed = t.seedPrefix ? `${t.seedPrefix}-${newSeed()}` : newSeed();
   const r = createRng(`${seed}|auto`);
-  if (!terrain && t.pool.length && r.next() < t.poolChance) {
+  if (usePool && !terrain && t.pool.length && r.next() < t.poolChance) {
     const id = t.pool[Math.floor(r.next() * t.pool.length)]!;
     const [v] = await ctx.db
       .select({ id: trackVersions.id })
@@ -90,6 +92,27 @@ async function categoryBySlug(ctx: Pick<Ctx, 'db'>, slug: string) {
   return c && c.active ? c : null;
 }
 
+/** Intervalo entre os horários da grade automática (ms; os horários são múltiplos dele em UTC). */
+export const gridStep = (s: GameSettings) => Math.round(86_400_000 / s.autoRaces.perDay);
+
+/**
+ * Categoria de um horário da grade: rodízio pelo número do horário (a mesma hora sempre cai na mesma categoria da
+ * lista), pulando as desativadas.
+ */
+export function slotCategory<C extends { slug: string; active: boolean }>(
+  s: GameSettings,
+  cats: C[],
+  at: number,
+): C | null {
+  const list = s.autoRaces.categories;
+  const slot = Math.floor(at / gridStep(s));
+  for (let k = 0; k < list.length; k++) {
+    const c = cats.find((x) => x.slug === list[(slot + k) % list.length]);
+    if (c?.active) return c;
+  }
+  return null;
+}
+
 /** Corridas automáticas não são criadas para começar em menos que isto (dá tempo de alguém se inscrever). */
 const MIN_LEAD_MS = 5 * 60_000;
 
@@ -110,7 +133,7 @@ export async function ensureAutoRaces(ctx: Ctx): Promise<number> {
   const st = await getSettings(ctx);
   const a = st.autoRaces;
   if (!a.enabled) return 0;
-  const step = Math.round(86_400_000 / a.perDay);
+  const step = gridStep(st);
   const now = ctx.clock.now();
   const horizon = now + a.lookaheadHours * 3_600_000;
   const first = Math.ceil((now + MIN_LEAD_MS) / step) * step;
@@ -129,16 +152,32 @@ export async function ensureAutoRaces(ctx: Ctx): Promise<number> {
         )
     ).map((r) => r.at.getTime()),
   );
+  // Pistas reservadas pelo admin para os horários (pistas do dia), ainda publicadas.
+  const plans = new Map(
+    (
+      await ctx.db
+        .select({ at: trackPlans.slotAt, versionId: trackPlans.trackVersionId })
+        .from(trackPlans)
+        .innerJoin(trackVersions, eq(trackVersions.id, trackPlans.trackVersionId))
+        .where(
+          and(
+            gte(trackPlans.slotAt, new Date(first)),
+            lte(trackPlans.slotAt, new Date(horizon)),
+            eq(trackVersions.status, 'published'),
+          ),
+        )
+    ).map((p) => [p.at.getTime(), p.versionId]),
+  );
+  const cats = await ctx.db.select().from(categories);
   let created = 0;
   for (let at = first; at <= horizon; at += step) {
     if (taken.has(at)) continue;
-    // Rodízio pelo número do horário: a mesma hora sempre cai na mesma categoria da lista.
-    const slot = Math.floor(at / step);
-    let cat: CategoryRow | null = null;
-    for (let k = 0; k < a.categories.length && !cat; k++)
-      cat = await categoryBySlug(ctx, a.categories[(slot + k) % a.categories.length]!);
+    const cat = slotCategory(st, cats, at);
     if (!cat) break;
-    const track = await autoTrack(ctx, st, cat);
+    const planned = plans.get(at);
+    const track: RaceCreate['track'] = planned
+      ? { type: 'version', trackVersionId: planned }
+      : await autoTrack(ctx, st, cat);
     const row = await createRace(
       ctx,
       {
@@ -159,8 +198,9 @@ export async function ensureAutoRaces(ctx: Ctx): Promise<number> {
     );
     await ctx.db
       .update(races)
-      .set({ flags: { ...row.flags, auto: true } })
+      .set({ flags: { ...row.flags, auto: true, ...(planned ? { trackPicked: true } : {}) } })
       .where(eq(races.id, row.id));
+    if (planned) await ctx.db.delete(trackPlans).where(eq(trackPlans.slotAt, new Date(at)));
     created++;
   }
   if (created) ctx.log.info({ created }, 'Corridas automáticas criadas');

@@ -53,8 +53,16 @@ function NotificationBell() {
   useRoom(me ? ROOM.user(me.id) : null, (env) => {
     if (env.type === 'notification') {
       const n = env.payload as ServerEvents['notification'];
-      toast(n.title, n.body, n.type === 'race_cancelled' || n.type === 'result_annulled' ? 'warn' : 'ok');
+      toast(
+        n.title,
+        n.body,
+        ['race_cancelled', 'result_annulled', 'track_changed'].includes(n.type) ? 'warn' : 'ok',
+      );
       void qc.invalidateQueries({ queryKey: ['notifications'] });
+      // Pista trocada pelo admin: a corrida, o traçado salvo e as referências do box mudaram.
+      const raceId = n.payload?.raceId as string | undefined;
+      if (n.type === 'track_changed' && raceId)
+        void qc.invalidateQueries({ predicate: (q) => q.queryKey.includes(raceId) });
     }
   });
   const unread = data?.filter((n) => !n.readAt).length ?? 0;

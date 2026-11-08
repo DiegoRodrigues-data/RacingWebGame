@@ -13,6 +13,7 @@ export function AdminNav() {
         ['/admin/pilotos-simulados', 'Pilotos simulados'],
         ['/admin/categorias', 'Categorias'],
         ['/admin/eventos', 'Eventos'],
+        ['/admin/pistas-do-dia', 'Pistas do dia'],
         ['/admin/pistas', 'Pistas'],
         ['/admin/gerador', 'Gerador de pistas'],
         ['/admin/temporadas', 'Temporadas'],

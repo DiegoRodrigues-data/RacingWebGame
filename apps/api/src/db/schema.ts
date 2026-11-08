@@ -493,6 +493,19 @@ export const gameSettings = pgTable('game_settings', {
   updatedBy: uuid('updated_by').references(() => users.id),
 });
 
+/**
+ * Pista reservada pelo admin para um horário da grade automática que ainda não virou corrida. Ao criar a corrida
+ * daquele horário, o motor usa esta pista e apaga a reserva. Sem reserva, vale a geração automática.
+ */
+export const trackPlans = pgTable('track_plans', {
+  slotAt: ts('slot_at').primaryKey(),
+  trackVersionId: uuid('track_version_id')
+    .notNull()
+    .references(() => trackVersions.id, { onDelete: 'cascade' }),
+  createdBy: uuid('created_by').references(() => users.id),
+  createdAt: ts('created_at').notNull().defaultNow(),
+});
+
 // ---------------------------------------------------------------- Pilotos simulados (grade automática)
 /**
  * Personagem de um piloto simulado (`users.is_bot` com linha aqui). Os bots sem persona são os de demonstração

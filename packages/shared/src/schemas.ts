@@ -12,7 +12,7 @@ import {
   TRACE_MIN_POINTS,
 } from './constants';
 import type { RaceCrazyDto } from './crazy';
-import { RACE_PHASES } from './phases';
+import { RACE_PHASES, type RacePhase } from './phases';
 
 // ---------- Básicos ----------
 export const uuid = z.string().uuid();
@@ -569,6 +569,7 @@ export const NOTIFICATION_TYPES = [
   'race_cancelled',
   'result_annulled',
   'level_changed',
+  'track_changed',
 ] as const;
 export type NotificationType = (typeof NOTIFICATION_TYPES)[number];
 export interface NotificationDto {
@@ -580,3 +581,45 @@ export interface NotificationDto {
   readAt: string | null;
   createdAt: string;
 }
+
+// ---------- Pistas do dia (admin) ----------
+export interface TrackDayTrackDto {
+  versionId: string;
+  name: string;
+  kind: 'special' | 'procedural';
+  terrain: TrackTerrain;
+  length: number;
+  corners: number;
+  /** Seed da pista gerada (null nas especiais). */
+  seed: string | null;
+}
+/** De onde veio a pista da corrida: gerada, sorteada do rodízio de especiais ou escolhida pelo admin. */
+export type TrackDaySource = 'auto' | 'pool' | 'admin';
+export interface TrackDaySlotDto {
+  /** Início do horário (ISO). */
+  at: string;
+  /** Horário da grade automática (false = corrida criada pelo admin nesse dia). */
+  grid: boolean;
+  category: { slug: string; name: string } | null;
+  race: { id: string; name: string; status: RacePhase; confirmed: number; capacity: number } | null;
+  track: TrackDayTrackDto | null;
+  biome: Biome | null;
+  source: TrackDaySource | null;
+  /** Pista reservada para um horário que ainda não virou corrida. */
+  plan: TrackDayTrackDto | null;
+  /** Dá para trocar a pista (corrida antes do parque fechado ou horário futuro ainda sem corrida). */
+  editable: boolean;
+}
+export interface TrackDayDto {
+  /** Dia no horário de Brasília (AAAA-MM-DD). */
+  day: string;
+  slots: TrackDaySlotDto[];
+  /** Pistas especiais publicadas, com quantas vezes entram no dia. */
+  specials: (TrackDayTrackDto & { inPool: boolean; today: number })[];
+  /** Chance de uma corrida da grade sortear uma especial do rodízio em vez de gerar. */
+  poolChance: number;
+  /** Até quando a grade já está criada (o resto do dia aceita reservas). */
+  createdUntil: string | null;
+}
+/** Pista de um horário: uma especial publicada, ou null para a geração automática. */
+export const trackChoiceSchema = z.object({ trackVersionId: z.string().uuid().nullable() });
