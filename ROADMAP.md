@@ -398,7 +398,7 @@ Fecha o ciclo de vida com resultados persistidos.
 - [x] Conflito de horário pela bandeirada prevista (voltas × comprimento), com 2 min de folga: dá para emendar a corrida seguinte
 - [x] Pilotos simulados não são planejados em duas corridas que se sobrepõem
 - [x] Pistas do dia: cada horário repete uma das `tracksPerDay` pistas do dia (padrão 12), com o mesmo cenário
-- [ ] Pôr a grade em 48 corridas por dia e subir os pilotos simulados ativos no admin de produção
+- [x] Grade em 48 corridas por dia no admin de produção (10/11/2026; os pilotos simulados ativos ficaram como estavam: o plano completa o grid com o pool todo)
 
 ## Fase 28 — Jogar sem cadastro
 
