@@ -3,11 +3,12 @@ import { Dices } from 'lucide-react';
 import { useState, type FormEvent } from 'react';
 import { useSearchParams } from 'react-router';
 import { DriverSliders, DriverStyleBadge } from '../components/DriverProfile';
+import { GuestBackLink } from '../components/Guest';
 import { CarIcon, Segmented, toast } from '../components/ui';
 import { errorMessage, patch, post } from '../lib/api';
 import { useSession } from '../lib/session';
 
-/** Convidado da Corrida Maluca vira conta normal (e-mail e senha), mantendo apelido, grupos e histórico. */
+/** Convidado (só apelido) vira conta normal (e-mail e senha), mantendo apelido, grupos e histórico. */
 function GuestUpgrade() {
   const setMe = useSession((s) => s.setMe);
   const [busy, setBusy] = useState(false);
@@ -30,10 +31,10 @@ function GuestUpgrade() {
   }
   return (
     <form onSubmit={submit} className="card space-y-3 border-violet">
-      <div className="font-display text-lg">Você está como convidado 🤪</div>
+      <div className="font-display text-lg">Crie sua conta</div>
       <p className="text-sm text-muted">
-        Crie seu acesso com e-mail e senha para entrar de qualquer aparelho, criar seus próprios grupos e
-        disputar as corridas abertas. Apelido, grupos e histórico continuam os mesmos.
+        Com e-mail e senha você entra de qualquer aparelho e cria seus próprios grupos da Corrida Maluca.
+        Apelido, grupos e histórico continuam os mesmos.
       </p>
       <div className="grid gap-2 sm:grid-cols-2">
         <label>
@@ -229,6 +230,7 @@ export default function Account() {
           </p>
         </div>
       )}
+      {me.guest && <GuestBackLink upgradeHint={false} />}
       {me.guest && <GuestUpgrade />}
       {!me.emailVerified && !me.guest && (
         <div className="card flex flex-wrap items-center justify-between gap-2 border-race">

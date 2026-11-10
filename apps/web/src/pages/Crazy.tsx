@@ -1,10 +1,8 @@
 import {
-  CAR_COLORS,
   CRAZY_AWARDS,
   DEFAULT_GAME_SETTINGS,
   PHASE_LABELS,
   SETUP_EDITABLE_PHASES,
-  type AuthResponse,
   type CrazyAwardKey,
   type CrazyGroupDto,
   type CrazyGroupSummaryDto,
@@ -15,15 +13,14 @@ import {
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import confetti from 'canvas-confetti';
 import clsx from 'clsx';
-import { Copy } from 'lucide-react';
 import { useEffect, useRef, useState, type FormEvent, type ReactNode } from 'react';
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router';
-import { CAR_COLOR_LABEL } from '../components/CarPicker';
 import { AwardList, CarDot, RaceReadyBar } from '../components/CrazyBits';
+import { CopyField, GuestBackLink, GuestJoinForm } from '../components/Guest';
 import { RaceMiniMap } from '../components/RaceMiniMap';
 import { ShareMenu } from '../components/ShareRace';
-import { CarIcon, Countdown, Empty, PhaseBadge, Segmented, Skeleton, Spinner, toast } from '../components/ui';
-import { ApiError, errorMessage, get, post } from '../lib/api';
+import { Countdown, Empty, PhaseBadge, Segmented, Skeleton, Spinner, toast } from '../components/ui';
+import { errorMessage, get, post } from '../lib/api';
 import { fmtDateTime } from '../lib/format';
 import { usePublicSettings } from '../lib/queries';
 import { realtime } from '../lib/realtime';
@@ -418,14 +415,11 @@ export function CrazyInvite() {
   const { code = '' } = useParams();
   const nav = useNavigate();
   const qc = useQueryClient();
-  const { me, apply } = useSession();
+  const me = useSession((s) => s.me);
   const { data, error, isLoading } = useQuery({
     queryKey: ['crazy-invite', code, me?.id ?? null],
     queryFn: () => get<CrazyInviteDto>(`/crazy/invite/${code}`),
   });
-  const [nickname, setNickname] = useState('');
-  const [color, setColor] = useState<string>('red');
-  const [suggestion, setSuggestion] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   useEffect(() => {
     if (data?.isMember) nav(`/corrida-maluca/${data.id}`, { replace: true });
@@ -450,28 +444,6 @@ export function CrazyInvite() {
       setBusy(false);
     }
   }
-  async function joinAsGuest(e: FormEvent) {
-    e.preventDefault();
-    setBusy(true);
-    setSuggestion(null);
-    try {
-      const r = await post<AuthResponse & { groupId: string }>('/auth/guest', {
-        inviteCode: code,
-        nickname: nickname.trim(),
-        carColor: color,
-      });
-      apply(r);
-      realtime.reconnect();
-      nav(`/corrida-maluca/${r.groupId}?novo=1`);
-    } catch (x) {
-      if (x instanceof ApiError && x.code === 'NICKNAME_TAKEN')
-        setSuggestion((x.details as { suggestion?: string } | undefined)?.suggestion ?? null);
-      toast('Não deu para entrar', errorMessage(x), 'error');
-    } finally {
-      setBusy(false);
-    }
-  }
-
   return (
     <div className="mx-auto max-w-xl space-y-4">
       <div className="card space-y-3 border-violet/60 text-center">
@@ -513,119 +485,23 @@ export function CrazyInvite() {
           </button>
         </div>
       ) : (
-        <form onSubmit={joinAsGuest} className="card space-y-4">
-          <label className="block">
-            <span className="label">Seu apelido</span>
-            <input
-              className="input"
-              value={nickname}
-              onChange={(e) => setNickname(e.target.value)}
-              placeholder="Ex.: Zé_do_Kart"
-              minLength={3}
-              maxLength={20}
-              pattern="[A-Za-z0-9_\-À-ÿ]+"
-              title="Letras, números, _ ou - (sem espaço)"
-              autoFocus
-              required
-            />
-          </label>
-          {suggestion && (
-            <p className="text-sm text-muted">
-              Esse já tem dono. Que tal{' '}
-              <button
-                type="button"
+        <GuestJoinForm
+          inviteCode={code}
+          onDone={(r) => nav(`/corrida-maluca/${r.groupId}?novo=1`)}
+          footer={
+            <>
+              Sem e-mail nem senha. Já tem conta?{' '}
+              <Link
+                to={`/entrar?voltar=/corrida-maluca/convite/${code}`}
                 className="font-bold text-race underline"
-                onClick={() => setNickname(suggestion)}
               >
-                {suggestion}
-              </button>
-              ?
-            </p>
-          )}
-          <div>
-            <span className="label">Cor do carro</span>
-            <Segmented
-              label="Cor do carro"
-              value={color}
-              onChange={setColor}
-              options={CAR_COLORS.map((c) => ({
-                value: c,
-                label: (
-                  <span className="flex items-center gap-1.5" title={CAR_COLOR_LABEL[c]}>
-                    <CarIcon color={c} model={1} className="h-6" />
-                  </span>
-                ),
-              }))}
-            />
-          </div>
-          <button className="btn-primary w-full" disabled={busy || nickname.trim().length < 3}>
-            {busy ? 'Entrando…' : 'Entrar na corrida 🏁'}
-          </button>
-          <p className="text-center text-xs text-muted">
-            Sem e-mail nem senha. Já tem conta?{' '}
-            <Link
-              to={`/entrar?voltar=/corrida-maluca/convite/${code}`}
-              className="font-bold text-race underline"
-            >
-              Entre com ela
-            </Link>
-            .
-          </p>
-        </form>
+                Entre com ela
+              </Link>
+              .
+            </>
+          }
+        />
       )}
-    </div>
-  );
-}
-
-/** /corrida-maluca/voltar/:key — link pessoal do convidado para entrar em outro aparelho. */
-export function CrazyResume() {
-  const { key = '' } = useParams();
-  const nav = useNavigate();
-  const apply = useSession((s) => s.apply);
-  const [err, setErr] = useState<string | null>(null);
-  const done = useRef(false);
-  useEffect(() => {
-    if (done.current) return;
-    done.current = true;
-    post<AuthResponse>('/auth/guest/resume', { key })
-      .then((r) => {
-        apply(r);
-        realtime.reconnect();
-        nav('/corrida-maluca', { replace: true });
-      })
-      .catch((x) => setErr(errorMessage(x)));
-  }, [key, apply, nav]);
-  if (!err) return <Spinner label="Entrando" />;
-  return (
-    <Empty title="Não deu para entrar" icon="🔑">
-      <p className="text-sm text-muted">{err}</p>
-    </Empty>
-  );
-}
-
-function CopyField({ value, label }: { value: string; label: string }) {
-  return (
-    <div className="flex gap-2">
-      <input
-        className="input min-w-0 flex-1 font-mono text-xs"
-        readOnly
-        value={value}
-        aria-label={label}
-        onFocus={(e) => e.target.select()}
-      />
-      <button
-        type="button"
-        className="btn-ghost !px-3"
-        aria-label={`Copiar ${label}`}
-        onClick={() =>
-          navigator.clipboard
-            .writeText(value)
-            .then(() => toast('Copiado!', undefined, 'ok'))
-            .catch(() => toast('Não deu para copiar', 'Selecione e copie o texto.', 'warn'))
-        }
-      >
-        <Copy size={16} />
-      </button>
     </div>
   );
 }
@@ -670,47 +546,6 @@ function ShareGroup({ g }: { g: CrazyGroupDto }) {
       url={`${window.location.origin}/s/grupo/${g.id}`}
       label="Compartilhar"
     />
-  );
-}
-
-function GuestCard() {
-  const [url, setUrl] = useState<string | null>(null);
-  const [busy, setBusy] = useState(false);
-  return (
-    <section className="card space-y-2">
-      <h2 className="font-display text-lg">Você está como convidado</h2>
-      <p className="text-sm text-muted">
-        Seu acesso fica neste navegador. Para entrar de outro celular ou computador, guarde seu link pessoal
-        de volta (não mande para ninguém: quem tiver o link entra como você).
-      </p>
-      {url ? (
-        <CopyField value={url} label="link de volta" />
-      ) : (
-        <button
-          className="btn-ghost !py-1.5"
-          disabled={busy}
-          onClick={async () => {
-            setBusy(true);
-            try {
-              setUrl((await post<{ url: string }>('/crazy/guest-link')).url);
-            } catch (x) {
-              toast('Erro', errorMessage(x), 'error');
-            } finally {
-              setBusy(false);
-            }
-          }}
-        >
-          🔑 Gerar meu link de volta
-        </button>
-      )}
-      <p className="text-xs text-muted">
-        Ou{' '}
-        <Link to="/conta" className="font-bold text-race underline">
-          crie sua conta
-        </Link>{' '}
-        com e-mail e senha (mantém apelido e histórico).
-      </p>
-    </section>
   );
 }
 
@@ -993,7 +828,7 @@ export function CrazyGroup() {
         </div>
         <aside className="space-y-5">
           {g.isMember && g.inviteCode && g.status !== 'finished' && <InviteCard g={g} />}
-          {g.isMember && meGuest && <GuestCard />}
+          {g.isMember && meGuest && <GuestBackLink />}
           {!g.isMember && (
             <div className="card text-sm text-muted">
               Este é um grupo fechado. Para entrar, peça o link de convite.

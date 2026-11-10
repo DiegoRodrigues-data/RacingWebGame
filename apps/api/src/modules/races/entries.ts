@@ -87,7 +87,7 @@ async function checkEligibility(ctx: Ctx, tx: Tx, race: RaceRow, user: AuthUser)
     .from(users)
     .where(eq(users.id, user.id));
   if (!p || !u) throw new AppError('UNAUTHORIZED');
-  await checkCrazyAccess(tx, race, user.id, u.guest);
+  await checkCrazyAccess(tx, race, user.id);
   // Grupo da Corrida Maluca: a categoria só empresta pista e clima, não exige nível.
   if (race.crazyGroupId) return p;
   const req = cat.config.entryRequirement;
@@ -97,7 +97,12 @@ async function checkEligibility(ctx: Ctx, tx: Tx, race: RaceRow, user: AuthUser)
       `Esta categoria exige nível ${req.minLevel} e ${req.minRaces} corrida(s) disputada(s).`,
     );
   if (race.ranked && ctx.config.REQUIRE_VERIFIED_EMAIL_FOR_RANKED && !u.verified)
-    throw new AppError('EMAIL_NOT_VERIFIED', 'Confirme seu e-mail para disputar corridas ranqueadas.');
+    throw new AppError(
+      'EMAIL_NOT_VERIFIED',
+      u.guest
+        ? 'Corridas ranqueadas exigem conta com e-mail confirmado. Crie sua conta em Minha conta.'
+        : 'Confirme seu e-mail para disputar corridas ranqueadas.',
+    );
   return p;
 }
 
@@ -142,19 +147,14 @@ export async function checkScheduleConflict(tx: Tx, race: RaceRow, userId: strin
     throw new AppError('SCHEDULE_CONFLICT', 'Você já está inscrito em uma corrida no mesmo horário.');
 }
 
-/** Corrida de grupo fechado: só membros se inscrevem; convidados só correm nos grupos. */
-async function checkCrazyAccess(tx: Tx, race: RaceRow, userId: string, guest: boolean) {
-  if (race.crazyGroupId) {
-    const [m] = await tx
-      .select({ u: crazyMembers.userId })
-      .from(crazyMembers)
-      .where(and(eq(crazyMembers.groupId, race.crazyGroupId), eq(crazyMembers.userId, userId)));
-    if (!m) throw new AppError('FORBIDDEN', 'Esta corrida é de um grupo fechado. Peça o link de convite.');
-  } else if (guest)
-    throw new AppError(
-      'FORBIDDEN',
-      'Convidados correm só na Corrida Maluca. Crie sua conta para disputar as corridas abertas.',
-    );
+/** Corrida de grupo fechado: só membros se inscrevem. Convidados (só apelido) correm nas abertas também. */
+async function checkCrazyAccess(tx: Tx, race: RaceRow, userId: string) {
+  if (!race.crazyGroupId) return;
+  const [m] = await tx
+    .select({ u: crazyMembers.userId })
+    .from(crazyMembers)
+    .where(and(eq(crazyMembers.groupId, race.crazyGroupId), eq(crazyMembers.userId, userId)));
+  if (!m) throw new AppError('FORBIDDEN', 'Esta corrida é de um grupo fechado. Peça o link de convite.');
 }
 
 /** Vaga liberada com as inscrições abertas: o primeiro da fila de espera é confirmado. */

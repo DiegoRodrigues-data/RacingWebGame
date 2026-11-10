@@ -53,9 +53,12 @@ export const crazyCreateSchema = z.object({
 });
 export type CrazyCreateInput = z.infer<typeof crazyCreateSchema>;
 
-/** Entrada pelo link de convite sem conta: só o apelido e a cor do carro. */
+/**
+ * Jogar sem conta: só o apelido e a cor do carro. Com `inviteCode` (link da Corrida Maluca), o convidado já
+ * entra no grupo; sem ele, entra direto nas corridas abertas.
+ */
 export const guestJoinSchema = z.object({
-  inviteCode: z.string().trim().min(6).max(32),
+  inviteCode: z.string().trim().min(6).max(32).optional(),
   nickname,
   carColor: z.enum(CAR_COLORS).default('red'),
 });

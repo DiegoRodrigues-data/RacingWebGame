@@ -253,18 +253,19 @@ async function suggestNickname(ctx: Pick<Ctx, 'db'>, base: string): Promise<stri
 }
 
 /**
- * Convidado: conta sem e-mail nem senha, criada pelo link de convite só com apelido e cor do carro.
- * A sessão é a mesma das contas normais (cookie de refresh); para voltar em outro aparelho, o convidado gera
- * um link pessoal (`guestLink`) ou cria a conta de verdade (`upgradeGuest`).
+ * Convidado: conta sem e-mail nem senha, criada só com apelido e cor do carro (pelo link de convite de um grupo
+ * ou direto, para jogar as corridas abertas). A sessão é a mesma das contas normais (cookie de refresh); para
+ * voltar em outro aparelho, o convidado gera um link pessoal (`guestLink`) ou cria a conta de verdade
+ * (`upgradeGuest`).
  */
 export async function createGuest(
   ctx: Ctx,
   input: GuestJoinInput,
   ip: string | null,
-): Promise<AuthResponse & { refresh: string; groupId: string }> {
+): Promise<AuthResponse & { refresh: string; groupId: string | null }> {
   const now = ctx.clock.now();
-  const g = await groupByCode(ctx, input.inviteCode);
-  if ((await memberIds(ctx, g.id)).length >= (await getSettings(ctx)).crazy.maxMembers)
+  const g = input.inviteCode ? await groupByCode(ctx, input.inviteCode) : null;
+  if (g && (await memberIds(ctx, g.id)).length >= (await getSettings(ctx)).crazy.maxMembers)
     throw new AppError('CONFLICT', 'Este grupo já está completo.');
   if (ip) {
     const [c] = await ctx.db
@@ -314,14 +315,14 @@ export async function createGuest(
         throw new AppError('NICKNAME_TAKEN', 'Esse apelido já tem dono. Tente outro.');
       throw e;
     });
-  await addMember(ctx, g, userId);
+  if (g) await addMember(ctx, g, userId);
   const t = await issueTokens(ctx, { id: userId, roles: ['player'] }, ip);
   return {
     accessToken: t.accessToken,
     expiresIn: 900,
     me: await getMe(ctx, userId),
     refresh: t.refresh,
-    groupId: g.id,
+    groupId: g?.id ?? null,
   };
 }
 
@@ -340,7 +341,7 @@ export async function guestLink(ctx: Ctx, user: AuthUser): Promise<{ url: string
       tokenHash: sha256(key),
       expiresAt: new Date(ctx.clock.now() + GUEST_LINK_TTL_MS),
     });
-  return { url: `${ctx.config.PUBLIC_WEB_URL.replace(/\/$/, '')}/corrida-maluca/voltar/${key}` };
+  return { url: `${ctx.config.PUBLIC_WEB_URL.replace(/\/$/, '')}/voltar/${key}` };
 }
 
 export async function resumeGuest(

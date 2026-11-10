@@ -81,21 +81,21 @@ describe('Corrida Maluca', () => {
     const lobby = (await t.json('GET', '/lobby', undefined, bia.token)).body;
     expect(lobby.upcoming.some((r: { id: string }) => r.id === r1)).toBe(false);
 
-    // Grupo fechado: quem não é membro não se inscreve; convidado não entra em corrida aberta nem cria grupo.
+    // Grupo fechado: quem não é membro não se inscreve. Convidado corre nas abertas, mas não cria grupo.
     const intruso = await t.register('Intruso');
     expect((await t.json('POST', `/races/${r1}/entries`, {}, intruso.token)).body.error.code).toBe(
       'FORBIDDEN',
     );
     const publica = await t.createRace({}, 90 * 60_000);
-    expect((await t.json('POST', `/races/${publica}/entries`, {}, ze)).body.error.message).toMatch(
-      /Convidados/,
-    );
+    expect((await t.json('POST', `/races/${publica}/entries`, {}, ze)).body.status).toBe('confirmed');
     expect(
       (await t.json('POST', '/crazy/groups', { name: 'Outra', races: 1, startAt }, ze)).body.error.code,
     ).toBe('FORBIDDEN');
 
     // Link pessoal de volta: entra de novo como o mesmo convidado.
-    const link = await t.json('POST', '/crazy/guest-link', {}, ze);
+    const link = await t.json('POST', '/auth/guest/link', {}, ze);
+    expect(link.body.url).toMatch(/\/voltar\/[^/]+$/);
+    expect(link.body.url).not.toContain('corrida-maluca');
     const key = (link.body.url as string).split('/voltar/')[1]!;
     const back = await t.json('POST', '/auth/guest/resume', { key });
     expect(back.body.me.id).toBe(zeId);
@@ -290,6 +290,30 @@ describe('Corrida Maluca', () => {
     const publica = await t.createRace({}, 60 * 60_000);
     expect((await t.json('PUT', `/races/${publica}/ready`, { ready: true }, a.token)).body.error.code).toBe(
       'FORBIDDEN',
+    );
+  });
+});
+
+describe('Jogar sem cadastro', () => {
+  it('convidado sem convite entra só com apelido e corre nas abertas', async () => {
+    const r = await t.json('POST', '/auth/guest', { nickname: 'Avulso', carColor: 'green' });
+    expect(r.status).toBe(201);
+    expect(r.body.groupId).toBeNull();
+    expect(r.body.me).toMatchObject({ guest: true, email: '' });
+    expect(r.body.me.profile.nickname).toBe('Avulso');
+    expect(cookieOf(r.res)).toBeTruthy();
+    const avulso = `USER:${r.body.me.id as string}`;
+    expect((await t.json('GET', '/crazy/groups', undefined, avulso)).body).toEqual([]);
+
+    const race = await t.createRace({}, 3 * 60 * 60_000);
+    const e = await t.json('POST', `/races/${race}/entries`, {}, avulso);
+    expect(e.body.status).toBe('confirmed');
+    expect((await t.race(race)).entries.some((x: { userId: string }) => x.userId === r.body.me.id)).toBe(
+      true,
+    );
+    // Convite inválido continua barrando.
+    expect((await t.json('POST', '/auth/guest', { inviteCode: 'naoexiste', nickname: 'Outro' })).status).toBe(
+      404,
     );
   });
 });

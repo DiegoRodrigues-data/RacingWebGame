@@ -1,6 +1,7 @@
 import { registerSchema } from '@tracado/shared';
 import { useState, type FormEvent, type ReactNode } from 'react';
-import { Link, useNavigate, useSearchParams } from 'react-router';
+import { Link, Navigate, useNavigate, useSearchParams } from 'react-router';
+import { GuestJoinForm } from '../components/Guest';
 import { toast } from '../components/ui';
 import { useQuery } from '@tanstack/react-query';
 import { API_BASE, ApiError, errorMessage, get, post } from '../lib/api';
@@ -135,6 +136,15 @@ export function Login() {
           Esqueci minha senha
         </Link>
       </form>
+      <div className="mt-5 border-t border-line pt-4 text-center text-sm">
+        Só quer correr?{' '}
+        <Link
+          className="font-bold text-race"
+          to={`/jogar${params.get('voltar') ? `?voltar=${encodeURIComponent(params.get('voltar')!)}` : ''}`}
+        >
+          Jogue só com um apelido
+        </Link>
+      </div>
     </AuthCard>
   );
 }
@@ -303,5 +313,60 @@ export function VerifyEmail() {
         Ir para o início
       </Link>
     </AuthCard>
+  );
+}
+
+/**
+ * /jogar — entra só com o apelido (convidado, sem e-mail nem senha). Com `?corrida=<id>`, já inscreve nessa
+ * corrida e leva ao box; senão volta para `?voltar` ou para o calendário.
+ */
+export function PlayAsGuest() {
+  const nav = useNavigate();
+  const [params] = useSearchParams();
+  const me = useSession((s) => s.me);
+  const raceId = params.get('corrida');
+  const next = params.get('voltar') ?? '/calendario';
+  const loginLink = `/entrar?voltar=${encodeURIComponent(raceId ? `/corridas/${raceId}` : next)}`;
+  if (me) return <Navigate to={raceId ? `/corridas/${raceId}` : next} replace />;
+
+  async function done() {
+    if (!raceId) return nav(next);
+    try {
+      const r = await post<{ status: string; waitlistPosition: number | null }>(`/races/${raceId}/entries`);
+      if (r.status === 'confirmed') {
+        toast('Você está no grid! 🏎️', 'Configure o carro e prepare seu traçado.', 'ok');
+        return nav(`/corridas/${raceId}/box`);
+      }
+      toast('Corrida lotada', `Você é o ${r.waitlistPosition}º da fila de espera.`, 'warn');
+    } catch (x) {
+      toast('Não foi possível se inscrever', errorMessage(x), 'error');
+    }
+    nav(`/corridas/${raceId}`);
+  }
+
+  return (
+    <div className="mx-auto max-w-md space-y-4 py-6">
+      <div className="card p-6">
+        <div className="checkered mb-4 h-2 rounded-full" aria-hidden />
+        <h1 className="font-display text-2xl">Jogar sem cadastro</h1>
+        <p className="mt-2 text-sm text-muted">
+          Escolha um apelido e a cor do carro e já pode correr. Sem e-mail nem senha: o acesso fica neste
+          navegador, e dá para criar a conta depois mantendo apelido e histórico.
+        </p>
+      </div>
+      <GuestJoinForm
+        submitLabel={raceId ? 'Entrar no grid 🏁' : 'Começar a jogar 🏁'}
+        onDone={done}
+        footer={
+          <>
+            Já tem conta?{' '}
+            <Link to={loginLink} className="font-bold text-race underline">
+              Entre com ela
+            </Link>
+            .
+          </>
+        }
+      />
+    </div>
   );
 }

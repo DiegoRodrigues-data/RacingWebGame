@@ -99,7 +99,12 @@ traçado e corrida contra fantasmas rodam no aparelho e nada é enviado ao servi
   O convidado é um usuário com `is_guest`, e-mail fictício `@convidado.invalid` (só para a coluna única) e senha
   aleatória inutilizável; a sessão é o cookie de refresh normal (30 dias). Para outro aparelho, gera um link pessoal de
   volta (token `guest_login`, só o hash no banco, 1 ano, um por vez) ou vira conta normal com e-mail e senha. Convidado
-  não cria grupo nem corre nas corridas abertas. Apelido continua único no jogo todo (sugestão automática se repetir).
+  não cria grupo. Apelido continua único no jogo todo (sugestão automática se repetir).
+- **Jogar sem cadastro:** o mesmo convidado nasce também fora da Corrida Maluca, pela página `/jogar` (`POST /auth/guest`
+  sem `inviteCode`), e corre nas corridas abertas como qualquer jogador, inclusive as ranqueadas. A exceção é
+  `REQUIRE_VERIFIED_EMAIL_FOR_RANKED`: ligado, o convidado (sem e-mail) fica fora das ranqueadas até criar a conta. O
+  limite de 40 convidados por IP em 24 h vale para os dois caminhos. O link de volta passou para `/voltar/:key` (o
+  antigo `/corrida-maluca/voltar/:key` continua funcionando).
 - **Membro entra em tudo:** ao entrar no grupo, o membro é inscrito direto em todas as corridas que ainda não chegaram ao
   parque fechado; quem chega no meio do campeonato entra só nas próximas.
 - **Bots:** nunca por padrão (o `DEMO_BOTS` não vale para grupos). Só se quem criou ligar `botFill`: na abertura da

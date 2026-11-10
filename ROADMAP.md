@@ -294,7 +294,7 @@ Fecha o ciclo de vida com resultados persistidos.
 
 - [x] Grupo com 1 a 10 corridas, intervalo entre elas, voltas, modo caos e bots opcionais
 - [x] Convite por link: entrar com a conta ou só com apelido (convidado), link pessoal de volta e virar conta
-- [x] Corridas fechadas: fora das listas públicas, só membros se inscrevem, convidado só corre nos grupos
+- [x] Corridas fechadas: fora das listas públicas, só membros se inscrevem (convidado corre também nas abertas desde a Fase 28)
 - [x] Troféus de zoeira por corrida, tabela entre os amigos e títulos de honra no fim do campeonato
 - [x] Menu "Corrida Maluca", página do grupo, resenha no resultado e selo do grupo na corrida
 - [x] Miniatura da pista no card do grupo e nas etapas
@@ -399,6 +399,13 @@ Fecha o ciclo de vida com resultados persistidos.
 - [x] Pilotos simulados não são planejados em duas corridas que se sobrepõem
 - [x] Pistas do dia: cada horário repete uma das `tracksPerDay` pistas do dia (padrão 12), com o mesmo cenário
 - [ ] Pôr a grade em 48 corridas por dia e subir os pilotos simulados ativos no admin de produção
+
+## Fase 28 — Jogar sem cadastro
+
+- [x] Convidado sem convite: `/jogar` só com apelido e cor do carro (`POST /auth/guest` com `inviteCode` opcional)
+- [x] Convidado corre nas corridas abertas; da página da corrida, "Correr só com apelido" já inscreve e leva ao box
+- [x] Link de volta em `/voltar/:key` (o antigo continua) e em Minha conta, ao lado do botão de criar a conta
+- [x] Home, cabeçalho e login oferecem jogar só com apelido
 
 ---
 

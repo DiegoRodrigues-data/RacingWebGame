@@ -4,7 +4,8 @@ import { Layout } from './components/Layout';
 import { Spinner } from './components/ui';
 import { isAdmin, isEditor, useSession } from './lib/session';
 import { Home } from './pages/Home';
-import { ForgotPassword, Login, Register, ResetPassword, VerifyEmail } from './pages/Auth';
+import { GuestResume } from './components/Guest';
+import { ForgotPassword, Login, PlayAsGuest, Register, ResetPassword, VerifyEmail } from './pages/Auth';
 
 const Calendar = lazy(() => import('./pages/Calendar'));
 const RaceDetail = lazy(() => import('./pages/RaceDetail'));
@@ -20,7 +21,6 @@ const EventPage = lazy(() => import('./pages/EventPage'));
 const CrazyHome = lazy(() => import('./pages/Crazy').then((m) => ({ default: m.CrazyHome })));
 const CrazyGroup = lazy(() => import('./pages/Crazy').then((m) => ({ default: m.CrazyGroup })));
 const CrazyInvite = lazy(() => import('./pages/Crazy').then((m) => ({ default: m.CrazyInvite })));
-const CrazyResume = lazy(() => import('./pages/Crazy').then((m) => ({ default: m.CrazyResume })));
 const Privacy = lazy(() => import('./pages/Legal').then((m) => ({ default: m.Privacy })));
 const Terms = lazy(() => import('./pages/Legal').then((m) => ({ default: m.Terms })));
 const About = lazy(() => import('./pages/About'));
@@ -83,6 +83,15 @@ export function App() {
             }
           />
           <Route path="/entrar" element={<Login />} />
+          <Route
+            path="/jogar"
+            element={
+              <PlayerOnly>
+                <PlayAsGuest />
+              </PlayerOnly>
+            }
+          />
+          <Route path="/voltar/:key" element={<GuestResume />} />
           <Route path="/cadastro" element={<Register />} />
           <Route path="/esqueci-senha" element={<ForgotPassword />} />
           <Route path="/redefinir-senha" element={<ResetPassword />} />
@@ -120,7 +129,7 @@ export function App() {
               </PlayerOnly>
             }
           />
-          <Route path="/corrida-maluca/voltar/:key" element={<CrazyResume />} />
+          <Route path="/corrida-maluca/voltar/:key" element={<GuestResume next="/corrida-maluca" />} />
           <Route path="/corrida-maluca/:id" element={<CrazyGroup />} />
           <Route path="/privacidade" element={<Privacy />} />
           <Route path="/termos" element={<Terms />} />

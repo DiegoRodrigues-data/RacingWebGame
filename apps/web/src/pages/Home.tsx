@@ -170,9 +170,14 @@ export function Home() {
                 Escolher corrida
               </Link>
             ) : (
-              <Link to="/cadastro" className="btn-primary">
-                Criar conta e correr
-              </Link>
+              <>
+                <Link to="/jogar" className="btn-primary">
+                  Jogar agora, só com apelido
+                </Link>
+                <Link to="/cadastro" className="btn-ghost">
+                  Criar conta
+                </Link>
+              </>
             )}
             <a href="#como-funciona" className="btn-ghost">
               Como funciona

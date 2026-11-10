@@ -187,8 +187,8 @@ export function Layout({ children }: { children: ReactNode }) {
                 <Link to="/entrar" className="btn-ghost !py-1.5">
                   Entrar
                 </Link>
-                <Link to="/cadastro" className="btn-primary hidden !py-1.5 sm:inline-flex">
-                  Criar conta
+                <Link to="/jogar" className="btn-primary !py-1.5">
+                  Jogar
                 </Link>
               </>
             )}

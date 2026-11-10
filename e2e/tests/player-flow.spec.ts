@@ -63,14 +63,20 @@ test('fluxo crítico do jogador: inscrição → setup → traçado na janela �
   await expect(page.getByRole('table')).toContainText(nick);
 });
 
-test('visitante vê o portal e precisa de conta para se inscrever', async ({ page, request }) => {
+test('visitante entra no grid só com apelido, sem cadastro', async ({ page, request }) => {
   const { id } = await createRaceAsAdmin(request, 90);
   await page.goto('/');
   await expect(page.getByRole('heading', { name: /Desenhe a linha/ })).toBeVisible();
   await expect(page.getByRole('heading', { name: 'Próximas largadas' })).toBeVisible();
-  await page.goto(`/corridas/${id}`);
-  await page.getByRole('link', { name: 'Entre para se inscrever' }).click();
-  await expect(page).toHaveURL(/entrar\?voltar=/);
+  // O box exige sessão.
   await page.goto(`/corridas/${id}/box`);
   await expect(page).toHaveURL(/entrar/);
+  await page.goto(`/corridas/${id}`);
+  await expect(page.getByRole('link', { name: 'Já tenho conta' })).toHaveAttribute('href', /entrar\?voltar=/);
+  await page.getByRole('link', { name: 'Correr só com apelido' }).click();
+  await expect(page).toHaveURL(/jogar\?corrida=/);
+  await page.getByLabel('Seu apelido').fill(`v${Date.now().toString(36).slice(-8)}`);
+  await page.getByRole('button', { name: /Entrar no grid/ }).click();
+  await expect(page).toHaveURL(new RegExp(`/corridas/${id}/box`));
+  await expect(page.getByText('convidado', { exact: true })).toBeVisible();
 });

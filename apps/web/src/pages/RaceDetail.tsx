@@ -234,10 +234,15 @@ export default function RaceDetail() {
         <aside className="space-y-4">
           <div className="card space-y-3">
             <CapacityMeter cap={race.capacity} />
-            {!me && (
-              <Link to={`/entrar?voltar=/corridas/${race.id}`} className="btn-primary w-full">
-                Entre para se inscrever
-              </Link>
+            {!me && (race.status === 'registration_open' || late) && !race.crazy && (
+              <>
+                <Link to={`/jogar?corrida=${race.id}`} className="btn-primary w-full">
+                  Correr só com apelido
+                </Link>
+                <Link to={`/entrar?voltar=/corridas/${race.id}`} className="btn-ghost w-full">
+                  Já tenho conta
+                </Link>
+              </>
             )}
             <JoinRaceButton race={race} now={now} />
             {me && !active && late && (

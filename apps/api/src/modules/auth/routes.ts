@@ -85,7 +85,8 @@ export function authRoutes(app: FastifyInstance, ctx: Ctx) {
       return reply.redirect(`${web}/entrar?erro=google`);
     }
   });
-  // Corrida Maluca: convidado entra pelo link só com apelido; volta pelo link pessoal; ou vira conta normal.
+  // Convidado: joga só com apelido (com ou sem convite da Corrida Maluca); volta pelo link pessoal; ou vira
+  // conta normal.
   app.post('/auth/guest', authLimit, async (req, reply) => {
     const r = await crazy.createGuest(ctx, parse(guestJoinSchema, req.body), req.ip);
     setCookie(reply, r.refresh);
@@ -98,6 +99,7 @@ export function authRoutes(app: FastifyInstance, ctx: Ctx) {
     const { refresh: _r, ...body } = r;
     return body;
   });
+  app.post('/auth/guest/link', async (req) => crazy.guestLink(ctx, requireAuth(req)));
   app.post('/auth/guest/upgrade', authLimit, async (req) => {
     const b = parse(guestUpgradeSchema, req.body);
     return crazy.upgradeGuest(ctx, requireAuth(req), b.email, b.password);
