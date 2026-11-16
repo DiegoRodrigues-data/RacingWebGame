@@ -1,8 +1,8 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { loadConfig } from '../src/config';
 import { ensureAdmin } from '../src/db/bootstrap';
-import { users } from '../src/db/schema';
-import { hashPassword } from '../src/lib/crypto';
+import { eq } from 'drizzle-orm';
+import { profiles, users } from '../src/db/schema';
 import { setupApp, type TestApp } from './helpers';
 
 let t: TestApp;
@@ -117,48 +117,71 @@ describe('autenticação', () => {
   });
 });
 
-describe('admin inicial', () => {
-  it('a senha só vale na criação; ADMIN_RESET_PASSWORD redefine e desbloqueia', async () => {
-    const cfg = { ...t.config, ADMIN_EMAIL: 'chefe@teste.dev', ADMIN_PASSWORD: 'primeira-1' };
-    await ensureAdmin(t.ctx.db, cfg);
-    expect((await t.login('chefe@teste.dev', 'primeira-1')).status).toBe(200);
-    // Trocar a variável sem o reset não muda a senha de quem já existe.
-    await ensureAdmin(t.ctx.db, { ...cfg, ADMIN_PASSWORD: 'segunda-22' });
-    expect((await t.login('chefe@teste.dev', 'segunda-22')).status).toBe(401);
-    for (let i = 0; i < 5; i++) await t.login('chefe@teste.dev', 'errada-000');
-    expect((await t.login('chefe@teste.dev', 'primeira-1')).body.error.code).toBe('ACCOUNT_LOCKED');
-    const logs: string[] = [];
-    await ensureAdmin(
-      t.ctx.db,
-      {
-        ...cfg,
-        ADMIN_EMAIL: ' Chefe@Teste.dev '.trim().toLowerCase(),
+describe('Master (admin de ADMIN_EMAIL/ADMIN_PASSWORD)', () => {
+  it('as variáveis valem a cada boot: senha, e-mail e desbloqueio; as sessões abertas caem na troca', async () => {
+    const t2 = await setupApp({ ADMIN_EMAIL: 'chefe@teste.dev', ADMIN_PASSWORD: 'primeira-1' });
+    try {
+      const first = await t2.login('chefe@teste.dev', 'primeira-1');
+      expect(first.status).toBe(200);
+      expect(first.body.me).toMatchObject({ master: true, roles: ['player', 'admin'] });
+      const cookie = first.res.cookies.find((c) => c.name === 'tracado_rt')!.value;
+      for (let i = 0; i < 5; i++) await t2.login('chefe@teste.dev', 'errada-000');
+      expect((await t2.login('chefe@teste.dev', 'primeira-1')).body.error.code).toBe('ACCOUNT_LOCKED');
+      // Trocar a variável troca a senha no boot seguinte, zera o bloqueio e encerra as sessões.
+      const logs: string[] = [];
+      const id = await ensureAdmin(t2.ctx.db, { ...t2.config, ADMIN_PASSWORD: 'segunda-22' }, (m) =>
+        logs.push(m),
+      );
+      expect(id).toBe(t2.adminId);
+      expect(logs.join(' ')).toMatch(/Senha do Master atualizada/);
+      expect((await t2.login('chefe@teste.dev', 'primeira-1')).status).toBe(401);
+      expect((await t2.login('chefe@teste.dev', 'segunda-22')).status).toBe(200);
+      const old = await t2.json('POST', '/auth/refresh', undefined, undefined, {
+        cookie: `tracado_rt=${cookie}`,
+        'x-tracado-csrf': '1',
+      });
+      expect(old.status).toBe(401);
+      // Mesmo boot sem mudança: nada a fazer.
+      const quiet: string[] = [];
+      await ensureAdmin(t2.ctx.db, { ...t2.config, ADMIN_PASSWORD: 'segunda-22' }, (m) => quiet.push(m));
+      expect(quiet).toEqual([]);
+      // E-mail novo na variável: o Master muda de e-mail (é achado pela marca, não pelo e-mail).
+      await ensureAdmin(t2.ctx.db, {
+        ...t2.config,
+        ADMIN_EMAIL: 'nova@teste.dev',
         ADMIN_PASSWORD: 'segunda-22',
-        ADMIN_RESET_PASSWORD: true,
-      },
-      (m) => logs.push(m),
-    );
-    expect(logs[0]).toMatch(/redefinida/);
-    expect((await t.login('chefe@teste.dev', 'segunda-22')).status).toBe(200);
+      });
+      expect((await t2.login('nova@teste.dev', 'segunda-22')).status).toBe(200);
+      // A senha do Master não muda pela conta nem por "esqueci a senha".
+      const tok = `Bearer ${(await t2.login('nova@teste.dev', 'segunda-22')).body.accessToken}`;
+      const change = await t2.json(
+        'POST',
+        '/auth/change-password',
+        { currentPassword: 'segunda-22', newPassword: 'terceira-333' },
+        undefined,
+        { authorization: tok },
+      );
+      expect(change.body.error.code).toBe('FORBIDDEN');
+    } finally {
+      await t2.close();
+    }
   });
-  it('conserta o admin que ficou sem perfil (apelido repetido em versões antigas)', async () => {
-    const [u] = await t.ctx.db
-      .insert(users)
-      .values({
-        email: 'sem-perfil@teste.dev',
-        passwordHash: await hashPassword('sem-perfil-1'),
-        roles: ['player'],
-      })
-      .returning();
-    expect((await t.login('sem-perfil@teste.dev', 'sem-perfil-1')).status).toBe(401);
-    const logs: string[] = [];
-    await ensureAdmin(t.ctx.db, { ...t.config, ADMIN_EMAIL: 'sem-perfil@teste.dev' }, (m) => logs.push(m));
-    expect(logs[0]).toMatch(/Perfil do admin/);
-    const r = await t.login('sem-perfil@teste.dev', 'sem-perfil-1');
-    expect(r.status).toBe(200);
-    expect(r.body.me.roles).toContain('admin');
-    expect(r.body.me.profile.nickname).toMatch(/^DiretorDeProva\d+$/);
-    void u;
+  it('adota o admin das versões antigas pelo e-mail e conserta o perfil que faltava', async () => {
+    const t2 = await setupApp();
+    try {
+      await t2.ctx.db.update(users).set({ isMaster: false }).where(eq(users.id, t2.adminId));
+      await t2.ctx.db.delete(profiles).where(eq(profiles.userId, t2.adminId));
+      expect((await t2.login(t2.config.ADMIN_EMAIL, t2.config.ADMIN_PASSWORD)).status).toBe(401);
+      const logs: string[] = [];
+      expect(await ensureAdmin(t2.ctx.db, t2.config, (m) => logs.push(m))).toBe(t2.adminId);
+      expect(logs.join(' ')).toMatch(/Perfil do admin/);
+      const r = await t2.login(t2.config.ADMIN_EMAIL, t2.config.ADMIN_PASSWORD);
+      expect(r.status).toBe(200);
+      expect(r.body.me.master).toBe(true);
+      expect(r.body.me.profile.nickname).toMatch(/^DiretorDeProva\d*$/);
+    } finally {
+      await t2.close();
+    }
   });
   it('e-mail do admin com espaço ou maiúscula é normalizado', () => {
     const c = loadConfig({ NODE_ENV: 'test', ADMIN_EMAIL: ' Admin@Admin.com ' });
@@ -219,7 +242,7 @@ describe('autorização', () => {
     await t2.register('ip2');
     await expect(t2.register('ip3')).rejects.toThrow('RATE_LIMITED');
     const flagged = await t2.json('GET', '/admin/users?flagged=true', undefined, t2.admin);
-    expect(flagged.body.map((u: any) => u.nickname)).toEqual(['ip2']);
+    expect(flagged.body.users.map((u: any) => u.nickname)).toEqual(['ip2']);
     await t2.close();
   });
   it('health e métricas', async () => {

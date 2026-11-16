@@ -5,11 +5,13 @@ import type { Ctx } from '../../context';
 import { profiles, users } from '../../db/schema';
 import { hashPassword, randomToken } from '../../lib/crypto';
 import { issueTokens } from './service';
+import { assertActive, clearBlockMark, isAdminEmail, newAccountStatus } from '../users/service';
 
 /**
  * Login com Google: OAuth 2.0 com código de autorização + PKCE. O servidor troca o código pelo token usando o
  * segredo do cliente e lê o perfil no endpoint userinfo (a resposta vem direto do Google por TLS).
  * Vínculo: `users.google_sub`; na primeira vez, um e-mail já cadastrado e verificado pelo Google é reaproveitado.
+ * Conta nova segue a regra de cadastros (`newAccountStatus`); e-mail de ADMIN_EMAILS entra sempre e sai ativo.
  */
 const AUTH_URL = 'https://accounts.google.com/o/oauth2/v2/auth';
 const TOKEN_URL = 'https://oauth2.googleapis.com/token';
@@ -109,6 +111,7 @@ export async function googleCallback(
   if (!g.sub) throw new AppError('UNAUTHORIZED', 'Perfil do Google inválido.');
   const email = g.email?.trim().toLowerCase();
   const now = ctx.clock.now();
+  const trusted = !!email && g.email_verified === true && isAdminEmail(ctx.config, email);
 
   let [u] = await ctx.db.select().from(users).where(eq(users.googleSub, g.sub));
   if (!u && email && g.email_verified) {
@@ -118,10 +121,17 @@ export async function googleCallback(
       await ctx.db.update(users).set({ googleSub: g.sub, emailVerified: true }).where(eq(users.id, u.id));
     }
   }
+  if (u && u.status !== 'active' && trusted) {
+    await ctx.db.update(users).set({ status: 'active' }).where(eq(users.id, u.id));
+    await clearBlockMark(ctx, u.id);
+    u = { ...u, status: 'active' };
+  }
+  if (u) assertActive(u);
   let created = false;
   if (!u) {
     if (!email || !g.email_verified)
       throw new AppError('UNAUTHORIZED', 'Sua conta Google precisa ter um e-mail verificado.');
+    const status = await newAccountStatus(ctx, { email, trusted });
     if (ip) {
       const [c] = await ctx.db
         .select({ n: sql<number>`count(*)::int` })
@@ -140,7 +150,9 @@ export async function googleCallback(
           email,
           passwordHash,
           emailVerified: true,
+          hasPassword: false,
           googleSub: g.sub,
+          status,
           signupIp: ip,
           createdAt: new Date(now),
         })
@@ -152,11 +164,16 @@ export async function googleCallback(
       return row!;
     });
     created = true;
+    if (status === 'pending')
+      throw new AppError(
+        'ACCOUNT_PENDING',
+        'Cadastro recebido! Seu acesso será liberado quando a organização aprovar.',
+      );
   }
   await ctx.db
     .update(users)
     .set({ lastLoginAt: new Date(now) })
     .where(eq(users.id, u!.id));
-  const t = await issueTokens(ctx, { id: u!.id, roles: u!.roles }, ip);
+  const t = await issueTokens(ctx, { id: u!.id }, ip);
   return { refresh: t.refresh, next, created };
 }

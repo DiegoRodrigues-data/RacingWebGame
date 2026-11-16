@@ -100,7 +100,7 @@ export const get = <T>(p: string) => api<T>(p);
 export const post = <T>(p: string, body: unknown = {}) => api<T>(p, { method: 'POST', body });
 export const put = <T>(p: string, body: unknown) => api<T>(p, { method: 'PUT', body });
 export const patch = <T>(p: string, body: unknown) => api<T>(p, { method: 'PATCH', body });
-export const del = <T>(p: string) => api<T>(p, { method: 'DELETE' });
+export const del = <T>(p: string, body?: unknown) => api<T>(p, { method: 'DELETE', body });
 
 export const ERROR_TEXT: Partial<Record<string, string>> = {
   RACE_FULL: 'Corrida lotada e fila de espera completa.',

@@ -95,17 +95,23 @@ export const registerSchema = z.object({
 });
 export type RegisterInput = z.infer<typeof registerSchema>;
 
-export const loginSchema = z.object({
-  email: z.string().trim().toLowerCase().email(),
-  password: z.string().min(1).max(128),
-});
+/** `login`: o e-mail ou o apelido da conta (`email` continua aceito, de clientes antigos). */
+export const loginSchema = z
+  .object({
+    login: z.string().trim().min(1).max(254).optional(),
+    email: z.string().trim().min(1).max(254).optional(),
+    password: z.string().min(1).max(128),
+  })
+  .transform((b) => ({ login: (b.login ?? b.email ?? '').toLowerCase(), password: b.password }))
+  .refine((b) => b.login.length > 0, { message: 'Informe o e-mail ou o apelido.', path: ['login'] });
 export type LoginInput = z.infer<typeof loginSchema>;
 
 export const forgotPasswordSchema = z.object({ email: z.string().trim().toLowerCase().email() });
 export const resetPasswordSchema = z.object({ token: z.string().min(20).max(200), password });
 export const verifyEmailSchema = z.object({ token: z.string().min(20).max(200) });
+/** Sem `currentPassword` só para quem ainda não tem senha (conta criada pelo Google). */
 export const changePasswordSchema = z.object({
-  currentPassword: z.string().min(1).max(128),
+  currentPassword: z.string().max(128).optional(),
   newPassword: password,
 });
 
@@ -137,6 +143,12 @@ export interface MeDto {
   profile: ProfileDto;
   /** Convidado da Corrida Maluca (entrou só com apelido, sem e-mail nem senha). */
   guest: boolean;
+  /** A conta tem senha própria (a criada pelo Google não tem até a pessoa criar uma). */
+  hasPassword: boolean;
+  /** Conta vinculada ao Google. */
+  google: boolean;
+  /** Master: o admin definido por ADMIN_EMAIL/ADMIN_PASSWORD (a senha muda só pela variável). */
+  master: boolean;
 }
 export interface ProfileDto {
   userId: string;

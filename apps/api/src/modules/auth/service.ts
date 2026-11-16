@@ -7,13 +7,13 @@ import {
   type AuthResponse,
   type MeDto,
   type RegisterInput,
-  type Role,
 } from '@tracado/shared';
 import { and, eq, gt, isNull, sql } from 'drizzle-orm';
 import type { Ctx } from '../../context';
 import { oneTimeTokens, profiles, refreshTokens, users } from '../../db/schema';
 import { signAccessToken, type AuthUser } from '../../lib/auth';
 import { hashPassword, randomToken, sha256, verifyPassword } from '../../lib/crypto';
+import { assertActive, effectiveRoles, endSessions, newAccountStatus } from '../users/service';
 
 const MAX_FAILED = 5;
 
@@ -30,7 +30,7 @@ export async function getMe(ctx: Ctx, userId: string): Promise<MeDto> {
     // Convidado tem e-mail fictício (só para a coluna única): não aparece para ninguém.
     email: row.users.isGuest ? '' : row.users.email,
     emailVerified: row.users.emailVerified,
-    roles: row.users.roles,
+    roles: effectiveRoles(ctx.config, row.users),
     profile: {
       userId: p.userId,
       nickname: p.nickname,
@@ -47,16 +47,26 @@ export async function getMe(ctx: Ctx, userId: string): Promise<MeDto> {
       driverChosen: p.driver != null,
     },
     guest: row.users.isGuest,
+    hasPassword: row.users.hasPassword && !row.users.isGuest,
+    google: !!row.users.googleSub,
+    master: row.users.isMaster,
   };
 }
 
+/**
+ * Emite access token e refresh. Os papéis vêm do banco na hora (não de `user.roles`): assim o admin por e-mail
+ * (ADMIN_EMAILS) e uma troca de papel no painel valem na próxima renovação.
+ */
 export async function issueTokens(
   ctx: Ctx,
-  user: AuthUser,
+  user: Pick<AuthUser, 'id'> & Partial<AuthUser>,
   ip: string | null,
   familyId: string = randomUUID(),
 ) {
   const now = ctx.clock.now();
+  const [u] = await ctx.db.select().from(users).where(eq(users.id, user.id));
+  if (!u) throw new AppError('UNAUTHORIZED', 'Conta não encontrada.');
+  const roles = effectiveRoles(ctx.config, u);
   const refresh = randomToken(48);
   const [row] = await ctx.db
     .insert(refreshTokens)
@@ -68,16 +78,23 @@ export async function issueTokens(
       ip,
     })
     .returning({ id: refreshTokens.id });
-  const accessToken = await signAccessToken(ctx.config.JWT_SECRET, user, now);
+  const accessToken = await signAccessToken(ctx.config.JWT_SECRET, { id: u.id, roles }, now);
   return { accessToken, refresh, refreshId: row!.id };
+}
+
+/** Cadastro sob aprovação: a conta é criada, mas só entra depois que o admin aprovar. */
+export interface PendingSignup {
+  pending: true;
+  message: string;
 }
 
 export async function register(
   ctx: Ctx,
   input: RegisterInput,
   ip: string | null,
-): Promise<AuthResponse & { refresh: string }> {
+): Promise<(AuthResponse & { refresh: string }) | PendingSignup> {
   const now = ctx.clock.now();
+  const status = await newAccountStatus(ctx, { email: input.email });
   // Antifraude básico: limite de cadastros por IP em 24 h; acima de um limiar menor, sinaliza para revisão.
   let flagged = false;
   if (ip) {
@@ -107,6 +124,7 @@ export async function register(
           passwordHash,
           signupIp: ip,
           flaggedForReview: flagged,
+          status,
           createdAt: new Date(now),
         })
         .returning({ id: users.id });
@@ -129,8 +147,12 @@ export async function register(
       throw e;
     });
   await sendVerification(ctx, userId, input.email);
-  const user: AuthUser = { id: userId, roles: ['player'] };
-  const t = await issueTokens(ctx, user, ip);
+  if (status === 'pending')
+    return {
+      pending: true,
+      message: 'Cadastro recebido! Você recebe um e-mail quando a organização aprovar o seu acesso.',
+    };
+  const t = await issueTokens(ctx, { id: userId }, ip);
   return { accessToken: t.accessToken, expiresIn: 900, me: await getMe(ctx, userId), refresh: t.refresh };
 }
 
@@ -151,17 +173,32 @@ export async function sendVerification(ctx: Ctx, userId: string, email: string) 
   );
 }
 
+/** Conta pelo e-mail ou pelo apelido (convidado e piloto simulado não entram por senha). */
+async function findByLogin(ctx: Ctx, login: string) {
+  const key = login.trim().toLowerCase();
+  if (key.includes('@')) {
+    const [u] = await ctx.db.select().from(users).where(eq(users.email, key));
+    return u;
+  }
+  const [row] = await ctx.db
+    .select({ u: users })
+    .from(users)
+    .innerJoin(profiles, eq(profiles.userId, users.id))
+    .where(sql`lower(${profiles.nickname}) = ${key}`);
+  return row?.u;
+}
+
 export async function login(
   ctx: Ctx,
-  email: string,
+  loginId: string,
   password: string,
   ip: string | null,
 ): Promise<AuthResponse & { refresh: string }> {
   const now = ctx.clock.now();
-  const [u] = await ctx.db.select().from(users).where(eq(users.email, email));
-  if (!u) {
-    await hashPassword(password); // tempo constante aproximado: não revela se o e-mail existe
-    throw new AppError('INVALID_CREDENTIALS', 'E-mail ou senha incorretos.');
+  const u = await findByLogin(ctx, loginId);
+  if (!u || u.isGuest || u.isBot) {
+    await hashPassword(password); // tempo constante aproximado: não revela se a conta existe
+    throw new AppError('INVALID_CREDENTIALS', 'E-mail, apelido ou senha incorretos.');
   }
   if (u.lockedUntil && u.lockedUntil.getTime() > now)
     throw new AppError('ACCOUNT_LOCKED', 'Conta temporariamente bloqueada por excesso de tentativas.', {
@@ -176,13 +213,15 @@ export async function login(
         ? new Date(now + Math.min(86_400_000, 15 * 60_000 * 2 ** (failed - MAX_FAILED)))
         : null;
     await ctx.db.update(users).set({ failedLogins: failed, lockedUntil }).where(eq(users.id, u.id));
-    throw new AppError('INVALID_CREDENTIALS', 'E-mail ou senha incorretos.');
+    throw new AppError('INVALID_CREDENTIALS', 'E-mail, apelido ou senha incorretos.');
   }
+  // Só depois da senha certa, para não revelar a situação de contas alheias.
+  assertActive(u);
   await ctx.db
     .update(users)
     .set({ failedLogins: 0, lockedUntil: null, lastLoginAt: new Date(now) })
     .where(eq(users.id, u.id));
-  const t = await issueTokens(ctx, { id: u.id, roles: u.roles }, ip);
+  const t = await issueTokens(ctx, { id: u.id }, ip);
   return { accessToken: t.accessToken, expiresIn: 900, me: await getMe(ctx, u.id), refresh: t.refresh };
 }
 
@@ -211,11 +250,15 @@ export async function refresh(
   }
   if (row.expiresAt.getTime() <= now) throw new AppError('UNAUTHORIZED', 'Sessão expirada.');
   const [u] = await ctx.db
-    .select({ id: users.id, roles: users.roles })
+    .select({ id: users.id, status: users.status })
     .from(users)
     .where(eq(users.id, row.userId));
   if (!u) throw new AppError('UNAUTHORIZED');
-  const t = await issueTokens(ctx, { id: u.id, roles: u.roles }, ip, row.familyId);
+  if (u.status !== 'active') {
+    await endSessions(ctx, u.id);
+    assertActive(u);
+  }
+  const t = await issueTokens(ctx, { id: u.id }, ip, row.familyId);
   await ctx.db.update(refreshTokens).set({ replacedBy: t.refreshId }).where(eq(refreshTokens.id, row.id));
   return { accessToken: t.accessToken, expiresIn: 900, me: await getMe(ctx, u.id), refresh: t.refresh };
 }
@@ -234,8 +277,12 @@ export async function logout(ctx: Ctx, token: string | undefined) {
 }
 
 export async function forgotPassword(ctx: Ctx, email: string) {
-  const [u] = await ctx.db.select({ id: users.id }).from(users).where(eq(users.email, email));
-  if (!u) return; // não revela existência
+  const [u] = await ctx.db
+    .select({ id: users.id, master: users.isMaster })
+    .from(users)
+    .where(eq(users.email, email));
+  // Não revela existência. A senha do Master só muda pela variável ADMIN_PASSWORD.
+  if (!u || u.master) return;
   const token = randomToken();
   await ctx.db
     .insert(oneTimeTokens)
@@ -271,7 +318,12 @@ export async function resetPassword(ctx: Ctx, token: string, password: string) {
   const userId = await consumeToken(ctx, 'password_reset', token);
   await ctx.db
     .update(users)
-    .set({ passwordHash: await hashPassword(password), failedLogins: 0, lockedUntil: null })
+    .set({
+      passwordHash: await hashPassword(password),
+      hasPassword: true,
+      failedLogins: 0,
+      lockedUntil: null,
+    })
     .where(eq(users.id, userId));
   await ctx.db
     .update(refreshTokens)
@@ -279,17 +331,22 @@ export async function resetPassword(ctx: Ctx, token: string, password: string) {
     .where(and(eq(refreshTokens.userId, userId), isNull(refreshTokens.revokedAt)));
 }
 
-/** Troca de senha logado: confere a atual, grava a nova e encerra as outras sessões. */
-export async function changePassword(ctx: Ctx, user: AuthUser, current: string, next: string) {
+/**
+ * Troca de senha logado: confere a atual, grava a nova e encerra as outras sessões. Conta criada pelo Google
+ * (`hasPassword` falso) cria a primeira senha sem informar a atual e passa a entrar também por e-mail e senha.
+ */
+export async function changePassword(ctx: Ctx, user: AuthUser, current: string | undefined, next: string) {
   const [u] = await ctx.db.select().from(users).where(eq(users.id, user.id));
   if (!u) throw new AppError('UNAUTHORIZED');
   if (u.isGuest)
     throw new AppError('CONFLICT', 'Convidado não tem senha: crie sua conta com e-mail e senha.');
-  if (!(await verifyPassword(u.passwordHash, current)))
+  if (u.isMaster)
+    throw new AppError('FORBIDDEN', 'A senha do Master é definida pela variável ADMIN_PASSWORD.');
+  if (u.hasPassword && !(await verifyPassword(u.passwordHash, current ?? '')))
     throw new AppError('INVALID_CREDENTIALS', 'A senha atual não confere.');
   await ctx.db
     .update(users)
-    .set({ passwordHash: await hashPassword(next), failedLogins: 0, lockedUntil: null })
+    .set({ passwordHash: await hashPassword(next), hasPassword: true, failedLogins: 0, lockedUntil: null })
     .where(eq(users.id, u.id));
   await ctx.db
     .update(refreshTokens)
@@ -311,8 +368,4 @@ export async function issueWsTicket(ctx: Ctx, user: AuthUser): Promise<string> {
 export async function redeemWsTicket(ctx: Ctx, ticket: string): Promise<AuthUser | null> {
   const v = await ctx.store.take(`wsticket:${ticket}`);
   return v ? (JSON.parse(v) as AuthUser) : null;
-}
-
-export async function setRoles(ctx: Ctx, userId: string, roles: Role[]) {
-  await ctx.db.update(users).set({ roles }).where(eq(users.id, userId));
 }

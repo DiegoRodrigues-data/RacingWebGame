@@ -1,5 +1,8 @@
 import { expect, test } from '@playwright/test';
-import { createRaceAsAdmin, race } from './helpers';
+import { mkdirSync } from 'node:fs';
+import { API, createRaceAsAdmin, race } from './helpers';
+
+const OUT = process.env.SHOTS_DIR ?? 'test-results/shots';
 
 test('admin cria pista especial válida, publica e agenda corrida com ela', async ({ page }) => {
   await page.goto('/entrar');
@@ -65,4 +68,63 @@ test('admin vê as pistas do dia e troca a pista de uma corrida por uma especial
   );
   if (process.env.SHOTS)
     await page.screenshot({ path: 'test-results/shots/14-pistas-do-dia.png', fullPage: true });
+});
+
+test('cadastro sob aprovação: o piloto espera, o admin aprova no painel e ele entra pelo apelido', async ({
+  browser,
+  request,
+}) => {
+  const login = await request.post(`${API}/auth/login`, {
+    data: { login: 'admin@tracado.local', password: 'admin12345' },
+  });
+  const headers = { authorization: `Bearer ${(await login.json()).accessToken}`, 'x-tracado-csrf': '1' };
+  const setAccess = (signupMode: string) =>
+    request.put(`${API}/admin/access`, { headers, data: { signupMode, signupDomains: [] } });
+  const nickname = `Aprov${Date.now().toString(36)}`;
+  expect((await setAccess('approval')).ok()).toBeTruthy();
+  try {
+    const visitor = await browser.newPage();
+    await visitor.goto('/cadastro');
+    await expect(visitor.getByText(/passam pela aprovação da organização/)).toBeVisible();
+    await visitor.getByLabel('Apelido de piloto').fill(nickname);
+    await visitor.getByLabel('E-mail').fill(`${nickname.toLowerCase()}@e2e.dev`);
+    await visitor.getByLabel('Senha (mín. 8)').fill('senha-e2e-123');
+    await visitor.getByLabel('Estado/Região').fill('SP');
+    await visitor.getByLabel('Cidade').fill('Campinas');
+    await visitor.getByRole('button', { name: 'Criar conta' }).click();
+    await expect(visitor.getByRole('status')).toContainText('Cadastro recebido');
+    await visitor.goto('/entrar');
+    await visitor.getByLabel('E-mail ou apelido').fill(nickname);
+    await visitor.getByLabel('Senha').fill('senha-e2e-123');
+    await visitor.getByRole('button', { name: 'Entrar' }).click();
+    await expect(visitor.getByRole('alert')).toContainText('aguarda a aprovação');
+
+    const admin = await browser.newPage();
+    await admin.goto('/entrar');
+    await admin.getByLabel('E-mail ou apelido').fill('admin@tracado.local');
+    await admin.getByLabel('Senha').fill('admin12345');
+    await admin.getByRole('button', { name: 'Entrar' }).click();
+    await expect(admin.getByRole('link', { name: 'Admin' })).toBeVisible();
+    await admin.goto('/admin/usuarios');
+    await expect(admin.getByText('Com aprovação')).toBeVisible();
+    await expect(admin.getByText(/aguarda(m)? a sua aprovação/)).toBeVisible();
+    if (process.env.SHOTS) {
+      mkdirSync(OUT, { recursive: true });
+      await admin.screenshot({ path: `${OUT}/12-admin-usuarios.png`, fullPage: true });
+    }
+    const row = admin.locator('tr', { hasText: nickname });
+    await row.getByRole('button', { name: /Aprovar/ }).click();
+    await expect(admin.getByText(`${nickname} aprovado`)).toBeVisible();
+    await expect(row).not.toContainText('aguardando aprovação');
+    await admin.getByRole('button', { name: 'Alterar regra' }).click();
+    if (process.env.SHOTS) await admin.screenshot({ path: `${OUT}/13-admin-regra.png` });
+    await admin.getByRole('radio', { name: /Liberados/ }).check();
+    await admin.getByRole('button', { name: 'Salvar regra' }).click();
+    await expect(admin.getByText('Regra de cadastro atualizada')).toBeVisible();
+
+    await visitor.getByRole('button', { name: 'Entrar' }).click();
+    await expect(visitor).toHaveURL(/\/$/);
+  } finally {
+    await setAccess('open');
+  }
 });

@@ -8,14 +8,13 @@ import {
   raceBatchSchema,
   raceCreateSchema,
   raceUpdateSchema,
-  roleSchema,
   ROOM,
   trackParamsSchema,
   DEFAULT_SETUP,
 } from '@tracado/shared';
 import { estimateLap } from '@tracado/sim';
 import { offsetsToTrace, suggestedLine, TrackGenerationError } from '@tracado/trackgen';
-import { and, asc, desc, eq, gte, ilike, inArray, or, sql } from 'drizzle-orm';
+import { and, asc, desc, eq, gte, inArray, sql } from 'drizzle-orm';
 import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
 import type { Ctx } from '../../context';
@@ -33,7 +32,6 @@ import {
 } from '../../db/schema';
 import { requireRole, type AuthUser } from '../../lib/auth';
 import { parse } from '../../lib/validate';
-import { setRoles } from '../auth/service';
 import type { PhaseEngine } from '../engine/engine';
 import { reprocess } from '../engine/runner';
 import { notify } from '../notifications/service';
@@ -518,55 +516,6 @@ export function adminRoutes(app: FastifyInstance, ctx: Ctx, engine: PhaseEngine)
     return { ok: true };
   });
 
-  // ------------------------------------------------------------ Usuários
-  app.get('/admin/users', async (req) => {
-    admin(req);
-    const q = parse(
-      z.object({ q: z.string().max(100).optional(), flagged: z.enum(['true', 'false']).optional() }),
-      req.query,
-    );
-    const rows = await ctx.db
-      .select({ u: users, p: profiles })
-      .from(users)
-      .innerJoin(profiles, eq(profiles.userId, users.id))
-      .where(
-        and(
-          q.q ? or(ilike(users.email, `%${q.q}%`), ilike(profiles.nickname, `%${q.q}%`)) : undefined,
-          q.flagged === 'true' ? eq(users.flaggedForReview, true) : undefined,
-        ),
-      )
-      .orderBy(desc(users.createdAt))
-      .limit(100);
-    return rows.map(({ u, p }) => ({
-      id: u.id,
-      email: u.email,
-      nickname: p.nickname,
-      roles: u.roles,
-      isBot: u.isBot,
-      flagged: u.flaggedForReview,
-      verified: u.emailVerified,
-      level: p.level,
-      createdAt: u.createdAt.toISOString(),
-      signupIp: u.signupIp,
-    }));
-  });
-  app.patch('/admin/users/:id', async (req) => {
-    const u = admin(req);
-    const { id } = parse(idParam, req.params);
-    const b = parse(
-      z.object({ roles: z.array(roleSchema).min(1).optional(), flagged: z.boolean().optional() }),
-      req.body,
-    );
-    if (b.roles) {
-      if (id === u.id && !b.roles.includes('admin'))
-        throw new AppError('VALIDATION_ERROR', 'Você não pode remover o próprio acesso de administrador.');
-      await setRoles(ctx, id, b.roles);
-    }
-    if (b.flagged !== undefined)
-      await ctx.db.update(users).set({ flaggedForReview: b.flagged }).where(eq(users.id, id));
-    await audit(ctx, u, 'user.update', 'user', id, b);
-    return { ok: true };
-  });
-
+  // Usuários: modules/users/routes.ts.
   void trackVersions;
 }

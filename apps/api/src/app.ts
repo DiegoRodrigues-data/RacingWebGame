@@ -27,6 +27,8 @@ import { devRoutes } from './modules/misc/dev';
 import { miscRoutes } from './modules/misc/routes';
 import { shareRoutes } from './modules/misc/share';
 import { raceRoutes } from './modules/races/routes';
+import { userRoutes } from './modules/users/routes';
+import { isBlockedNow } from './modules/users/service';
 import { getRaceRow, listEntries, raceSummaries } from './modules/races/service';
 import { WsHub } from './modules/ws/hub';
 
@@ -105,7 +107,10 @@ export async function buildApp(
     const h = req.headers.authorization;
     if (h?.startsWith('Bearer ')) {
       try {
-        req.user = await verifyAccessToken(config.JWT_SECRET, h.slice(7), ctx.clock.now());
+        const user = await verifyAccessToken(config.JWT_SECRET, h.slice(7), ctx.clock.now());
+        // Conta bloqueada ou excluída agora há pouco: o token ainda é válido, mas a pessoa sai na hora.
+        if (await isBlockedNow(ctx, user.id)) req.tokenError = true;
+        else req.user = user;
       } catch {
         req.tokenError = true;
       }
@@ -179,6 +184,7 @@ export async function buildApp(
   miscRoutes(app, ctx);
   shareRoutes(app, ctx);
   adminRoutes(app, ctx, engine);
+  userRoutes(app, ctx);
   botRoutes(app, ctx);
   scheduleRoutes(app, ctx, engine);
   if (config.ENABLE_DEV_ROUTES && config.NODE_ENV !== 'production') devRoutes(app, ctx, engine);

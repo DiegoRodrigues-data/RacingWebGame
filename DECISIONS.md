@@ -213,6 +213,22 @@ traçado e corrida contra fantasmas rodam no aparelho e nada é enviado ao servi
 - **Desligar**: um piloto desligado pelo admin sai das corridas ainda abertas (como uma desistência) e perde os
   planos pendentes. Desligar o recurso inteiro só para as inscrições novas; quem já entrou corre.
 
+### Gestão de usuários (adotada do Gerador_Prompt)
+
+- **Master pelo ambiente.** `ADMIN_EMAIL`/`ADMIN_PASSWORD` valem a cada boot (antes a senha só era gravada na criação e
+  `ADMIN_RESET_PASSWORD` recuperava o acesso). O Master é achado pela marca `users.is_master`, então trocar o e-mail na
+  variável muda o e-mail da mesma conta. Ele não é editado, bloqueado nem excluído pelo painel.
+- **`ADMIN_EMAILS` sem papel gravado.** O papel de admin é somado na emissão do token (`effectiveRoles`); tirar o e-mail
+  da variável tira o acesso na próxima renovação (até 15 min). Como toda conta admin, essas não correm (`assertPlayer`).
+- **Regra de cadastros nas três portas.** No Gerador_Prompt ela vale só para o Google, porque lá não há cadastro
+  próprio. Aqui vale para e-mail, Google e convidado, com padrão "liberado" para o jogo público não mudar até o admin
+  decidir. Sob aprovação o convidado é recusado: sem e-mail nem senha, ele não teria como voltar depois de aprovado.
+- **Bloqueio imediato sem consultar o banco a cada requisição.** O access token é um JWT de 15 min. Em vez do
+  `session_version` do Gerador_Prompt, o bloqueio revoga os refresh tokens e grava uma marca no `Store` com o tempo de
+  vida de um access token; o hook de auth lê a marca.
+- **Excluir = apagar ou anonimizar.** O Gerador_Prompt passa os prompts do excluído para o Master. Aqui inscrições,
+  resultados e rankings não têm cascata e mudariam corridas passadas, então quem já correu é anonimizado.
+
 ## Modelo de simulação
 
 Determinístico (PRNG sfc32 semeado; nenhuma fonte de aleatoriedade externa). Por volta, cada carro tem um perfil de velocidade

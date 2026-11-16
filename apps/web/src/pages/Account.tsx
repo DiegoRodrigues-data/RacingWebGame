@@ -120,8 +120,11 @@ function DriverCard({ me }: { me: MeDto }) {
   );
 }
 
-/** Troca de senha (contas com e-mail e senha). As outras sessões são encerradas. */
-function ChangePassword() {
+/**
+ * Troca de senha (contas com e-mail e senha). As outras sessões são encerradas. Conta criada pelo Google ainda sem
+ * senha cria a primeira sem informar a atual e passa a entrar também com e-mail ou apelido e senha.
+ */
+function ChangePassword({ hasPassword, onCreated }: { hasPassword: boolean; onCreated: () => void }) {
   const [busy, setBusy] = useState(false);
   async function submit(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -134,11 +137,15 @@ function ChangePassword() {
     setBusy(true);
     try {
       await post('/auth/change-password', {
-        currentPassword: f.get('currentPassword'),
+        ...(hasPassword ? { currentPassword: f.get('currentPassword') } : {}),
         newPassword: f.get('newPassword'),
       });
       form.reset();
-      toast('Senha alterada', 'As outras sessões foram encerradas.', 'ok');
+      if (hasPassword) toast('Senha alterada', 'As outras sessões foram encerradas.', 'ok');
+      else {
+        toast('Senha criada', 'Agora você também entra com e-mail ou apelido e senha.', 'ok');
+        onCreated();
+      }
     } catch (x) {
       toast('Não deu para trocar a senha', errorMessage(x), 'error');
     } finally {
@@ -147,18 +154,25 @@ function ChangePassword() {
   }
   return (
     <form onSubmit={submit} className="card space-y-3">
-      <div className="font-display text-lg">Trocar senha</div>
-      <div className="grid gap-2 sm:grid-cols-3">
-        <label>
-          <span className="label">Senha atual</span>
-          <input
-            name="currentPassword"
-            type="password"
-            className="input"
-            autoComplete="current-password"
-            required
-          />
-        </label>
+      <div className="font-display text-lg">{hasPassword ? 'Trocar senha' : 'Criar senha'}</div>
+      {!hasPassword && (
+        <p className="text-sm text-muted">
+          Sua conta entra pelo Google. Com uma senha, você também entra digitando o e-mail ou o apelido.
+        </p>
+      )}
+      <div className={hasPassword ? 'grid gap-2 sm:grid-cols-3' : 'grid gap-2 sm:grid-cols-2'}>
+        {hasPassword && (
+          <label>
+            <span className="label">Senha atual</span>
+            <input
+              name="currentPassword"
+              type="password"
+              className="input"
+              autoComplete="current-password"
+              required
+            />
+          </label>
+        )}
         <label>
           <span className="label">Nova senha (mín. 8)</span>
           <input
@@ -183,7 +197,7 @@ function ChangePassword() {
         </label>
       </div>
       <button className="btn-ghost" disabled={busy}>
-        Trocar senha
+        {hasPassword ? 'Trocar senha' : 'Criar senha'}
       </button>
     </form>
   );
@@ -304,7 +318,9 @@ export default function Account() {
         </button>
       </form>
       <DriverCard me={me} />
-      {!me.guest && <ChangePassword />}
+      {!me.guest && !me.master && (
+        <ChangePassword hasPassword={me.hasPassword} onCreated={() => setMe({ ...me, hasPassword: true })} />
+      )}
     </div>
   );
 }

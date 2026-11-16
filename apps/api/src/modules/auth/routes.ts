@@ -21,8 +21,18 @@ import { parse } from '../../lib/validate';
 import { googleCallback, googleEnabled, googleStart, safeNext } from './google';
 import * as crazy from '../crazy/service';
 import * as svc from './service';
+import { accessPolicy, guestsAllowed } from '../users/service';
 
 const COOKIE = 'tracado_rt';
+
+function googleErrorParam(e: unknown) {
+  if (!(e instanceof AppError)) return 'google';
+  if (e.code === 'ACCOUNT_PENDING') return 'pendente';
+  if (e.code === 'ACCOUNT_BLOCKED') return 'bloqueado';
+  if (e.code === 'SIGNUP_CLOSED')
+    return (e.details as { reason?: string } | undefined)?.reason === 'domain' ? 'dominio' : 'fechado';
+  return 'google';
+}
 
 export function authRoutes(app: FastifyInstance, ctx: Ctx) {
   const setCookie = (reply: FastifyReply, token: string) =>
@@ -43,20 +53,26 @@ export function authRoutes(app: FastifyInstance, ctx: Ctx) {
 
   app.post('/auth/register', authLimit, async (req, reply) => {
     const r = await svc.register(ctx, parse(registerSchema, req.body), req.ip);
+    // Cadastro sob aprovação: sem sessão até o admin aprovar.
+    if ('pending' in r) return reply.code(202).send(r);
     setCookie(reply, r.refresh);
     const { refresh: _r, ...body } = r;
     return reply.code(201).send(body);
   });
   app.post('/auth/login', authLimit, async (req, reply) => {
     const b = parse(loginSchema, req.body);
-    const r = await svc.login(ctx, b.email, b.password, req.ip);
+    const r = await svc.login(ctx, b.login, b.password, req.ip);
     setCookie(reply, r.refresh);
     const { refresh: _r, ...body } = r;
     return body;
   });
   // Login com Google. O cookie "tracado_og" (SameSite=Lax, volta na navegação vinda do Google) prende o state
   // ao navegador que iniciou o login.
-  app.get('/auth/providers', async () => ({ google: googleEnabled(ctx) }));
+  // Também diz a regra de cadastros, para a tela de entrada avisar antes (aprovação, fechados, convidados).
+  app.get('/auth/providers', async () => {
+    const p = await accessPolicy(ctx);
+    return { google: googleEnabled(ctx), signupMode: p.signupMode, guests: guestsAllowed(p) };
+  });
   app.get('/auth/google/start', authLimit, async (req, reply) => {
     const { next } = req.query as { next?: string };
     const { url, state } = await googleStart(ctx, safeNext(next));
@@ -81,8 +97,10 @@ export function authRoutes(app: FastifyInstance, ctx: Ctx) {
       setCookie(reply, r.refresh);
       return reply.redirect(r.created ? `${web}/conta?bemvindo=1` : `${web}${r.next}`);
     } catch (e) {
-      req.log.warn({ err: e }, 'Login com Google falhou');
-      return reply.redirect(`${web}/entrar?erro=google`);
+      // Recusas da regra de cadastros e da situação da conta voltam com um motivo para a tela de entrada.
+      const reason = googleErrorParam(e);
+      if (reason === 'google') req.log.warn({ err: e }, 'Login com Google falhou');
+      return reply.redirect(`${web}/entrar?erro=${reason}`);
     }
   });
   // Convidado: joga só com apelido (com ou sem convite da Corrida Maluca); volta pelo link pessoal; ou vira

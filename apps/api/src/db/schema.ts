@@ -31,6 +31,7 @@ import type {
   TrackSource,
   TrackTerrain,
   TrackVersionStatus,
+  UserStatus,
 } from '@tracado/shared';
 
 const bytea = customType<{ data: Buffer; driverData: Buffer | Uint8Array }>({
@@ -59,6 +60,12 @@ export const users = pgTable(
     googleSub: text('google_sub'),
     /** Convidado da Corrida Maluca: entrou pelo link só com apelido (e-mail fictício, sem senha utilizável). */
     isGuest: boolean('is_guest').notNull().default(false),
+    /** active, pending (cadastro aguardando aprovação) ou blocked (não entra). Ver `USER_STATUSES`. */
+    status: text('status').$type<UserStatus>().notNull().default('active'),
+    /** Master: o admin de ADMIN_EMAIL/ADMIN_PASSWORD, sincronizado a cada boot (`ensureAdmin`). Só um. */
+    isMaster: boolean('is_master').notNull().default(false),
+    /** false = conta criada pelo Google, com senha aleatória descartada; pode criar uma sem informar a atual. */
+    hasPassword: boolean('has_password').notNull().default(true),
   },
   (t) => [
     uniqueIndex('users_email_uq').on(t.email),

@@ -407,6 +407,15 @@ Fecha o ciclo de vida com resultados persistidos.
 - [x] Link de volta em `/voltar/:key` (o antigo continua) e em Minha conta, ao lado do botão de criar a conta
 - [x] Home, cabeçalho e login oferecem jogar só com apelido
 
+## Fase 29 — Gestão de usuários (modelo do Gerador_Prompt)
+
+- [x] Situação da conta (ativa, aguardando aprovação, bloqueada): login e refresh conferem; bloquear derruba na hora
+- [x] Regra de novos cadastros (liberados, com aprovação, fechados e domínios) para e-mail, Google e convidado
+- [x] Master sincronizado por `ADMIN_EMAIL`/`ADMIN_PASSWORD` a cada boot (sai o `ADMIN_RESET_PASSWORD`) e admins por `ADMIN_EMAILS`
+- [x] Painel de usuários: cadastrar, editar, aprovar, bloquear, excluir (ou anonimizar quem tem histórico) e filtrar por situação
+- [x] Login por e-mail ou apelido; conta do Google cria a primeira senha em Minha conta
+- [ ] Conferir no Dokploy que `ADMIN_PASSWORD` é a senha desejada (o próximo deploy a aplica ao Master) e, se quiser, definir `ADMIN_EMAILS`
+
 ---
 
 ## Ordem recomendada (próximos passos)

@@ -9,3 +9,4 @@ export * from './setup';
 export * from './crazy';
 export * from './settings';
 export * from './driver';
+export * from './users';

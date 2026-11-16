@@ -7,7 +7,7 @@ import { useQuery } from '@tanstack/react-query';
 import { API_BASE, ApiError, errorMessage, get, post } from '../lib/api';
 import { realtime } from '../lib/realtime';
 import { useSession } from '../lib/session';
-import type { AuthResponse } from '@tracado/shared';
+import type { AuthResponse, SignupMode } from '@tracado/shared';
 
 function AuthCard({ title, children, footer }: { title: string; children: ReactNode; footer?: ReactNode }) {
   return (
@@ -36,13 +36,57 @@ function Field({
   );
 }
 
+interface Providers {
+  google: boolean;
+  signupMode: SignupMode;
+  /** Convidados (só apelido) aceitos pela regra de cadastros. */
+  guests: boolean;
+}
+
+/** Provedores de login e regra de novos cadastros (definida pelo admin na tela de usuários). */
+export const useProviders = () =>
+  useQuery({
+    queryKey: ['auth-providers'],
+    queryFn: () => get<Providers>('/auth/providers'),
+    staleTime: 60_000,
+  });
+
+const SIGNUP_HINTS: Record<SignupMode, string | null> = {
+  open: null,
+  approval:
+    'Novos cadastros passam pela aprovação da organização: você recebe um e-mail quando for liberado.',
+  closed: 'Novos cadastros estão fechados no momento. Quem já tem conta entra normalmente.',
+};
+
+/** Recusas que o login com Google devolve em `?erro=` (situação da conta e regra de cadastros). */
+const GOOGLE_ERRORS: Record<string, { text: string; tone: 'info' | 'error' }> = {
+  google: {
+    text: 'Não foi possível entrar com o Google. Tente de novo ou use e-mail e senha.',
+    tone: 'error',
+  },
+  pendente: {
+    text: 'Cadastro recebido! Seu acesso será liberado quando a organização aprovar. Você recebe um e-mail.',
+    tone: 'info',
+  },
+  bloqueado: { text: 'Seu acesso está bloqueado. Fale com a organização do Roda Presa.', tone: 'error' },
+  fechado: {
+    text: 'Novos cadastros estão fechados no momento. Quem já tem conta entra normalmente.',
+    tone: 'error',
+  },
+  dominio: {
+    text: 'Só são aceitos cadastros com e-mails dos domínios autorizados pela organização.',
+    tone: 'error',
+  },
+};
+
+function SignupHint() {
+  const hint = SIGNUP_HINTS[useProviders().data?.signupMode ?? 'open'];
+  return hint ? <p className="rounded-xl bg-night-2 p-3 text-sm text-muted">{hint}</p> : null;
+}
+
 /** Botão do Google (só aparece se o servidor tiver o login com Google configurado). */
 function GoogleButton({ next }: { next: string }) {
-  const providers = useQuery({
-    queryKey: ['auth-providers'],
-    queryFn: () => get<{ google: boolean }>('/auth/providers'),
-    staleTime: 5 * 60_000,
-  });
+  const providers = useProviders();
   if (!providers.data?.google) return null;
   return (
     <>
@@ -83,6 +127,8 @@ export function Login() {
   const [params] = useSearchParams();
   const [err, setErr] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const googleError = GOOGLE_ERRORS[params.get('erro') ?? ''];
+  const guests = useProviders().data?.guests ?? true;
   async function submit(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
     const f = new FormData(e.currentTarget);
@@ -90,7 +136,7 @@ export function Login() {
     setErr(null);
     try {
       const r = await post<AuthResponse>('/auth/login', {
-        email: f.get('email'),
+        login: f.get('login'),
         password: f.get('password'),
       });
       apply(r);
@@ -116,13 +162,27 @@ export function Login() {
       }
     >
       <form onSubmit={submit} className="space-y-4" noValidate>
-        {params.get('erro') === 'google' && (
-          <p role="alert" className="rounded-xl bg-hot/15 p-3 text-sm text-hot">
-            Não foi possível entrar com o Google. Tente de novo ou use e-mail e senha.
+        {googleError && (
+          <p
+            role="alert"
+            className={
+              googleError.tone === 'error'
+                ? 'rounded-xl bg-hot/15 p-3 text-sm text-hot'
+                : 'rounded-xl bg-go/15 p-3 text-sm text-go'
+            }
+          >
+            {googleError.text}
           </p>
         )}
         <GoogleButton next={params.get('voltar') ?? '/'} />
-        <Field label="E-mail" name="email" type="email" autoComplete="email" required />
+        <Field
+          label="E-mail ou apelido"
+          name="login"
+          autoComplete="username"
+          autoCapitalize="none"
+          spellCheck={false}
+          required
+        />
         <Field label="Senha" name="password" type="password" autoComplete="current-password" required />
         {err && (
           <p role="alert" className="rounded-xl bg-hot/15 p-3 text-sm text-hot">
@@ -136,15 +196,17 @@ export function Login() {
           Esqueci minha senha
         </Link>
       </form>
-      <div className="mt-5 border-t border-line pt-4 text-center text-sm">
-        Só quer correr?{' '}
-        <Link
-          className="font-bold text-race"
-          to={`/jogar${params.get('voltar') ? `?voltar=${encodeURIComponent(params.get('voltar')!)}` : ''}`}
-        >
-          Jogue só com um apelido
-        </Link>
-      </div>
+      {guests && (
+        <div className="mt-5 border-t border-line pt-4 text-center text-sm">
+          Só quer correr?{' '}
+          <Link
+            className="font-bold text-race"
+            to={`/jogar${params.get('voltar') ? `?voltar=${encodeURIComponent(params.get('voltar')!)}` : ''}`}
+          >
+            Jogue só com um apelido
+          </Link>
+        </div>
+      )}
     </AuthCard>
   );
 }
@@ -154,6 +216,7 @@ export function Register() {
   const nav = useNavigate();
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [busy, setBusy] = useState(false);
+  const [pending, setPending] = useState<string | null>(null);
   async function submit(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
     const data = Object.fromEntries(new FormData(e.currentTarget)) as Record<string, string>;
@@ -165,7 +228,9 @@ export function Register() {
     setErrors({});
     setBusy(true);
     try {
-      const r = await post<AuthResponse>('/auth/register', v.data);
+      const r = await post<AuthResponse | { pending: true; message: string }>('/auth/register', v.data);
+      // Cadastro sob aprovação: a conta existe, mas só entra depois que o admin aprovar.
+      if ('pending' in r) return setPending(r.message);
       apply(r);
       realtime.reconnect();
       toast('Conta criada! 🏁', 'Confira seu e-mail para confirmar o cadastro.', 'ok');
@@ -191,51 +256,70 @@ export function Register() {
         </>
       }
     >
-      <form onSubmit={submit} className="space-y-4" noValidate>
-        <GoogleButton next="/calendario" />
-        <Field
-          label="Apelido de piloto"
-          name="nickname"
-          autoComplete="nickname"
-          required
-          maxLength={20}
-          error={errors.nickname}
-        />
-        <Field label="E-mail" name="email" type="email" autoComplete="email" required error={errors.email} />
-        <Field
-          label="Senha (mín. 8)"
-          name="password"
-          type="password"
-          autoComplete="new-password"
-          required
-          minLength={8}
-          error={errors.password}
-        />
-        <div className="grid grid-cols-3 gap-2">
-          <Field
-            label="País"
-            name="country"
-            defaultValue="BR"
-            maxLength={2}
-            required
-            error={errors.country}
-          />
-          <Field label="Estado/Região" name="region" placeholder="SP" required error={errors.region} />
-          <Field label="Cidade" name="city" placeholder="Campinas" required error={errors.city} />
-        </div>
-        <p className="text-xs text-muted">
-          Sua cidade, região e país definem seus rankings local, regional e nacional. Mudanças valem a partir
-          da próxima temporada.
-        </p>
-        {errors.form && (
-          <p role="alert" className="rounded-xl bg-hot/15 p-3 text-sm text-hot">
-            {errors.form}
+      {pending ? (
+        <div className="space-y-4">
+          <p role="status" className="rounded-xl bg-go/15 p-3 text-sm text-go">
+            {pending}
           </p>
-        )}
-        <button className="btn-primary w-full" disabled={busy}>
-          {busy ? 'Criando…' : 'Criar conta'}
-        </button>
-      </form>
+          <Link to="/" className="btn-ghost w-full">
+            Voltar ao início
+          </Link>
+        </div>
+      ) : (
+        <form onSubmit={submit} className="space-y-4" noValidate>
+          <SignupHint />
+          <GoogleButton next="/calendario" />
+          <Field
+            label="Apelido de piloto"
+            name="nickname"
+            autoComplete="nickname"
+            required
+            maxLength={20}
+            error={errors.nickname}
+          />
+          <Field
+            label="E-mail"
+            name="email"
+            type="email"
+            autoComplete="email"
+            required
+            error={errors.email}
+          />
+          <Field
+            label="Senha (mín. 8)"
+            name="password"
+            type="password"
+            autoComplete="new-password"
+            required
+            minLength={8}
+            error={errors.password}
+          />
+          <div className="grid grid-cols-3 gap-2">
+            <Field
+              label="País"
+              name="country"
+              defaultValue="BR"
+              maxLength={2}
+              required
+              error={errors.country}
+            />
+            <Field label="Estado/Região" name="region" placeholder="SP" required error={errors.region} />
+            <Field label="Cidade" name="city" placeholder="Campinas" required error={errors.city} />
+          </div>
+          <p className="text-xs text-muted">
+            Sua cidade, região e país definem seus rankings local, regional e nacional. Mudanças valem a
+            partir da próxima temporada.
+          </p>
+          {errors.form && (
+            <p role="alert" className="rounded-xl bg-hot/15 p-3 text-sm text-hot">
+              {errors.form}
+            </p>
+          )}
+          <button className="btn-primary w-full" disabled={busy}>
+            {busy ? 'Criando…' : 'Criar conta'}
+          </button>
+        </form>
+      )}
     </AuthCard>
   );
 }
@@ -324,6 +408,7 @@ export function PlayAsGuest() {
   const nav = useNavigate();
   const [params] = useSearchParams();
   const me = useSession((s) => s.me);
+  const guests = useProviders().data?.guests ?? true;
   const raceId = params.get('corrida');
   const next = params.get('voltar') ?? '/calendario';
   const loginLink = `/entrar?voltar=${encodeURIComponent(raceId ? `/corridas/${raceId}` : next)}`;
@@ -353,6 +438,15 @@ export function PlayAsGuest() {
           Escolha um apelido e a cor do carro e já pode correr. Sem e-mail nem senha: o acesso fica neste
           navegador, e dá para criar a conta depois mantendo apelido e histórico.
         </p>
+        {!guests && (
+          <p role="alert" className="mt-3 rounded-xl bg-hot/15 p-3 text-sm text-hot">
+            No momento a organização não aceita convidados.{' '}
+            <Link to={loginLink} className="font-bold underline">
+              Entre ou crie sua conta
+            </Link>
+            .
+          </p>
+        )}
       </div>
       <GuestJoinForm
         submitLabel={raceId ? 'Entrar no grid 🏁' : 'Começar a jogar 🏁'}

@@ -71,7 +71,8 @@ export function settingsRoutes(app: FastifyInstance, ctx: Ctx, engine: PhaseEngi
         throw new AppError('VALIDATION_ERROR', 'O rodízio só aceita pistas publicadas.');
     }
     const before = await getSettings(ctx);
-    const saved = await saveSettings(ctx, next, u.id);
+    // A regra de cadastros só muda em PUT /admin/access: uma tela de configurações aberta antes não a desfaz.
+    const saved = await saveSettings(ctx, { ...next, access: before.access }, u.id);
     await audit(ctx, u, 'settings.update', 'settings', 'main', { before, after: saved });
     engine.nudgeAutoRaces();
     // Pilotos simulados ligados: as personas já existem antes da próxima corrida automática abrir.

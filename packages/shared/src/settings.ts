@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import { DEFAULT_PRACTICE_MINUTES, DEFAULT_TRACK_WIDTH, MAX_CARS_PER_RACE } from './constants';
 import { DEFAULT_DRIVER_RULES, driverRulesSchema } from './driver';
+import { accessPolicySchema, DEFAULT_ACCESS_POLICY } from './users';
 
 /**
  * Configurações do jogo editáveis pelo admin, com efeito na hora (sem deploy). Ficam numa linha do banco;
@@ -126,6 +127,8 @@ export const gameSettingsSchema = z
     }),
     /** Perfil do piloto e colisões na simulação (vale para corridas simuladas daqui em diante). */
     drivers: driverRulesSchema,
+    /** Regra de novos cadastros (editada na tela de usuários do admin). */
+    access: accessPolicySchema.default(DEFAULT_ACCESS_POLICY),
     crazy: z.object({
       maxRaces: z.number().int().min(1).max(20),
       maxMembers: z.number().int().min(2).max(MAX_CARS_PER_RACE),
@@ -193,6 +196,7 @@ export const DEFAULT_GAME_SETTINGS: GameSettings = {
   },
   drivers: DEFAULT_DRIVER_RULES,
   crazy: { maxRaces: 10, maxMembers: 20, lapsDefault: 8, chaosDefault: true, botFillDefault: 0 },
+  access: DEFAULT_ACCESS_POLICY,
 };
 
 /** O que o jogo precisa saber no navegador (sem nada administrativo). */

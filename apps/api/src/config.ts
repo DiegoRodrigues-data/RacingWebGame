@@ -15,14 +15,28 @@ const schema = z.object({
   WEB_ORIGIN: z.string().default('http://localhost:5173'),
   PUBLIC_WEB_URL: z.string().default('http://localhost:5173'),
   COOKIE_SECURE: bool.default(false),
-  // O login compara o e-mail em minúsculas e sem espaços: o do admin precisa estar igual.
+  /**
+   * Master: o admin principal. E-mail e senha são reaplicados a cada boot (`ensureAdmin`): para trocar a senha, mude a
+   * variável e reinicie. O login compara o e-mail em minúsculas e sem espaços, então ele é normalizado aqui.
+   */
   ADMIN_EMAIL: z.string().trim().toLowerCase().email().default('admin@tracado.local'),
   ADMIN_PASSWORD: z.string().min(8).default('admin12345'),
   /**
-   * Recuperação de acesso: com "true", a cada boot a senha do admin volta a ser ADMIN_PASSWORD (e o bloqueio por
-   * tentativas é zerado). Ligue, faça o deploy, entre e desligue (senão a troca de senha não dura).
+   * E-mails com acesso de administrador (separados por vírgula, espaço ou ponto e vírgula), além do Master. Valem
+   * pela senha ou pelo Google, e pelo Google entram mesmo com os cadastros fechados ou sob aprovação. Não podem ser
+   * bloqueados nem excluídos pelo painel: para tirar o acesso, remova o e-mail daqui.
    */
-  ADMIN_RESET_PASSWORD: bool.default(false),
+  ADMIN_EMAILS: z
+    .string()
+    .default('')
+    .transform((v) => [
+      ...new Set(
+        v
+          .toLowerCase()
+          .split(/[\s,;]+/)
+          .filter(Boolean),
+      ),
+    ]),
   ENABLE_DEV_ROUTES: bool.default(false),
   SEED_DEMO: bool.default(false),
   DEMO_BOTS: z.coerce.number().int().min(0).max(21).default(0),

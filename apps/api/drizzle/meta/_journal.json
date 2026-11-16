@@ -99,6 +99,13 @@
       "when": 1794600000000,
       "tag": "0013_pistas_do_dia",
       "breakpoints": true
+    },
+    {
+      "idx": 14,
+      "version": "7",
+      "when": 1794838726722,
+      "tag": "0014_gestao_de_usuarios",
+      "breakpoints": true
     }
   ]
 }

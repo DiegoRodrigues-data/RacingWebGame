@@ -37,6 +37,7 @@ import { hashPassword, randomToken, sha256 } from '../../lib/crypto';
 import { getMe, issueTokens, sendVerification } from '../auth/service';
 import { autoBiome, autoTrack, phaseInput } from '../engine/autoRaces';
 import { getSettings } from '../settings/service';
+import { assertActive, newAccountStatus } from '../users/service';
 import { assertPlayer, assignCar } from '../races/entries';
 import {
   broadcastRace,
@@ -264,6 +265,8 @@ export async function createGuest(
   ip: string | null,
 ): Promise<AuthResponse & { refresh: string; groupId: string | null }> {
   const now = ctx.clock.now();
+  // Regra de cadastros: convidado só entra com os cadastros liberados e sem lista de domínios.
+  await newAccountStatus(ctx, { email: null, guest: true });
   const g = input.inviteCode ? await groupByCode(ctx, input.inviteCode) : null;
   if (g && (await memberIds(ctx, g.id)).length >= (await getSettings(ctx)).crazy.maxMembers)
     throw new AppError('CONFLICT', 'Este grupo já está completo.');
@@ -316,7 +319,7 @@ export async function createGuest(
       throw e;
     });
   if (g) await addMember(ctx, g, userId);
-  const t = await issueTokens(ctx, { id: userId, roles: ['player'] }, ip);
+  const t = await issueTokens(ctx, { id: userId }, ip);
   return {
     accessToken: t.accessToken,
     expiresIn: 900,
@@ -350,18 +353,19 @@ export async function resumeGuest(
   ip: string | null,
 ): Promise<AuthResponse & { refresh: string }> {
   const [row] = await ctx.db
-    .select({ t: oneTimeTokens, guest: users.isGuest, roles: users.roles })
+    .select({ t: oneTimeTokens, guest: users.isGuest, status: users.status })
     .from(oneTimeTokens)
     .innerJoin(users, eq(users.id, oneTimeTokens.userId))
     .where(and(eq(oneTimeTokens.tokenHash, sha256(key)), eq(oneTimeTokens.kind, 'guest_login')));
   if (!row || row.t.expiresAt.getTime() <= ctx.clock.now())
     throw new AppError('UNAUTHORIZED', 'Link de volta inválido ou expirado.');
   if (!row.guest) throw new AppError('UNAUTHORIZED', 'Esta conta já tem e-mail e senha. Entre com eles.');
+  assertActive(row);
   await ctx.db
     .update(users)
     .set({ lastLoginAt: new Date(ctx.clock.now()) })
     .where(eq(users.id, row.t.userId));
-  const t = await issueTokens(ctx, { id: row.t.userId, roles: row.roles }, ip);
+  const t = await issueTokens(ctx, { id: row.t.userId }, ip);
   return {
     accessToken: t.accessToken,
     expiresIn: 900,
@@ -377,7 +381,13 @@ export async function upgradeGuest(ctx: Ctx, user: AuthUser, email: string, pass
   if (existing.length) throw new AppError('EMAIL_TAKEN', 'Este e-mail já está cadastrado.');
   await ctx.db
     .update(users)
-    .set({ email, passwordHash: await hashPassword(password), isGuest: false, emailVerified: false })
+    .set({
+      email,
+      passwordHash: await hashPassword(password),
+      hasPassword: true,
+      isGuest: false,
+      emailVerified: false,
+    })
     .where(eq(users.id, user.id));
   await ctx.db
     .delete(oneTimeTokens)

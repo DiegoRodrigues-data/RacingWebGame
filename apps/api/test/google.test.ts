@@ -4,7 +4,11 @@ import { setupApp, type TestApp } from './helpers';
 let t: TestApp;
 beforeAll(
   async () =>
-    (t = await setupApp({ GOOGLE_CLIENT_ID: 'cliente-teste', GOOGLE_CLIENT_SECRET: 'segredo-teste' })),
+    (t = await setupApp({
+      GOOGLE_CLIENT_ID: 'cliente-teste',
+      GOOGLE_CLIENT_SECRET: 'segredo-teste',
+      ADMIN_EMAILS: ['chefe@empresa.com.br'],
+    })),
 );
 afterAll(() => t.close());
 afterEach(() => vi.unstubAllGlobals());
@@ -61,7 +65,11 @@ const meFrom = async (rt: string) =>
 
 describe('login com Google', () => {
   it('anuncia o provedor quando configurado', async () => {
-    expect((await t.json('GET', '/auth/providers')).body).toEqual({ google: true });
+    expect((await t.json('GET', '/auth/providers')).body).toEqual({
+      google: true,
+      signupMode: 'open',
+      guests: true,
+    });
   });
 
   it('cria a conta no primeiro acesso e manda completar o perfil; depois volta para onde estava', async () => {
@@ -100,5 +108,65 @@ describe('login com Google', () => {
     expect(evil.location).toBe('http://localhost:5173/conta?bemvindo=1');
     const evil2 = await loginGoogle('https://evil.example');
     expect(evil2.location).toBe('http://localhost:5173/');
+  });
+
+  it('conta nova do Google não tem senha e cria a primeira sem informar a atual', async () => {
+    fakeGoogle({ sub: 'g-senha', email: 'semsenha@gmail.com', email_verified: true, given_name: 'SemSenha' });
+    const r = await loginGoogle();
+    const me = await meFrom(r.rt!);
+    expect(me).toMatchObject({ hasPassword: false, google: true });
+    const tok = `USER:${me.id}`;
+    expect(
+      (await t.json('POST', '/auth/change-password', { newPassword: 'primeira-senha-1' }, tok)).status,
+    ).toBe(200);
+    expect(
+      (await t.json('POST', '/auth/login', { login: 'semsenha@gmail.com', password: 'primeira-senha-1' }))
+        .status,
+    ).toBe(200);
+    // Com senha, a troca passa a pedir a atual.
+    const again = await t.json('POST', '/auth/change-password', { newPassword: 'segunda-senha-2' }, tok);
+    expect(again.body.error.code).toBe('INVALID_CREDENTIALS');
+  });
+});
+
+describe('Google e a regra de cadastros', () => {
+  const setAccess = (signupMode: string, signupDomains: string[] = []) =>
+    t.json('PUT', '/admin/access', { signupMode, signupDomains }, t.admin);
+
+  it('com aprovação: a conta nova fica pendente e volta para a entrada com o aviso', async () => {
+    await setAccess('approval');
+    fakeGoogle({ sub: 'g-pend', email: 'pendente@gmail.com', email_verified: true, given_name: 'Pendente' });
+    const r = await loginGoogle();
+    expect(r.location).toBe('http://localhost:5173/entrar?erro=pendente');
+    expect(r.rt).toBeUndefined();
+    // Na segunda tentativa a conta já existe e continua pendente.
+    expect((await loginGoogle()).location).toBe('http://localhost:5173/entrar?erro=pendente');
+    const { users } = (await t.json('GET', '/admin/users?status=pending', undefined, t.admin)).body;
+    const u = users.find((x: any) => x.email === 'pendente@gmail.com');
+    await t.json('PUT', `/admin/users/${u.id}/status`, { status: 'active' }, t.admin);
+    expect((await loginGoogle('/rankings')).location).toBe('http://localhost:5173/rankings');
+    await setAccess('open');
+  });
+
+  it('fechados ou fora dos domínios: recusa; e-mail de ADMIN_EMAILS entra mesmo assim, como admin', async () => {
+    await setAccess('closed');
+    fakeGoogle({ sub: 'g-fech', email: 'fechado@gmail.com', email_verified: true });
+    expect((await loginGoogle()).location).toBe('http://localhost:5173/entrar?erro=fechado');
+    await setAccess('open', ['empresa.com.br']);
+    fakeGoogle({ sub: 'g-dom', email: 'fora@gmail.com', email_verified: true });
+    expect((await loginGoogle()).location).toBe('http://localhost:5173/entrar?erro=dominio');
+    await setAccess('closed');
+    fakeGoogle({ sub: 'g-chefe', email: 'chefe@empresa.com.br', email_verified: true, given_name: 'Chefe' });
+    const r = await loginGoogle();
+    expect(r.rt).toBeDefined();
+    expect((await meFrom(r.rt!)).roles).toContain('admin');
+    await setAccess('open');
+  });
+
+  it('conta bloqueada não entra pelo Google', async () => {
+    fakeGoogle({ sub: 'g-bloq', email: 'bloq@gmail.com', email_verified: true, given_name: 'Bloq' });
+    const me = await meFrom((await loginGoogle()).rt!);
+    await t.json('PUT', `/admin/users/${me.id}/status`, { status: 'blocked' }, t.admin);
+    expect((await loginGoogle()).location).toBe('http://localhost:5173/entrar?erro=bloqueado');
   });
 });
