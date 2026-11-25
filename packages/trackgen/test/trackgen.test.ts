@@ -51,23 +51,27 @@ describe('geração procedural', () => {
     expect(geometryFromSource(g.source).hash).toBe(g.hash);
   });
 
-  it('1.000 seeds geram pistas válidas com metadados completos', () => {
-    for (let i = 0; i < 1000; i++) {
-      const params: TrackParams = {
-        length: [1200, 2000, 3000, 4500][i % 4]!,
-        complexity: (i % 7) / 6,
-        width: 10 + (i % 3) * 2,
-        terrain: (['asphalt', 'dirt', 'sand', 'mixed'] as const)[i % 4]!,
-      };
-      const g = generateProceduralTrack(`seed-${i}`, params);
-      expect(validateGeometry(g, { targetLength: params.length })).toEqual([]);
-      expect(g.grid).toHaveLength(22);
-      expect(g.sectors).toHaveLength(3);
-      expect(g.pit.lane.length).toBeGreaterThan(10);
-      expect(g.terrain).toHaveLength(g.count);
-    }
-    // ~6 s numa máquina de desenvolvimento; no runner de 2 núcleos da CI, em paralelo com os outros pacotes, passa de 60 s.
-  }, 180_000);
+  // 1.000 seeds em 10 lotes: um teste síncrono de mais de 60 s (runner lento da CI) derruba o RPC do worker do Vitest.
+  it.each(Array.from({ length: 10 }, (_, b) => b))(
+    '1.000 seeds geram pistas válidas com metadados completos (lote %i)',
+    (batch) => {
+      for (let i = batch * 100; i < (batch + 1) * 100; i++) {
+        const params: TrackParams = {
+          length: [1200, 2000, 3000, 4500][i % 4]!,
+          complexity: (i % 7) / 6,
+          width: 10 + (i % 3) * 2,
+          terrain: (['asphalt', 'dirt', 'sand', 'mixed'] as const)[i % 4]!,
+        };
+        const g = generateProceduralTrack(`seed-${i}`, params);
+        expect(validateGeometry(g, { targetLength: params.length })).toEqual([]);
+        expect(g.grid).toHaveLength(22);
+        expect(g.sectors).toHaveLength(3);
+        expect(g.pit.lane.length).toBeGreaterThan(10);
+        expect(g.terrain).toHaveLength(g.count);
+      }
+    },
+    60_000,
+  );
 });
 
 describe('validação', () => {
