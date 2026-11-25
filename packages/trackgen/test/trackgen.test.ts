@@ -66,7 +66,8 @@ describe('geração procedural', () => {
       expect(g.pit.lane.length).toBeGreaterThan(10);
       expect(g.terrain).toHaveLength(g.count);
     }
-  }, 60_000);
+    // ~6 s numa máquina de desenvolvimento; no runner de 2 núcleos da CI, em paralelo com os outros pacotes, passa de 60 s.
+  }, 180_000);
 });
 
 describe('validação', () => {
