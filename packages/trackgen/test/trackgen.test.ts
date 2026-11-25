@@ -51,27 +51,25 @@ describe('geração procedural', () => {
     expect(geometryFromSource(g.source).hash).toBe(g.hash);
   });
 
-  // 1.000 seeds em 10 lotes: um teste síncrono de mais de 60 s (runner lento da CI) derruba o RPC do worker do Vitest.
-  it.each(Array.from({ length: 10 }, (_, b) => b))(
-    '1.000 seeds geram pistas válidas com metadados completos (lote %i)',
-    (batch) => {
-      for (let i = batch * 100; i < (batch + 1) * 100; i++) {
-        const params: TrackParams = {
-          length: [1200, 2000, 3000, 4500][i % 4]!,
-          complexity: (i % 7) / 6,
-          width: 10 + (i % 3) * 2,
-          terrain: (['asphalt', 'dirt', 'sand', 'mixed'] as const)[i % 4]!,
-        };
-        const g = generateProceduralTrack(`seed-${i}`, params);
-        expect(validateGeometry(g, { targetLength: params.length })).toEqual([]);
-        expect(g.grid).toHaveLength(22);
-        expect(g.sectors).toHaveLength(3);
-        expect(g.pit.lane.length).toBeGreaterThan(10);
-        expect(g.terrain).toHaveLength(g.count);
-      }
-    },
-    60_000,
-  );
+  it('1.000 seeds geram pistas válidas com metadados completos', async () => {
+    for (let i = 0; i < 1000; i++) {
+      // Cede o event loop de tempos em tempos: num runner lento, um bloco síncrono longo derruba o RPC do worker
+      // do Vitest ("Timeout calling onTaskUpdate") mesmo com todas as asserções passando.
+      if (i % 25 === 0) await new Promise((r) => setTimeout(r, 0));
+      const params: TrackParams = {
+        length: [1200, 2000, 3000, 4500][i % 4]!,
+        complexity: (i % 7) / 6,
+        width: 10 + (i % 3) * 2,
+        terrain: (['asphalt', 'dirt', 'sand', 'mixed'] as const)[i % 4]!,
+      };
+      const g = generateProceduralTrack(`seed-${i}`, params);
+      expect(validateGeometry(g, { targetLength: params.length })).toEqual([]);
+      expect(g.grid).toHaveLength(22);
+      expect(g.sectors).toHaveLength(3);
+      expect(g.pit.lane.length).toBeGreaterThan(10);
+      expect(g.terrain).toHaveLength(g.count);
+    }
+  }, 180_000);
 });
 
 describe('validação', () => {

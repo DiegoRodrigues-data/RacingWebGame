@@ -26,5 +26,6 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - run: pnpm lint
       - run: pnpm typecheck
-      - run: pnpm test
+      # Um pacote por vez: em paralelo, o runner de 2 núcleos fica lento demais para os testes pesados de CPU.
+      - run: pnpm exec turbo run test --concurrency=1
       - run: pnpm build
