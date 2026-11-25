@@ -1,8 +1,18 @@
 import type { ReactNode } from 'react';
 import { Link } from 'react-router';
 
-const CONTACT = 'brahacker@gmail.com';
+/** E-mail de contato de quem hospeda o jogo (`VITE_CONTACT_EMAIL`, lido no build). */
+const CONTACT = (import.meta.env.VITE_CONTACT_EMAIL ?? '').trim();
 const UPDATED = '4 de novembro de 2026';
+
+function ContactLink() {
+  if (!CONTACT) return <>o contato de quem administra este servidor</>;
+  return (
+    <a className="text-race underline" href={`mailto:${CONTACT}`}>
+      {CONTACT}
+    </a>
+  );
+}
 
 function Doc({ title, children }: { title: string; children: ReactNode }) {
   return (
@@ -66,11 +76,7 @@ export function Privacy() {
       <h2>Seus direitos</h2>
       <p>
         Você pode acessar e corrigir seus dados na página <Link to="/conta">Minha conta</Link> e pedir a
-        exclusão da conta ou uma cópia dos seus dados pelo e-mail{' '}
-        <a className="text-race underline" href={`mailto:${CONTACT}`}>
-          {CONTACT}
-        </a>
-        .
+        exclusão da conta ou uma cópia dos seus dados por <ContactLink />.
       </p>
     </Doc>
   );
@@ -105,11 +111,8 @@ export function Terms() {
       </p>
       <h2>Contato</h2>
       <p>
-        Dúvidas ou pedidos:{' '}
-        <a className="text-race underline" href={`mailto:${CONTACT}`}>
-          {CONTACT}
-        </a>
-        . Veja também a <Link to="/privacidade">Política de Privacidade</Link>.
+        Dúvidas ou pedidos: <ContactLink />. Veja também a{' '}
+        <Link to="/privacidade">Política de Privacidade</Link>.
       </p>
     </Doc>
   );

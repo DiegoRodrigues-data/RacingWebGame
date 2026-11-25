@@ -13,6 +13,9 @@ COPY packages/sim/package.json packages/sim/
 COPY e2e/package.json e2e/
 RUN pnpm install --frozen-lockfile
 COPY . .
+# E-mail de contato das páginas de Privacidade e Termos (opcional, embutido no bundle).
+ARG VITE_CONTACT_EMAIL=""
+ENV VITE_CONTACT_EMAIL=$VITE_CONTACT_EMAIL
 RUN pnpm --filter @tracado/web build
 
 FROM nginx:1.27-alpine

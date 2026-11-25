@@ -1,10 +1,14 @@
-# Produção (Dokploy → Compose). Aponte o domínio para o serviço "web" na porta 80.
+# Produção com Docker Compose (ex.: Dokploy, Coolify ou `docker compose` puro atrás de um proxy com HTTPS).
+# Aponte o domínio para o serviço "web" na porta 80.
 # Variáveis obrigatórias: POSTGRES_PASSWORD, JWT_SECRET, ADMIN_EMAIL, ADMIN_PASSWORD, PUBLIC_WEB_URL.
+# Opcional: CONTACT_EMAIL (contato exibido em Privacidade e Termos).
 services:
   web:
     build:
       context: .
       dockerfile: apps/web/Dockerfile
+      args:
+        VITE_CONTACT_EMAIL: ${CONTACT_EMAIL:-}
     restart: unless-stopped
     depends_on:
       api:

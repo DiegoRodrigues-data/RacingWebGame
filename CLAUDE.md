@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 **Roda Presa** (nome interno do código: Traçado, pacotes `@tracado/*`) é um jogo web multiplayer de corrida estratégica 2D top-down. O jogador não pilota: ele monta o setup e desenha o traçado antes da corrida. O servidor agenda as corridas, simula e transmite o replay. Código, comentários, mensagens de erro e documentação são em português.
 
-Docs de referência: `README.md` (como rodar e as variáveis de ambiente), `DECISIONS.md` (por que cada escolha diverge do plano), `docs/API.md` (rotas REST e eventos WebSocket), `ROADMAP.md` (progresso, mantenha os checkboxes em dia).
+Código aberto sob a licença MIT. Docs de referência: `README.md` (como rodar, variáveis de ambiente e capturas em `docs/images/`), `CONTRIBUTING.md`, `SECURITY.md`, `DECISIONS.md` (por que cada escolha diverge do plano), `docs/API.md` (rotas REST e eventos WebSocket), `ROADMAP.md` (progresso, mantenha os checkboxes em dia).
 
 ## Comandos
 
@@ -32,7 +32,7 @@ cd e2e && npx playwright test tests/admin.spec.ts        # um spec E2E
 SHOTS=1 npx playwright test tests/visual.spec.ts         # screenshots (só com SHOTS=1)
 ```
 
-Na primeira vez, rode `pnpm --filter @tracado/e2e install-browsers` antes do E2E. O hook de pre-commit (Husky + lint-staged) roda eslint --fix e prettier.
+Na primeira vez, rode `pnpm --filter @tracado/e2e install-browsers` antes do E2E. O hook de pre-commit (`.husky/pre-commit`, lint-staged) roda eslint --fix e prettier. A CI (`.github/workflows/ci.yml`) roda lint, typecheck, testes e build em cada push e pull request.
 
 ## Ambiente local sem Docker
 
@@ -42,7 +42,7 @@ Na primeira vez, rode `pnpm --filter @tracado/e2e install-browsers` antes do E2E
 - O admin padrão é `admin@tracado.local` / `admin12345`. Em produção a config recusa essa senha, um JWT secret fraco e `ENABLE_DEV_ROUTES`.
 - O admin principal (Master, `users.is_master`) é sincronizado a cada boot por `ensureAdmin` (`db/bootstrap.ts`): `ADMIN_EMAIL` e `ADMIN_PASSWORD` sempre valem. Trocar a variável troca a senha, zera o bloqueio por tentativas e derruba as sessões. A senha do Master não muda pela conta nem por "esqueci a senha".
 - `ADMIN_EMAILS` (lista) dá acesso de admin a outras contas sem gravar o papel: `effectiveRoles` soma `admin` ao emitir o token e no `/me`.
-- O `docker-compose.yml` sobe Postgres e Redis reais para desenvolvimento. O `docker-compose.prod.yml` é o deploy no Dokploy.
+- O `docker-compose.yml` sobe Postgres e Redis reais para desenvolvimento. O `docker-compose.prod.yml` é o deploy de produção (validado no Dokploy; a instância foi desativada).
 
 ## Arquitetura
 
@@ -120,13 +120,14 @@ Os pacotes são consumidos direto como TypeScript: o `exports` aponta para `src/
 - `game/audio.ts`: trilha e efeitos sintetizados com Web Audio a partir de notas MIDI escritas no código (sem arquivos de áudio); o som só começa no primeiro gesto do usuário.
 - `game/playback.ts`: `FrameBuffer` interpola os frames de 4 Hz usando o relógio sincronizado.
 - Tailwind 4: classes de componente se declaram com `@utility` em `styles.css`. O `@apply` de classes próprias não funciona.
+- O e-mail de contato das páginas de Privacidade e Termos vem de `VITE_CONTACT_EMAIL` no build (`CONTACT_EMAIL` no compose); não fixe e-mail pessoal no código.
 - Os assets estão em `src/assets/racing_pack` (licença CC0, créditos em `CREDITS.md`).
 - `pages/Box.tsx` concentra a preparação: setup, desenho do traçado e treino com carro fantasma. O envio automático do traçado tem uma trava em nível de módulo contra envio duplicado quando o componente remonta após renovar o token.
 - As páginas de admin ficam em `pages/admin/`: configurações do jogo, corridas teste, gerador de pistas por seed (roda o gerador no navegador) e editor de pistas. A conta de admin só vê o painel (`PlayerOnly` em `App.tsx` redireciona as telas de jogador).
 - `components/Guest.tsx`: formulário de apelido do convidado (usado em `/jogar` e no convite da Corrida Maluca), link de volta e a página `/voltar/:key`.
 - `pages/Crazy.tsx` é a Corrida Maluca (grupos de amigos com convite por link, convidados só com apelido e troféus de zoeira). No servidor fica em `modules/crazy`; as corridas do grupo têm `crazy_group_id` e ficam fora das listas públicas.
 
-## Deploy (VPS com Dokploy)
+## Deploy (Docker Compose; ex.: VPS com Dokploy)
 
 - `infra/nginx.conf` serve a SPA.
   - `index.html` (inclusive o fallback) vai com `Cache-Control: no-cache`; os assets com hash, com `public, max-age=31536000, immutable`.

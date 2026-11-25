@@ -2,7 +2,13 @@
   "name": "tracado",
   "private": true,
   "version": "0.1.0",
-  "description": "Traçado — jogo web multiplayer de corrida estratégica 2D top-down",
+  "description": "Roda Presa — jogo web multiplayer de corrida estratégica 2D top-down",
+  "license": "MIT",
+  "author": "Diego de Castro Rodrigues",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/DiegoRodrigues-data/RacingWebGame.git"
+  },
   "packageManager": "pnpm@9.15.0",
   "engines": {
     "node": ">=22"

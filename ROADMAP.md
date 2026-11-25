@@ -277,7 +277,7 @@ Fecha o ciclo de vida com resultados persistidos.
   - [x] Reprocessamento reproduz o resultado persistido
 - [x] `DECISIONS.md` com riscos e decisões pendentes
 
-## Fase 16 — Deploy na VPS com Dokploy 🟡
+## Fase 16 — Deploy na VPS com Dokploy ✅
 
 - [x] `Dockerfile` da API (bundle + 3 dependências de runtime) e do web (Nginx)
 - [x] Nginx: `no-cache` no `index.html` e no fallback da SPA; `immutable` nos assets com hash
@@ -285,10 +285,10 @@ Fecha o ciclo de vida com resultados persistidos.
 - [x] WebSocket pelo Nginx (upgrade) atrás do Traefik
 - [x] Migrações na subida da API com lock consultivo
 - [x] Backup diário com retenção e script de restauração
-- [x] Construir as imagens e subir o compose (no Dokploy, em race.diegorodrigues.com.br)
+- [x] Construir as imagens e subir o compose no Dokploy (instância de validação, já desativada)
 - [x] Validar com Postgres e Redis reais
 - [x] Push, autodeploy no Dokploy, hash do bundle no domínio igual ao local, `curl -I` nos cabeçalhos de cache e `GET /api/health`
-- [ ] Sentry e métricas apontando para produção
+- [ ] Sentry e métricas apontando para produção (fica para quem hospedar uma instância)
 
 ## Fase 17 — Corrida Maluca (grupos de amigos) ✅
 
@@ -414,7 +414,16 @@ Fecha o ciclo de vida com resultados persistidos.
 - [x] Master sincronizado por `ADMIN_EMAIL`/`ADMIN_PASSWORD` a cada boot (sai o `ADMIN_RESET_PASSWORD`) e admins por `ADMIN_EMAILS`
 - [x] Painel de usuários: cadastrar, editar, aprovar, bloquear, excluir (ou anonimizar quem tem histórico) e filtrar por situação
 - [x] Login por e-mail ou apelido; conta do Google cria a primeira senha em Minha conta
-- [ ] Conferir no Dokploy que `ADMIN_PASSWORD` é a senha desejada (o próximo deploy a aplica ao Master) e, se quiser, definir `ADMIN_EMAILS`
+- [x] Validado no Dokploy; a instância foi desativada depois da validação
+
+## Fase 30 — Código aberto ✅
+
+- [x] Varredura do histórico do git atrás de segredos, `.env`, chaves e dados pessoais (nada encontrado além do e-mail de contato)
+- [x] E-mail de contato das páginas de Privacidade e Termos configurável (`VITE_CONTACT_EMAIL` / `CONTACT_EMAIL`)
+- [x] Licença MIT, `CONTRIBUTING.md`, `SECURITY.md`, modelos de issue e `.env.example`
+- [x] CI no GitHub Actions (lint, typecheck, testes e build) e hook de pre-commit versionado
+- [x] README com capturas de tela
+- [x] Repositório público
 
 ---
 
@@ -422,6 +431,6 @@ Fecha o ciclo de vida com resultados persistidos.
 
 1. Rodar `docker compose -f docker-compose.prod.yml up --build` numa máquina com Docker e corrigir o que aparecer.
 2. Rodar a suíte com `DATABASE_URL` e `REDIS_URL` reais (`docker compose up -d`).
-3. Criar o repositório remoto, fazer o push e configurar o serviço Compose no Dokploy com as variáveis do README.
+3. Rodar a CI do GitHub (`.github/workflows/ci.yml`) e corrigir o que aparecer.
 4. Medir fps no celular e testar determinismo em Firefox e Safari pela página `/dev/determinismo`.
 5. Escolher o provedor de e-mail e decidir as pendências listadas em DECISIONS.md.
